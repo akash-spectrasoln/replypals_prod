@@ -30,3 +30,7 @@ api/test_results.txt
 Thumbs.db
 
 /generated/prisma
+
+tests/playwright/.pw-ext-user-data/
+tests/playwright/test-results/
+.env.local
