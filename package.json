@@ -1,0 +1,23 @@
+{
+  "name": "replypals-prod",
+  "version": "1.0.0",
+  "description": "> The AI writing assistant built for non-native English speakers. > Rewrite any text — confident, polite, casual, formal — in one click.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "dotenv": "^17.3.1",
+    "prisma": "^7.5.0"
+  },
+  "dependencies": {
+    "@prisma/client": "^7.5.0"
+  }
+}

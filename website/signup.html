@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign Up — ReplyPals</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700&family=DM+Sans:wght@400;500;600&display=swap"
+    rel="stylesheet">
+  <style>
+    body {
+      font-family: 'DM Sans', sans-serif;
+    }
+
+    .syne {
+      font-family: 'Syne', sans-serif;
+    }
+
+    .strength-bar {
+      transition: width 0.3s, background-color 0.3s;
+    }
+  </style>
+</head>
+
+<body class="min-h-screen bg-gradient-to-br from-slate-50 to-orange-50 flex items-center justify-center p-4">
+
+  <div class="w-full max-w-md">
+    <!-- Logo -->
+    <div class="text-center mb-8">
+      <div class="inline-flex items-center gap-3">
+        <div
+          class="w-10 h-10 rounded-full bg-gradient-to-br from-orange-500 to-orange-400 flex items-center justify-center text-white font-bold text-lg">
+          R</div>
+        <span class="syne text-2xl font-bold text-slate-800">ReplyPals</span>
+      </div>
+      <p class="text-slate-500 mt-2 text-sm">Create your free account</p>
+    </div>
+
+    <div class="bg-white rounded-2xl shadow-xl p-8">
+
+      <div id="alert" class="hidden mb-4 p-3 rounded-lg text-sm font-medium"></div>
+
+      <!-- Google Sign Up -->
+      <button id="google-btn" onclick="signUpWithGoogle()" class="w-full flex items-center justify-center gap-3 border-2 border-slate-200 
+               rounded-xl py-3 px-4 text-slate-700 font-medium hover:bg-slate-50 
+               hover:border-slate-300 transition-all mb-6">
+        <svg width="20" height="20" viewBox="0 0 48 48">
+          <path fill="#4285F4"
+            d="M47.5 24.6c0-1.6-.1-3.1-.4-4.6H24v8.7h13.2c-.6 3-2.3 5.5-4.9 7.2v6h7.9c4.6-4.2 7.3-10.5 7.3-17.3z" />
+          <path fill="#34A853"
+            d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.9-6c-2.1 1.4-4.9 2.3-8 2.3-6.1 0-11.3-4.1-13.1-9.7H2.7v6.2C6.7 42.7 14.8 48 24 48z" />
+          <path fill="#FBBC04"
+            d="M10.9 28.8c-.5-1.4-.7-2.9-.7-4.4s.2-3 .7-4.4v-6.2H2.7C1 17.2 0 20.5 0 24s1 6.8 2.7 9.9l8.2-5.1z" />
+          <path fill="#E94235"
+            d="M24 9.5c3.4 0 6.5 1.2 8.9 3.5l6.6-6.6C35.9 2.5 30.5 0 24 0 14.8 0 6.7 5.3 2.7 13.1l8.2 5.1C12.7 13.6 17.9 9.5 24 9.5z" />
+        </svg>
+        Sign up with Google
+      </button>
+
+      <div class="relative mb-6">
+        <div class="absolute inset-0 flex items-center">
+          <div class="w-full border-t border-slate-200"></div>
+        </div>
+        <div class="relative flex justify-center text-sm">
+          <span class="bg-white px-3 text-slate-400">or sign up with email</span>
+        </div>
+      </div>
+
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
+          <input id="name" type="text" placeholder="Your name" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm
+                   focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">Email</label>
+          <input id="email" type="email" placeholder="you@example.com" class="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm
+                   focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">Password</label>
+          <input id="password" type="password" placeholder="Min. 8 characters" oninput="checkStrength(this.value)"
+            class="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm
+                   focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent">
+          <!-- Strength bar -->
+          <div class="mt-2 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+            <div id="strength-bar" class="strength-bar h-full w-0 rounded-full bg-red-400"></div>
+          </div>
+          <p id="strength-label" class="text-xs text-slate-400 mt-1"></p>
+        </div>
+
+        <button id="signup-btn" onclick="signUpWithEmail()" class="w-full bg-gradient-to-r from-orange-500 to-orange-400 text-white font-semibold
+                 rounded-xl py-3 px-4 hover:from-orange-600 hover:to-orange-500 transition-all
+                 flex items-center justify-center gap-2 shadow-lg shadow-orange-200">
+          <span id="signup-text">Create Account</span>
+          <svg id="signup-spinner" class="hidden animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2">
+            <path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0" />
+          </svg>
+        </button>
+
+        <p class="text-xs text-slate-400 text-center">
+          By signing up you agree to our
+          <a href="/privacy.html" class="text-orange-500">Privacy Policy</a>
+        </p>
+      </div>
+    </div>
+
+    <p class="text-center text-sm text-slate-500 mt-6">
+      Already have an account?
+      <a href="/login.html" class="text-orange-500 font-semibold hover:text-orange-600">Sign in</a>
+    </p>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    const SUPABASE_URL = 'https://lcnusuiwxamjvosjgsrl.supabase.co';
+    const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxjbnVzdWl3eGFtanZvc2pnc3JsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxNTQ2OTUsImV4cCI6MjA4ODczMDY5NX0.edcKlXnNdzACCsQmTp4-xPOCp4TVCmwjPlXkORcjQ24';
+    const apiBaseOverride = new URLSearchParams(window.location.search).get('api_base');
+    const API_BASE = apiBaseOverride || window.location.origin;
+
+    const { createClient } = supabase;
+    const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
+    const HOST = window.location.hostname || '';
+    const IS_LOCAL_DEV =
+      /^(localhost|127\.0\.0\.1|0\.0\.0\.0)$/i.test(HOST) ||
+      /^192\.168\./.test(HOST) ||
+      /^10\./.test(HOST) ||
+      /^172\.(1[6-9]|2\d|3[0-1])\./.test(HOST);
+    const RP_LOCAL_USERS_KEY = 'rp_local_auth_users_v1';
+    const RP_LOCAL_SESSION_KEY = 'rp_local_auth_session_v1';
+
+    function loadLocalUsers() {
+      try {
+        return JSON.parse(localStorage.getItem(RP_LOCAL_USERS_KEY) || '{}');
+      } catch (_) {
+        return {};
+      }
+    }
+
+    function saveLocalUsers(users) {
+      localStorage.setItem(RP_LOCAL_USERS_KEY, JSON.stringify(users));
+    }
+
+    function saveLocalSession(user) {
+      localStorage.setItem(RP_LOCAL_SESSION_KEY, JSON.stringify(user));
+    }
+
+    function fallbackSignUp(email, password, name) {
+      const users = loadLocalUsers();
+      const existing = users[email.toLowerCase()];
+      if (existing) {
+        showAlert('An account with this email already exists. Try signing in.');
+        return false;
+      }
+      const user = {
+        id: 'local-' + Date.now(),
+        email,
+        full_name: name || email.split('@')[0],
+        password,
+      };
+      users[email.toLowerCase()] = user;
+      saveLocalUsers(users);
+      saveLocalSession({ id: user.id, email: user.email, full_name: user.full_name });
+      return true;
+    }
+
+    function isNetworkFetchFailure(errLike) {
+      const msg = String(errLike?.message || errLike || '').toLowerCase();
+      return (
+        msg.includes('failed to fetch') ||
+        msg.includes('networkerror') ||
+        msg.includes('load failed') ||
+        msg.includes('dns') ||
+        msg.includes('getaddrinfo') ||
+        msg.includes('cors') ||
+        msg.includes('fetch')
+      );
+    }
+
+    // Check already logged in
+    window.addEventListener('DOMContentLoaded', async () => {
+      const localSession = localStorage.getItem(RP_LOCAL_SESSION_KEY);
+      if (localSession) {
+        window.location.href = '/dashboard.html';
+        return;
+      }
+      try {
+        const { data: { session } } = await sb.auth.getSession();
+        if (session) window.location.href = '/dashboard.html';
+      } catch (_) {
+        // Ignore transient auth network errors on local dev.
+      }
+    });
+
+    function showAlert(msg, type = 'error') {
+      const el = document.getElementById('alert');
+      el.textContent = msg;
+      el.className = `mb-4 p-3 rounded-lg text-sm font-medium ${type === 'error' ? 'bg-red-50 text-red-700 border border-red-200' :
+          type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' :
+            'bg-blue-50 text-blue-700 border border-blue-200'
+        }`;
+      el.classList.remove('hidden');
+    }
+
+    function setLoading(loading) {
+      const btn = document.getElementById('signup-btn');
+      const text = document.getElementById('signup-text');
+      const spin = document.getElementById('signup-spinner');
+      btn.disabled = loading;
+      text.textContent = loading ? 'Creating account...' : 'Create Account';
+      if (loading) spin.classList.remove('hidden');
+      else spin.classList.add('hidden');
+    }
+
+    function checkStrength(val) {
+      const bar = document.getElementById('strength-bar');
+      const label = document.getElementById('strength-label');
+      if (!val) { bar.style.width = '0'; label.textContent = ''; return; }
+      let score = 0;
+      if (val.length >= 8) score++;
+      if (/[A-Z]/.test(val)) score++;
+      if (/[0-9]/.test(val)) score++;
+      if (/[^A-Za-z0-9]/.test(val)) score++;
+      const levels = [
+        { w: '25%', color: 'bg-red-400', text: 'Weak' },
+        { w: '50%', color: 'bg-orange-400', text: 'Fair' },
+        { w: '75%', color: 'bg-yellow-400', text: 'Good' },
+        { w: '100%', color: 'bg-green-500', text: 'Strong' },
+      ];
+      const level = levels[Math.min(score - 1, 3)] || levels[0];
+      bar.style.width = level.w;
+      bar.className = `strength-bar h-full rounded-full ${level.color}`;
+      label.textContent = level.text;
+    }
+
+    async function signUpWithEmail() {
+      const name = document.getElementById('name').value.trim();
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+
+      if (!email || !password) {
+        showAlert('Please fill in all fields.');
+        return;
+      }
+      if (password.length < 8) {
+        showAlert('Password must be at least 8 characters.');
+        return;
+      }
+
+      setLoading(true);
+      try {
+        const { data, error } = await sb.auth.signUp({
+          email,
+          password,
+          options: {
+            data: { full_name: name },
+            // After email confirmation, redirect here:
+            emailRedirectTo: window.location.origin + '/auth-callback.html',
+          }
+        });
+
+        if (error) {
+          if (IS_LOCAL_DEV && isNetworkFetchFailure(error)) {
+            const ok = fallbackSignUp(email, password, name);
+            if (ok) {
+              await registerUserWithBackend(email, 'local-' + Date.now(), name);
+              window.location.href = '/dashboard.html';
+            }
+            return;
+          }
+          const msgs = {
+            'User already registered': 'An account with this email already exists. Try signing in.',
+            'Password should be at least 6 characters': 'Password must be at least 8 characters.',
+          };
+          showAlert(msgs[error.message] || error.message);
+          return;
+        }
+
+        if (data.user && !data.session) {
+          // Email confirmation required
+          showAlert(
+            `✅ Check your inbox! We sent a confirmation to ${email}. Click the link to activate your account.`,
+            'success'
+          );
+          // Register with backend anyway (for tracking)
+          await registerUserWithBackend(email, data.user.id, name);
+        } else if (data.session) {
+          // Email confirmation disabled — direct login
+          await registerUserWithBackend(email, data.user.id, name, data.session.access_token);
+          window.location.href = '/dashboard.html';
+        }
+      } catch (e) {
+        if (IS_LOCAL_DEV && isNetworkFetchFailure(e)) {
+          const ok = fallbackSignUp(email, password, name);
+          if (ok) {
+            await registerUserWithBackend(email, 'local-' + Date.now(), name);
+            window.location.href = '/dashboard.html';
+          }
+          return;
+        }
+        showAlert('Something went wrong. Please try again.');
+        console.error('Signup error:', e);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    async function signUpWithGoogle() {
+      const { error } = await sb.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin + '/auth-callback.html',
+          scopes: 'email profile',
+        }
+      });
+      if (error) showAlert('Google sign-up failed: ' + error.message);
+    }
+
+    // Read referral code from URL
+    const REF_CODE = new URLSearchParams(window.location.search).get('ref') || '';
+
+    async function registerUserWithBackend(email, userId, name, token = null) {
+      try {
+        await fetch(API_BASE + '/account/register', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': 'Bearer ' + token } : {}),
+          },
+          body: JSON.stringify({ email, user_id: userId, full_name: name || '' })
+        });
+
+        // Apply referral code if present
+        if (REF_CODE) {
+          await fetch(API_BASE + '/referral/use', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ref_code: REF_CODE, email })
+          });
+        }
+      } catch (e) {
+        console.warn('Backend registration failed (non-fatal):', e);
+      }
+    }
+  </script>
+</body>
+
+</html>

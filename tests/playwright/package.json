@@ -1,0 +1,16 @@
+{
+  "name": "replypals-playwright",
+  "private": true,
+  "version": "1.0.0",
+  "type": "commonjs",
+  "scripts": {
+    "test": "playwright test",
+    "test:frontend": "playwright test frontend-smoke.spec.js",
+    "test:extension-ui": "playwright test extension-ui.spec.js",
+    "test:core-e2e": "playwright test frontend-smoke.spec.js extension-ui.spec.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0"
+  }
+}
+

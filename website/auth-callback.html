@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Signing in... — ReplyPals</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #fff8f5, #fff);
+      margin: 0;
+    }
+    .card {
+      background: white;
+      border-radius: 20px;
+      padding: 48px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.08);
+      text-align: center;
+      max-width: 380px;
+      width: 90%;
+    }
+    .logo {
+      width: 56px; height: 56px;
+      background: linear-gradient(135deg, #FF6B35, #FF8C42);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 22px; color: white;
+      margin: 0 auto 20px;
+    }
+    h2 { color: #1a1d2e; font-size: 20px; font-weight: 700; margin: 0 0 8px; }
+    p  { color: #6B7280; font-size: 14px; margin: 0 0 24px; }
+    .spinner {
+      width: 36px; height: 36px;
+      border: 3px solid #fde8d8;
+      border-top-color: #FF6B35;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .success { color: #059669; }
+    .error-msg { color: #DC2626; }
+    .btn {
+      display: inline-block;
+      background: #FF6B35;
+      color: white;
+      border-radius: 12px;
+      padding: 12px 28px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 14px;
+      margin-top: 16px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">R</div>
+    <div class="spinner" id="spinner"></div>
+    <h2 id="title">Signing you in...</h2>
+    <p id="message">Please wait a moment</p>
+    <div id="action"></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    const SUPABASE_URL  = 'https://lcnusuiwxamjvosjgsrl.supabase.co';
+    const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxjbnVzdWl3eGFtanZvc2pnc3JsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxNTQ2OTUsImV4cCI6MjA4ODczMDY5NX0.edcKlXnNdzACCsQmTp4-xPOCp4TVCmwjPlXkORcjQ24';
+    const apiBaseOverride = new URLSearchParams(window.location.search).get('api_base');
+    const API_BASE = apiBaseOverride || window.location.origin;
+
+    const { createClient } = supabase;
+    const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
+
+    function setUI(state, title, message, actionHtml = '') {
+      document.getElementById('spinner').style.display = 
+        state === 'loading' ? 'block' : 'none';
+      document.getElementById('title').textContent = title;
+      document.getElementById('title').className = 
+        state === 'error' ? 'error-msg' : 
+        state === 'success' ? 'success' : '';
+      document.getElementById('message').textContent = message;
+      document.getElementById('action').innerHTML = actionHtml;
+    }
+
+    async function handleCallback() {
+      try {
+        // Parse the URL — Supabase uses hash fragments for OAuth
+        // and query params for email confirmations
+        const hash   = window.location.hash.substring(1);
+        const query  = window.location.search.substring(1);
+        const params = new URLSearchParams(hash || query);
+
+        // Check for errors in URL
+        const errorParam = params.get('error');
+        const errorDesc  = params.get('error_description');
+        if (errorParam) {
+          setUI('error', 'Sign-in failed', 
+            errorDesc || errorParam,
+            '<a href="/login.html" class="btn">Try Again</a>'
+          );
+          return;
+        }
+
+        // Check for password reset flow
+        const type = params.get('type');
+        if (type === 'recovery') {
+          // Has access token from recovery email
+          const accessToken  = params.get('access_token');
+          const refreshToken = params.get('refresh_token');
+          if (accessToken) {
+            await sb.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+          }
+          window.location.href = '/reset-password.html';
+          return;
+        }
+
+        // Wait for Supabase to process the session
+        // (handles both hash-based OAuth and query-based OTP)
+        const { data, error } = await sb.auth.getSession();
+
+        if (error) {
+          setUI('error', 'Authentication failed', error.message,
+            '<a href="/login.html" class="btn">Try Again</a>'
+          );
+          return;
+        }
+
+        if (data.session) {
+          // SUCCESS — user is authenticated
+          setUI('success', '✅ Signed in!', 'Redirecting to your dashboard...');
+          
+          // Register/update user in backend
+          await registerWithBackend(data.session);
+
+          // Redirect after brief success display
+          setTimeout(() => {
+            window.location.href = '/dashboard.html';
+          }, 1200);
+          return;
+        }
+
+        // No session yet — might be email confirmation
+        // Try exchanging code for session (PKCE flow)
+        const code = params.get('code');
+        if (code) {
+          const { data: exchangeData, error: exchangeError } = 
+            await sb.auth.exchangeCodeForSession(code);
+          
+          if (exchangeError) {
+            setUI('error', 'Link expired', 
+              'This link has expired. Please request a new one.',
+              '<a href="/login.html" class="btn">Sign In</a>'
+            );
+            return;
+          }
+
+          if (exchangeData.session) {
+            setUI('success', '✅ Email confirmed!', 'Setting up your account...');
+            await registerWithBackend(exchangeData.session);
+            setTimeout(() => {
+              window.location.href = '/dashboard.html';
+            }, 1500);
+            return;
+          }
+        }
+
+        // Fallback — no session, no code
+        setUI('error', 'Something went wrong',
+          'Could not complete sign-in. Please try again.',
+          '<a href="/login.html" class="btn">Back to Login</a>'
+        );
+
+      } catch (e) {
+        console.error('Auth callback error:', e);
+        setUI('error', 'Unexpected error', e.message || 'Please try again.',
+          '<a href="/login.html" class="btn">Back to Login</a>'
+        );
+      }
+    }
+
+    async function registerWithBackend(session) {
+      try {
+        await fetch(API_BASE + '/account/register', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + session.access_token,
+          },
+          body: JSON.stringify({
+            user_id:   session.user.id,
+            email:     session.user.email,
+            full_name: session.user.user_metadata?.full_name || 
+                       session.user.user_metadata?.name || '',
+          })
+        });
+      } catch (e) {
+        console.warn('Backend register failed (non-fatal):', e);
+      }
+    }
+
+    // Run immediately
+    handleCallback();
+  </script>
+</body>
+</html>

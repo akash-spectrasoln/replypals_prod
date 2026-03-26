@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>ReplyPals Auth Tests</title>
+  <style>
+    body { font-family: system-ui; max-width: 800px; margin: 40px auto; padding: 20px; }
+    h1   { color: #0F2544; }
+    .test { border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin: 12px 0; }
+    .test h3 { margin: 0 0 8px; font-size: 14px; color: #374151; }
+    .result { font-size: 13px; padding: 8px 12px; border-radius: 6px; margin-top: 8px; font-family: monospace; white-space: pre-wrap; }
+    .pass { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
+    .fail { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+    .info { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
+    .pending { background: #fafafa; color: #6b7280; border: 1px solid #e5e7eb; }
+    button { background: #FF6B35; color: white; border: none; border-radius: 8px; padding: 10px 20px; cursor: pointer; font-size: 13px; font-weight: 600; margin: 4px; }
+    button:hover { background: #e85520; }
+    button.secondary { background: #0F2544; }
+    .summary { background: #0F2544; color: white; padding: 16px; border-radius: 10px; margin-bottom: 20px; }
+    input { border: 1px solid #d1d5db; border-radius: 8px; padding: 8px 12px; font-size: 13px; width: 100%; box-sizing: border-box; margin: 4px 0 8px; }
+  </style>
+</head>
+<body>
+  <h1>🔐 ReplyPals Auth Test Suite</h1>
+  <p style="color: #6B7280; font-size: 13px;">Tests for login, signup, Google OAuth, and stats tracking. Open in browser — no server needed.</p>
+
+  <div class="summary">
+    <strong>⚠️ Setup Required Before Running Tests:</strong><br>
+    1. Set SUPABASE_URL, SUPABASE_ANON, and API_BASE below<br>
+    2. Create a test user in Supabase: test@replypal.test / TestPass123!<br>
+    3. Ensure backend is running
+  </div>
+
+  <!-- Config -->
+  <div class="test">
+    <h3>⚙️ Test Configuration</h3>
+    <label>Supabase URL:</label>
+    <input id="cfg-supabase-url" placeholder="https://xxx.supabase.co" value="">
+    <label>Supabase Anon Key:</label>
+    <input id="cfg-anon-key" placeholder="eyJhbGci..." value="">
+    <label>API Base URL:</label>
+    <input id="cfg-api-base" placeholder="https://xxx.railway.app" value="">
+    <label>Test Email (must exist in Supabase):</label>
+    <input id="cfg-test-email" placeholder="test@replypal.test" value="test@replypal.test">
+    <label>Test Password:</label>
+    <input id="cfg-test-password" placeholder="TestPass123!" type="password" value="TestPass123!">
+    <button onclick="runAllTests()">▶ Run All Tests</button>
+    <button class="secondary" onclick="runAuthTests()">Run Auth Only</button>
+    <button class="secondary" onclick="runStatsTests()">Run Stats Only</button>
+  </div>
+
+  <!-- Individual test cards -->
+  <div class="test">
+    <h3>TEST 1 — Supabase connection reachable</h3>
+    <div id="t1" class="result pending">Pending...</div>
+    <button onclick="test1()">Run</button>
+  </div>
+
+  <div class="test">
+    <h3>TEST 2 — API backend /health reachable</h3>
+    <div id="t2" class="result pending">Pending...</div>
+    <button onclick="test2()">Run</button>
+  </div>
+
+  <div class="test">
+    <h3>TEST 3 — Email + Password login (valid credentials)</h3>
+    <div id="t3" class="result pending">Pending...</div>
+    <button onclick="test3()">Run</button>
+  </div>
+
+  <div class="test">
+    <h3>TEST 4 — Email + Password login (wrong password) → correct error</h3>
+    <div id="t4" class="result pending">Pending...</div>
+    <button onclick="test4()">Run</button>
+  </div>
+
+  <div class="test">
+    <h3>TEST 5 — Login returns session with access_token</h3>
+    <div id="t5" class="result pending">Pending...</div>
+    <button onclick="test5()">Run</button>
+  </div>
+
+  <div class="test">
+    <h3>TEST 6 — /account/register called after login → OK response</h3>
+    <div id="t6" class="result pending">Pending...</div>
+    <button onclick="test6()">Run</button>
+  </div>
+
+  <div class="test">
+    <h3>TEST 7 — /account/status requires auth (no token → 401)</h3>
+    <div id="t7" class="result pending">Pending...</div>
+    <button onclick="test7()">Run</button>
+  </div>
+
+  <div class="test">
+    <h3>TEST 8 — /account/status with valid token → returns plan data</h3>
+    <div id="t8" class="result pending">Pending...</div>
+    <button onclick="test8()">Run</button>
+  </div>
+
+  <div class="test">
+    <h3>TEST 9 — /account/stats returns correct shape</h3>
+    <div id="t9" class="result pending">Pending...</div>
+    <button onclick="test9()">Run</button>
+  </div>
+
+  <div class="test">
+    <h3>TEST 10 — /rewrite with auth token → updates stats in DB</h3>
+    <div id="t10" class="result pending">Pending...</div>
+    <button onclick="test10()">Run</button>
+  </div>
+
+  <div class="test">
+    <h3>TEST 11 — /rewrite updates total_rewrites count (verify increment)</h3>
+    <div id="t11" class="result pending">Pending...</div>
+    <button onclick="test11()">Run</button>
+  </div>
+
+  <div class="test">
+    <h3>TEST 12 — /rewrite updates avg_score correctly</h3>
+    <div id="t12" class="result pending">Pending...</div>
+    <button onclick="test12()">Run</button>
+  </div>
+
+  <div class="test">
+    <h3>TEST 13 — Google OAuth URL generated correctly (manual check)</h3>
+    <div id="t13" class="result pending">Pending...</div>
+    <button onclick="test13()">Run</button>
+  </div>
+
+  <div class="test">
+    <h3>TEST 14 — auth-callback.html exists and loads</h3>
+    <div id="t14" class="result pending">Pending...</div>
+    <button onclick="test14()">Run</button>
+  </div>
+
+  <div class="test">
+    <h3>TEST 15 — Sign out clears session</h3>
+    <div id="t15" class="result pending">Pending...</div>
+    <button onclick="test15()">Run</button>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+  // ── Helpers ────────────────────────────────────────────
+  let sb = null;
+  let testSession = null;
+
+  function getConfig() {
+    return {
+      supabaseUrl: document.getElementById('cfg-supabase-url').value.trim(),
+      anonKey:     document.getElementById('cfg-anon-key').value.trim(),
+      apiBase:     document.getElementById('cfg-api-base').value.trim(),
+      email:       document.getElementById('cfg-test-email').value.trim(),
+      password:    document.getElementById('cfg-test-password').value,
+    };
+  }
+
+  function initClient() {
+    const { supabaseUrl, anonKey } = getConfig();
+    if (!supabaseUrl || !anonKey) {
+      alert('Please fill in Supabase URL and Anon Key first!');
+      return false;
+    }
+    sb = supabase.createClient(supabaseUrl, anonKey);
+    return true;
+  }
+
+  function pass(id, msg) {
+    document.getElementById(id).className = 'result pass';
+    document.getElementById(id).textContent = '✅ PASS — ' + msg;
+  }
+
+  function fail(id, msg) {
+    document.getElementById(id).className = 'result fail';
+    document.getElementById(id).textContent = '❌ FAIL — ' + msg;
+  }
+
+  function info(id, msg) {
+    document.getElementById(id).className = 'result info';
+    document.getElementById(id).textContent = 'ℹ️ ' + msg;
+  }
+
+  function pending(id) {
+    document.getElementById(id).className = 'result pending';
+    document.getElementById(id).textContent = '⏳ Running...';
+  }
+
+  // ── Tests ──────────────────────────────────────────────
+  async function test1() {
+    pending('t1');
+    try {
+      if (!initClient()) { fail('t1', 'Config not set'); return; }
+      const { data, error } = await sb.auth.getSession();
+      if (error) throw error;
+      pass('t1', 'Supabase client connected successfully');
+    } catch (e) {
+      fail('t1', e.message);
+    }
+  }
+
+  async function test2() {
+    pending('t2');
+    const { apiBase } = getConfig();
+    if (!apiBase) { fail('t2', 'API_BASE not set'); return; }
+    try {
+      const res = await fetch(apiBase + '/health');
+      const data = await res.json();
+      if (data.status === 'ok') {
+        pass('t2', 'Backend /health returned status:ok');
+      } else {
+        fail('t2', 'Unexpected response: ' + JSON.stringify(data));
+      }
+    } catch (e) {
+      fail('t2', 'Cannot reach backend: ' + e.message);
+    }
+  }
+
+  async function test3() {
+    pending('t3');
+    const { email, password } = getConfig();
+    if (!initClient()) return;
+    try {
+      const { data, error } = await sb.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      testSession = data.session;
+      pass('t3', `Logged in as ${data.user.email}`);
+    } catch (e) {
+      fail('t3', e.message + ' — Make sure test user exists in Supabase');
+    }
+  }
+
+  async function test4() {
+    pending('t4');
+    const { email } = getConfig();
+    if (!initClient()) return;
+    try {
+      const { error } = await sb.auth.signInWithPassword({
+        email,
+        password: 'definitely-wrong-password-12345',
+      });
+      if (error && error.message === 'Invalid login credentials') {
+        pass('t4', 'Wrong password returns correct error: "' + error.message + '"');
+      } else if (error) {
+        pass('t4', 'Returns error as expected: ' + error.message);
+      } else {
+        fail('t4', 'Should have returned an error but did not');
+      }
+    } catch (e) {
+      fail('t4', e.message);
+    }
+  }
+
+  async function test5() {
+    pending('t5');
+    if (!testSession) {
+      info('t5', 'Run TEST 3 first to get a session');
+      return;
+    }
+    const token = testSession.access_token;
+    if (token && token.startsWith('eyJ')) {
+      pass('t5', 'Session has access_token (JWT: ' + token.substring(0,20) + '...)');
+    } else {
+      fail('t5', 'access_token missing or invalid format');
+    }
+  }
+
+  async function test6() {
+    pending('t6');
+    if (!testSession) {
+      info('t6', 'Run TEST 3 first');
+      return;
+    }
+    const { apiBase } = getConfig();
+    try {
+      const res = await fetch(apiBase + '/account/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + testSession.access_token,
+        },
+        body: JSON.stringify({
+          user_id:   testSession.user.id,
+          email:     testSession.user.email,
+          full_name: 'Test User',
+        })
+      });
+      const data = await res.json();
+      if (data.ok === true) {
+        pass('t6', '/account/register returned { ok: true }');
+      } else {
+        fail('t6', 'Response: ' + JSON.stringify(data));
+      }
+    } catch (e) {
+      fail('t6', e.message);
+    }
+  }
+
+  async function test7() {
+    pending('t7');
+    const { apiBase } = getConfig();
+    try {
+      const res = await fetch(apiBase + '/account/status');  // no token
+      if (res.status === 401) {
+        pass('t7', '/account/status without token returns 401 ✓');
+      } else {
+        fail('t7', 'Expected 401 but got ' + res.status);
+      }
+    } catch (e) {
+      fail('t7', e.message);
+    }
+  }
+
+  async function test8() {
+    pending('t8');
+    if (!testSession) { info('t8', 'Run TEST 3 first'); return; }
+    const { apiBase } = getConfig();
+    try {
+      const res = await fetch(apiBase + '/account/status', {
+        headers: { 'Authorization': 'Bearer ' + testSession.access_token }
+      });
+      const data = await res.json();
+      if (data.plan) {
+        pass('t8', 'Status: plan=' + data.plan + 
+          (data.active ? ', active=true' : 
+           ', rewrites_used=' + data.rewrites_used));
+      } else {
+        fail('t8', 'No "plan" field in response: ' + JSON.stringify(data));
+      }
+    } catch (e) {
+      fail('t8', e.message);
+    }
+  }
+
+  async function test9() {
+    pending('t9');
+    if (!testSession) { info('t9', 'Run TEST 3 first'); return; }
+    const { apiBase } = getConfig();
+    try {
+      const res = await fetch(apiBase + '/account/stats', {
+        headers: { 'Authorization': 'Bearer ' + testSession.access_token }
+      });
+      const data = await res.json();
+      const required = ['total_rewrites', 'avg_score', 'scores_by_day'];
+      const missing = required.filter(k => !(k in data));
+      if (missing.length === 0) {
+        pass('t9', 'Stats shape correct — total:' + data.total_rewrites + 
+          ', avg:' + data.avg_score + '/100');
+      } else {
+        fail('t9', 'Missing fields: ' + missing.join(', ') + 
+          '\nGot: ' + JSON.stringify(data));
+      }
+    } catch (e) {
+      fail('t9', e.message);
+    }
+  }
+
+  async function test10() {
+    pending('t10');
+    if (!testSession) { info('t10', 'Run TEST 3 first'); return; }
+    const { apiBase } = getConfig();
+    try {
+      const res = await fetch(apiBase + '/rewrite', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + testSession.access_token,
+        },
+        body: JSON.stringify({
+          text: 'Please do the needful and revert back to me at the earliest.',
+          tone: 'Formal',
+          language: 'auto',
+        })
+      });
+      const data = await res.json();
+      if (data.success && data.score > 0) {
+        pass('t10', 'Rewrite succeeded. Score: ' + data.score + '/100\n' +
+          'Result: "' + (data.text || '').substring(0, 80) + '..."');
+      } else {
+        fail('t10', JSON.stringify(data));
+      }
+    } catch (e) {
+      fail('t10', e.message);
+    }
+  }
+
+  async function test11() {
+    pending('t11');
+    if (!testSession) { info('t11', 'Run TEST 3 first'); return; }
+    const { apiBase } = getConfig();
+    try {
+      // Get count before
+      const before = await (await fetch(apiBase + '/account/stats', {
+        headers: { 'Authorization': 'Bearer ' + testSession.access_token }
+      })).json();
+      const countBefore = before.total_rewrites || 0;
+
+      // Do a rewrite
+      await fetch(apiBase + '/rewrite', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + testSession.access_token,
+        },
+        body: JSON.stringify({
+          text: 'I want to inform you that I will be out of station tomorrow.',
+          tone: 'Polite',
+          language: 'auto',
+        })
+      });
+
+      // Small delay for DB to update
+      await new Promise(r => setTimeout(r, 1500));
+
+      // Get count after
+      const after = await (await fetch(apiBase + '/account/stats', {
+        headers: { 'Authorization': 'Bearer ' + testSession.access_token }
+      })).json();
+      const countAfter = after.total_rewrites || 0;
+
+      if (countAfter > countBefore) {
+        pass('t11', 'total_rewrites incremented: ' + countBefore + ' → ' + countAfter);
+      } else {
+        fail('t11', 'Count did NOT increment! Before: ' + countBefore + ', After: ' + countAfter +
+          '\nCheck that /rewrite endpoint calls stats update');
+      }
+    } catch (e) {
+      fail('t11', e.message);
+    }
+  }
+
+  async function test12() {
+    pending('t12');
+    if (!testSession) { info('t12', 'Run TEST 3 first'); return; }
+    const { apiBase } = getConfig();
+    try {
+      const stats = await (await fetch(apiBase + '/account/stats', {
+        headers: { 'Authorization': 'Bearer ' + testSession.access_token }
+      })).json();
+      
+      const avg = stats.avg_score;
+      if (typeof avg === 'number' && avg >= 0 && avg <= 100) {
+        pass('t12', 'avg_score is valid number: ' + avg + '/100' +
+          (avg === 0 ? ' (0 = no rewrites yet, run TEST 10/11 first)' : ''));
+      } else {
+        fail('t12', 'avg_score invalid: ' + JSON.stringify(avg));
+      }
+    } catch (e) {
+      fail('t12', e.message);
+    }
+  }
+
+  async function test13() {
+    pending('t13');
+    if (!initClient()) return;
+    try {
+      // Get the OAuth URL without actually redirecting
+      // We check the URL is properly formed
+      const { data, error } = await sb.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: 'http://localhost/auth-callback.html',
+          skipBrowserRedirect: true,  // don't actually redirect
+        }
+      });
+      if (error) throw error;
+      if (data.url && data.url.includes('accounts.google.com')) {
+        pass('t13', 'Google OAuth URL generated:\n' + data.url.substring(0, 80) + '...\n\n' +
+          '⚠️ MANUAL CHECK required:\n' +
+          '1. Supabase Dashboard → Auth → URL Configuration\n' +
+          '   Add: https://replypals.in/auth-callback.html\n' +
+          '2. Google Cloud Console → OAuth → Authorized redirect URIs\n' +
+          '   Add: https://YOUR_PROJECT.supabase.co/auth/v1/callback');
+      } else {
+        fail('t13', 'OAuth URL not generated. Check Supabase Google provider is enabled.\nGot: ' + JSON.stringify(data));
+      }
+    } catch (e) {
+      fail('t13', e.message + '\n\nFix: Supabase Dashboard → Auth → Providers → Google → Enable it');
+    }
+  }
+
+  async function test14() {
+    pending('t14');
+    try {
+      const res = await fetch('/auth-callback.html');
+      if (res.ok) {
+        pass('t14', 'auth-callback.html exists and returns 200');
+      } else {
+        fail('t14', 'auth-callback.html returned ' + res.status);
+      }
+    } catch (e) {
+      info('t14', 'Cannot check when running from file://' +
+        '\nDeploy to a server and test there.\nManually verify auth-callback.html exists in website/ folder.');
+    }
+  }
+
+  async function test15() {
+    pending('t15');
+    if (!initClient()) return;
+    try {
+      // Sign in first
+      const { email, password } = getConfig();
+      await sb.auth.signInWithPassword({ email, password });
+      
+      // Sign out
+      const { error } = await sb.auth.signOut();
+      if (error) throw error;
+      
+      // Check session is gone
+      const { data: { session } } = await sb.auth.getSession();
+      if (!session) {
+        pass('t15', 'Sign out successful — session cleared');
+        testSession = null;
+      } else {
+        fail('t15', 'Session still exists after sign out');
+      }
+    } catch (e) {
+      fail('t15', e.message);
+    }
+  }
+
+  // ── Run all ───────────────────────────────────────────
+  async function runAllTests() {
+    if (!initClient()) return;
+    
+    // Run sequentially so sessions are available
+    await test1();
+    await test2();
+    await test3();  // establishes testSession
+    await test4();
+    await test5();
+    await test6();
+    await test7();
+    await test8();
+    await test9();
+    await test10();
+    await test11();
+    await test12();
+    await test13();
+    await test14();
+    await test15();
+    
+    // Count results
+    const passes = document.querySelectorAll('.result.pass').length;
+    const fails  = document.querySelectorAll('.result.fail').length;
+    const infos  = document.querySelectorAll('.result.info').length;
+    alert(`Test run complete!\n\n✅ Passed: ${passes}\n❌ Failed: ${fails}\nℹ️ Info: ${infos}`);
+  }
+
+  async function runAuthTests() {
+    if (!initClient()) return;
+    await test1(); await test3(); await test4();
+    await test5(); await test13(); await test15();
+  }
+
+  async function runStatsTests() {
+    if (!initClient()) return;
+    if (!testSession) await test3();
+    await test6(); await test7(); await test8();
+    await test9(); await test10(); await test11(); await test12();
+  }
+  </script>
+</body>
+</html>

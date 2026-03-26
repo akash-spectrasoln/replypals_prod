@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Welcome to Pro! — ReplyPals</title>
+  <meta name="description" content="Your ReplyPals Pro subscription is confirmed. Get your license key and start writing like a native.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Syne:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'DM Sans', sans-serif; background: linear-gradient(135deg, #FFF8F5 0%, #F8F9FE 50%, #FFF 100%); min-height: 100vh; display: flex; flex-direction: column; color: #1A1D2E; }
+    .nav { position: fixed; top: 0; left: 0; width: 100%; background: rgba(255,255,255,0.92); backdrop-filter: blur(12px); border-bottom: 1px solid #EAECF4; z-index: 50; }
+    .nav-inner { max-width: 1200px; margin: 0 auto; padding: 0 24px; height: 64px; display: flex; align-items: center; }
+    .logo { display: flex; align-items: center; gap: 8px; text-decoration: none; }
+    .logo-mark { width: 32px; height: 32px; background: #FF6B35; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 14px; }
+    .logo-text { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 20px; color: #0F2544; }
+    .main { flex: 1; display: flex; align-items: center; justify-content: center; padding: 100px 24px 60px; }
+    .card { width: 100%; max-width: 520px; background: #fff; border-radius: 20px; box-shadow: 0 24px 64px rgba(0,0,0,0.08); padding: 48px 40px; text-align: center; }
+    .check-circle { width: 80px; height: 80px; background: linear-gradient(135deg, #10B981, #34D399); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 24px; animation: scaleIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1); }
+    @keyframes scaleIn { from { transform: scale(0); } to { transform: scale(1); } }
+    .check-svg { animation: drawCheck 0.6s ease 0.3s both; }
+    @keyframes drawCheck { from { stroke-dashoffset: 30; } to { stroke-dashoffset: 0; } }
+    h1 { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 28px; color: #0F2544; margin-bottom: 8px; }
+    .sent-to { color: #6B7280; font-size: 15px; margin-bottom: 32px; }
+    .sent-to strong { color: #0F2544; }
+    .key-hint { background: #F8F9FE; border: 1.5px solid #EAECF4; border-radius: 10px; padding: 12px 16px; font-family: 'Courier New', monospace; font-size: 15px; color: #0F2544; letter-spacing: 0.05em; margin-bottom: 28px; }
+    .steps-title { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 15px; color: #6B7280; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 16px; }
+    .step { display: flex; align-items: flex-start; gap: 12px; text-align: left; margin-bottom: 14px; }
+    .step-num { width: 28px; height: 28px; min-width: 28px; background: linear-gradient(135deg, #FF6B35, #FF8C42); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 13px; }
+    .step-text { font-size: 14px; color: #374151; padding-top: 4px; }
+    .btn-orange { display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #FF6B35, #FF8C42); color: #fff; border: none; border-radius: 12px; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 15px; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 16px rgba(255,107,53,0.3); text-decoration: none; margin-top: 20px; }
+    .btn-orange:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(255,107,53,0.4); }
+    .btn-navy { display: inline-block; padding: 12px 24px; background: #0F2544; color: #fff; border: none; border-radius: 10px; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 14px; cursor: pointer; transition: all 0.2s; text-decoration: none; margin: 12px 8px 0; }
+    .btn-navy:hover { background: #1a3a6e; }
+    .resend-link { display: inline-block; margin-top: 16px; font-size: 13px; color: #6B7280; cursor: pointer; border: none; background: none; font-family: 'DM Sans', sans-serif; }
+    .resend-link:hover { color: #FF6B35; }
+    .loading-state { text-align: center; padding: 60px; }
+    .spinner { width: 36px; height: 36px; border: 3px solid #EAECF4; border-top-color: #FF6B35; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <nav class="nav">
+    <div class="nav-inner">
+      <a href="index.html" class="logo"><div class="logo-mark">R</div><span class="logo-text">ReplyPals</span></a>
+    </div>
+  </nav>
+
+  <div class="main">
+    <div class="card">
+      <div id="loadingState" class="loading-state">
+        <div class="spinner"></div>
+        <p style="color:#6B7280;">Confirming your payment...</p>
+      </div>
+
+      <div id="successState" style="display:none;">
+        <div class="check-circle">
+          <svg class="check-svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="30" stroke-dashoffset="0">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+        </div>
+
+        <h1>🎉 Welcome to ReplyPals Pro!</h1>
+        <p class="sent-to">Your license key has been sent to:<br><strong id="emailDisplay">loading...</strong></p>
+
+        <div class="key-hint" id="keyHint"></div>
+
+        <div class="steps-title">── What to do next ──</div>
+        <div class="step"><div class="step-num">1</div><div class="step-text"><!-- Replace YOUR_EXTENSION_ID --><a href="https://chromewebstore.google.com/detail/replypal/EXTENSION_ID_HERE" style="color:#FF6B35;font-weight:600;">Add to Chrome — Free</a></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-text">Click the extension icon → "Already have a key?"</div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-text">Paste your key from the email</div></div>
+        <div class="step"><div class="step-num">4</div><div class="step-text">Start writing like a native! ✨</div></div>
+
+        <div>
+          <a href="dashboard.html?upgraded=true" class="btn-orange">Go to Dashboard →</a>
+        </div>
+
+        <button class="resend-link" id="resendBtn">Can't find your email? Resend license →</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // <!-- REPLACE with your API base URL -->
+  const API_BASE = '';  // same origin — API and website served together
+
+  const params = new URLSearchParams(window.location.search);
+  const sessionId = params.get('session_id');
+
+  async function loadPayment() {
+    if (!sessionId) {
+      document.getElementById('loadingState').innerHTML = '<p style="color:#991B1B;">No session found. <a href="index.html" style="color:#FF6B35;">Go home →</a></p>';
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/account/payment-success`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId })
+      });
+      const data = await res.json();
+
+      document.getElementById('emailDisplay').textContent = data.email;
+      document.getElementById('keyHint').textContent = data.license_key_hint ? `Key starts with: ${data.license_key_hint}` : 'Check your email for your license key';
+
+      document.getElementById('loadingState').style.display = 'none';
+      document.getElementById('successState').style.display = 'block';
+    } catch (e) {
+      document.getElementById('loadingState').innerHTML = '<p style="color:#991B1B;">Could not load payment details. <a href="dashboard.html" style="color:#FF6B35;">Go to dashboard →</a></p>';
+    }
+  }
+
+  // Resend
+  document.getElementById('resendBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('resendBtn');
+    btn.textContent = 'Sending...';
+    btn.disabled = true;
+    try {
+      await fetch(`${API_BASE}/account/resend-license-by-session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId })
+      });
+      btn.textContent = '✅ License email resent!';
+    } catch (e) {
+      btn.textContent = 'Failed to resend. Try again.';
+    }
+    setTimeout(() => { btn.textContent = 'Resend license →'; btn.disabled = false; }, 4000);
+  });
+
+  loadPayment();
+</script>
+</body>
+</html>

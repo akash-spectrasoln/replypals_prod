@@ -1,0 +1,1394 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ReplyPals — AI Email Rewriter for Non-Native English Speakers</title>
+  <meta name="description" content="Fix 'do the needful', 'revert back' and 47+ non-native English patterns instantly. Works in Gmail, WhatsApp Web, LinkedIn. Free Chrome extension.">
+  <meta name="keywords" content="fix non-native English, Indian English correction, do the needful alternative, Grammarly alternative India, email rewriter Chrome extension, English tone changer">
+  
+  <meta property="og:title" content="ReplyPals — Write English Like a Native">
+  <meta property="og:description" content="Rewrite any email or message in seconds. Built for Indian, Filipino, Arabic and Spanish English speakers.">
+  <meta property="og:image" content="https://replypals.in/og-image.png">
+  <meta property="og:url" content="https://replypals.in">
+  <meta property="og:type" content="website">
+  
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="ReplyPals — AI Writing for Non-Native Speakers">
+  <meta name="twitter:description" content="Fix non-native English patterns instantly. Free Chrome extension.">
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "ReplyPals",
+    "applicationCategory": "ProductivityApplication",
+    "operatingSystem": "Chrome",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD",
+      "description": "Free to start"
+    },
+    "aggregateRating": {
+      "@type": "AggregateRating",
+      "ratingValue": "4.9",
+      "ratingCount": "127"
+    },
+    "description": "AI writing assistant for non-native English speakers"
+  }
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Syne:wght@500;600;700;800&display=swap" rel="stylesheet">
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script>
+    tailwind.config = {
+      content: [],
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              orange: '#FF6B35',
+              orangedark: '#E85520',
+              navy: '#0F2544',
+              navylight: '#1a3a6e',
+              text: '#1A1D2E',
+              textmuted: '#6B7280',
+              bgsoft: '#FFF8F5',
+              bggrey: '#F8F9FE',
+              green: '#10B981',
+              border: '#EAECF4'
+            }
+          },
+          fontFamily: {
+            syne: ['Syne', 'sans-serif'],
+            sans: ['"DM Sans"', 'sans-serif']
+          }
+        }
+      }
+    }
+  </script>
+  
+  <style>
+    :root {
+      scroll-padding-top: 80px;
+    }
+    .animate-on-scroll {
+      opacity: 0;
+      transform: translateY(24px);
+      transition: opacity 0.5s ease-out, transform 0.5s ease-out;
+    }
+    .animate-on-scroll.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .nav-hidden {
+      transform: translateY(-100%);
+    }
+    .nav-shadow {
+      box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+    }
+    .demo-card-state {
+      transition: opacity 200ms ease, transform 200ms ease;
+    }
+    /* SVG stroke animation for hero */
+    .draw-line {
+      stroke-dasharray: 400;
+      stroke-dashoffset: 400;
+      animation: draw 1s ease forwards 0.8s;
+    }
+    @keyframes draw {
+      to { stroke-dashoffset: 0; }
+    }
+    /* Feature cards hover */
+    .feature-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 30px rgba(0,0,0,0.08);
+      border-top-color: #FF6B35;
+      border-top-width: 3px;
+    }
+    /* FAQ accordion */
+    .faq-answer {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 300ms ease;
+    }
+    .faq-item.open .faq-answer {
+      max-height: 200px;
+    }
+    .faq-item.open .faq-icon {
+      transform: rotate(45deg);
+    }
+    .pro-card-shadow {
+      box-shadow: 0 16px 40px rgba(255, 107, 53, 0.15);
+    }
+  </style>
+</head>
+<body class="font-sans text-brand-text bg-white antialiased">
+
+<!-- SECTION 1 — NAVBAR -->
+<nav id="navbar" class="fixed top-0 left-0 w-full bg-white/90 backdrop-blur-md border-b border-brand-border z-50 transition-all duration-300">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex justify-between items-center h-16">
+      
+      <!-- Logo -->
+      <a href="#" class="flex items-center gap-2 flex-shrink-0 group">
+        <div class="w-8 h-8 bg-brand-orange rounded-full flex items-center justify-center group-hover:scale-105 transition-transform">
+          <span class="font-syne font-bold text-white leading-none">R</span>
+        </div>
+        <span class="font-syne font-bold text-xl text-brand-navy tracking-tight">ReplyPals</span>
+      </a>
+
+      <!-- Desktop Nav -->
+      <div class="hidden md:flex items-center space-x-8">
+        <a href="#how-it-works" class="text-sm font-medium text-brand-textmuted hover:text-brand-orange transition-colors">How it Works</a>
+        <a href="#features" class="text-sm font-medium text-brand-textmuted hover:text-brand-orange transition-colors">Features</a>
+        <a href="#pricing" class="text-sm font-medium text-brand-textmuted hover:text-brand-orange transition-colors">Pricing</a>
+        <a href="#faq" class="text-sm font-medium text-brand-textmuted hover:text-brand-orange transition-colors">FAQ</a>
+      </div>
+
+      <!-- Right Buttons (logged out state) -->
+      <div id="navLoggedOut" class="hidden md:flex items-center gap-4">
+        <a href="login.html" class="text-sm font-medium text-brand-textmuted hover:text-brand-navy transition-colors">Log In</a>
+        <!-- Replace YOUR_EXTENSION_ID with Chrome Web Store extension ID -->
+        <a href="https://chromewebstore.google.com/detail/replypal/EXTENSION_ID_HERE" 
+           onclick="trackCTAClick('navbar')"
+           class="bg-brand-orange hover:bg-brand-orangedark text-white text-sm font-medium px-5 py-2 rounded-full transition-colors flex items-center gap-2">
+           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+             <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="currentColor" stroke-width="2"/>
+             <path d="M12 8V16M8 12H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+           </svg>
+           Add to Chrome — Free
+        </a>
+      </div>
+      <!-- Right Buttons (logged in state) -->
+      <div id="navLoggedIn" class="hidden items-center gap-4" style="display:none;">
+        <div class="relative">
+          <button id="navAvatar" class="w-[34px] h-[34px] rounded-full bg-gradient-to-br from-brand-orange to-[#FF8C42] text-white font-bold text-sm flex items-center justify-center cursor-pointer" title="Account">?</button>
+          <div id="navDropdown" class="absolute right-0 top-[42px] w-[200px] bg-white border border-brand-border rounded-xl shadow-xl overflow-hidden z-50" style="display:none;">
+            <a href="dashboard.html" class="flex items-center gap-2 px-4 py-2.5 text-sm text-brand-text hover:bg-gray-50 transition-colors">📊 Dashboard</a>
+            <a href="dashboard.html" class="flex items-center gap-2 px-4 py-2.5 text-sm text-brand-text hover:bg-gray-50 transition-colors">🔑 License Key</a>
+            <div class="h-px bg-brand-border"></div>
+            <button id="navSignOut" class="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-brand-text hover:bg-gray-50 transition-colors text-left">🚪 Sign Out</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mobile Menu Button -->
+      <button id="mobile-menu-btn" class="md:hidden text-brand-text p-2">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+        </svg>
+      </button>
+
+    </div>
+  </div>
+  
+  <!-- Mobile Menu Dropdown -->
+  <div id="mobile-menu" class="hidden md:hidden bg-white border-b border-brand-border px-4 py-4 space-y-3 shadow-lg absolute w-full">
+    <a href="#how-it-works" class="block text-brand-text font-medium py-2">How it Works</a>
+    <a href="#features" class="block text-brand-text font-medium py-2">Features</a>
+    <a href="#pricing" class="block text-brand-text font-medium py-2">Pricing</a>
+    <a href="#faq" class="block text-brand-text font-medium py-2">FAQ</a>
+    <div class="pt-2 border-t border-brand-border">
+      <a id="mobileAuthLink" href="login.html" class="block text-brand-text font-medium py-2">Log In</a>
+      <!-- Replace YOUR_EXTENSION_ID with Chrome Web Store extension ID -->
+      <a href="https://chromewebstore.google.com/detail/replypal/EXTENSION_ID_HERE" 
+         onclick="trackCTAClick('mobile_navbar')"
+         class="block w-full text-center bg-brand-orange text-white font-medium px-5 py-3 rounded-xl mt-2">
+         Add to Chrome — Free
+      </a>
+    </div>
+  </div>
+</nav>
+
+<!-- SECTION 2 — HERO -->
+<section class="relative pt-32 pb-20 lg:pt-48 lg:pb-32 overflow-hidden min-h-screen flex items-center">
+  <!-- Soft Radial Gradient BG -->
+  <div class="absolute top-0 right-0 w-full h-full pointer-events-none" style="background: radial-gradient(ellipse at 80% 20%, rgba(255,107,53,0.08) 0%, transparent 60%);"></div>
+  
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 w-full">
+    <div class="flex flex-col lg:flex-row items-center gap-12 lg:gap-8">
+      
+      <!-- Left Column: Content -->
+      <div class="w-full lg:w-[60%] text-center lg:text-left">
+        
+        <!-- Badge -->
+        <div class="inline-flex items-center space-x-2 bg-[#FFF3EE] border border-brand-orange/30 text-brand-orangedark px-3 py-1.5 rounded-full text-xs font-semibold mb-6 animate-[fadeInUp_0.6s_ease-out]">
+          <span>✨</span>
+          <span>Built for 1.5B+ non-native English speakers</span>
+        </div>
+        
+        <!-- Headline -->
+        <h1 class="font-syne font-extrabold text-[#1A1D2E] text-4xl sm:text-5xl lg:text-[64px] leading-[1.1] tracking-tight mb-6 animate-[fadeInUp_0.6s_ease-out_80ms_both]">
+          Write English Emails<br>That Sound Completely<br>
+          <span class="relative inline-block">
+            Native.
+            <svg class="absolute -bottom-2 left-0 w-full draw-line text-brand-orange" viewBox="0 0 200 12" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+              <path d="M2 9.5C50 -2.5 150 -1.5 198 9.5" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+            </svg>
+          </span>
+        </h1>
+        
+        <!-- Subtext -->
+        <p class="text-brand-textmuted text-lg sm:text-xl leading-relaxed max-w-lg mx-auto lg:mx-0 mb-8 animate-[fadeInUp_0.6s_ease-out_160ms_both]">
+          ReplyPals rewrites your emails, messages, and texts in seconds. Works inside Gmail, WhatsApp Web, LinkedIn and everywhere you type. 
+          <br><br><span class="font-medium text-brand-text">No copy-paste. No switching tabs.</span>
+        </p>
+        
+        <!-- Buttons -->
+        <div class="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4 mb-6 animate-[fadeInUp_0.6s_ease-out_240ms_both]">
+          <!-- TODO: Replace with your Chrome Web Store extension ID -->
+          <a href="https://chromewebstore.google.com/detail/replypal/EXTENSION_ID_HERE" 
+             onclick="trackCTAClick('hero')"
+             class="w-full sm:w-auto bg-brand-orange hover:bg-brand-orangedark text-white font-syne font-bold text-base px-8 py-4 rounded-full shadow-[0_8px_24px_rgba(255,107,53,0.3)] hover:shadow-[0_12px_32px_rgba(255,107,53,0.4)] hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2">
+            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/></svg>
+            Add to Chrome — It's Free
+          </a>
+          
+          <a href="#how-it-works" class="w-full sm:w-auto bg-white border-2 border-brand-border hover:border-brand-textmuted text-brand-text font-bold text-base px-8 py-3.5 rounded-full transition-colors flex items-center justify-center gap-2">
+            <svg class="w-5 h-5 text-brand-orange" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+            Watch 60-sec Demo
+          </a>
+        </div>
+        
+        <!-- Trust Signals -->
+        <div class="flex items-center justify-center lg:justify-start gap-3 sm:gap-4 text-[13px] text-brand-textmuted animate-[fadeInUp_0.6s_ease-out_320ms_both]">
+          <span class="flex items-center gap-1"><span class="text-[#FBBF24]">⭐⭐⭐⭐⭐</span> 4.9 rating</span>
+          <span>·</span>
+          <span class="flex items-center gap-1">🔒 Never stores your text</span>
+          <span>·</span>
+          <span class="flex items-center gap-1">✅ Free to start</span>
+        </div>
+      </div>
+
+
+      <!-- Right Column: Demo Animation -->
+      <div class="w-full lg:w-[40%] flex justify-center lg:justify-end animate-[fadeInUp_0.6s_ease-out_400ms_both] relative z-20">
+        <div class="w-full max-w-[360px] bg-white rounded-2xl shadow-[0_24px_64px_rgba(0,0,0,0.08)] overflow-hidden border border-brand-border">
+          
+          <!-- Card Header -->
+          <div class="h-1 bg-gradient-to-r from-brand-orange to-brand-orangedark w-full"></div>
+          <div class="flex items-center justify-between px-4 py-3 border-b border-brand-border bg-brand-bggrey">
+            <div class="flex items-center gap-2">
+              <div class="w-5 h-5 bg-brand-orange rounded-full flex items-center justify-center">
+                <span class="font-syne font-bold text-white text-[10px]">R</span>
+              </div>
+              <span class="font-syne font-bold text-brand-navy text-sm">ReplyPals</span>
+            </div>
+            <div class="flex items-center gap-1">
+              <span class="text-xs text-brand-textmuted">Gmail</span>
+              <!-- Gmail icon placeholder -->
+              <svg class="w-3 h-3 text-red-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12L2 5v14l10 5l10-5V5l-10 7z"/></svg>
+            </div>
+          </div>
+          
+          <!-- Card Body / Animation Container -->
+          <div class="p-5 flex flex-col gap-4 h-[280px] relative bg-white">
+            
+            <!-- Original Input -->
+            <div id="demo-original" class="absolute inset-5 demo-card-state transition-all duration-300 transform translate-y-0 opacity-100 flex flex-col pointer-events-none z-30">
+              <div class="text-xs text-brand-textmuted font-medium mb-2 uppercase tracking-wide">Original Email</div>
+              <div id="demo-original-text" class="border border-brand-border rounded-xl p-3 text-[15px] leading-relaxed text-brand-text bg-white h-[100px] shadow-sm font-sans flex items-start whitespace-pre-line">Please do the needful and revert at the earliest. I am having a doubt regarding the project timeline.</div>
+              <div class="flex items-center justify-between mt-auto">
+                <div class="bg-brand-bgsoft border border-brand-orangedark/20 rounded-full px-2.5 py-1 text-brand-orangedark text-xs font-semibold flex items-center gap-1 shadow-sm">
+                  <span>💪</span> Confident
+                </div>
+                <div class="bg-brand-orange text-white rounded-full px-3 py-1.5 text-xs font-bold shadow-md opacity-90 blur-[0.3px] scale-95 transition-all">
+                  <span class="flex items-center">✨ Rewrite</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Loading State -->
+            <div id="demo-loading" class="absolute inset-5 demo-card-state transition-all duration-300 transform opacity-0 translate-y-8 flex flex-col justify-center items-center pointer-events-none z-20">
+              <div class="w-12 h-12 relative flex items-center justify-center mb-4">
+                <div class="absolute inset-0 rounded-full border-2 border-brand-border"></div>
+                <!-- CSS spinner -->
+                <div class="absolute inset-0 rounded-full border-t-2 border-brand-orange animate-spin"></div>
+                <span class="font-syne font-bold text-brand-orange text-lg">R</span>
+              </div>
+              <div class="text-sm font-medium text-brand-textmuted animate-pulse">Rewriting as Confident...</div>
+              <div class="w-48 h-1.5 bg-brand-border rounded-full mt-4 overflow-hidden">
+                <div class="h-full bg-brand-orange rounded-full animate-[progress_1.5s_ease-out_forwards] w-0"></div>
+              </div>
+            </div>
+
+            <!-- Rewritten Result -->
+            <div id="demo-result" class="absolute inset-5 demo-card-state transition-all duration-300 transform opacity-0 translate-y-8 flex flex-col pointer-events-none z-10">
+              <div class="flex items-center justify-between mb-2">
+                <div class="text-xs text-brand-green font-medium uppercase tracking-wide flex items-center gap-1">
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+                  Rewritten
+                </div>
+                <div class="text-xs font-bold text-brand-green bg-green-50 px-2 rounded">
+                  91/100 🎯
+                </div>
+              </div>
+              <div id="demo-rewritten-text" class="border border-brand-green/30 bg-green-50/30 rounded-xl p-3 text-[15px] leading-relaxed text-brand-text flex-grow shadow-inner whitespace-pre-line relative overflow-hidden">Please handle this and get back to me as soon as possible. I also have a question about the project timeline.</div>
+              
+              <div class="mt-3 bg-brand-bgsoft rounded-lg p-2 border border-brand-orange/10 flex items-start gap-2 shadow-sm">
+                <span class="text-sm">💡</span>
+                <div id="demo-tip-text" class="text-xs text-brand-textmuted leading-tight font-medium">"Do the needful" → "handle this"</div>
+              </div>
+              
+              <div class="flex items-center gap-2 mt-auto">
+                <div class="flex-1 bg-brand-orange text-white rounded-lg py-2 text-xs font-bold text-center border border-brand-orangedark shadow-md">✅ Replace</div>
+                <div class="bg-gray-100 text-brand-textmuted rounded-lg px-3 py-2 text-xs font-bold border border-gray-200 shadow-sm">📋</div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+      
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 3 — PROBLEM/BEFORE-AFTER -->
+<section class="py-24 bg-brand-bgsoft" id="problem">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    
+    <div class="text-center max-w-2xl mx-auto mb-16 animate-on-scroll">
+      <div class="text-brand-orange text-sm font-bold uppercase tracking-widest mb-3">SOUNDS FAMILIAR?</div>
+      <h2 class="font-syne font-bold text-3xl md:text-4xl lg:text-[40px] text-brand-navy leading-tight mb-4">We all write like this sometimes.</h2>
+      <p class="text-brand-textmuted text-lg relative inline-block mx-4">
+        These phrases make perfect sense to us — but confuse native English speakers.
+      </p>
+    </div>
+
+    <!-- Scrollable Grid -->
+    <div class="flex overflow-x-auto pb-8 -mx-4 px-4 sm:overflow-visible sm:pb-0 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-2 gap-6 lg:gap-8 snap-x">
+      
+      <!-- Card 1 -->
+      <div class="min-w-[320px] w-[85vw] sm:w-auto flex-shrink-0 bg-white border border-brand-border rounded-2xl shadow-sm overflow-hidden animate-on-scroll snap-center">
+        <div class="grid grid-cols-2 divide-x divide-brand-border h-full">
+          <div class="p-6 bg-red-50/50 flex flex-col justify-between h-full relative">
+            <div>
+              <div class="text-[10px] font-bold text-gray-400 mb-3 tracking-widest uppercase border-b border-gray-200 pb-2">BEFORE</div>
+              <p class="text-[15px] font-medium text-brand-text leading-relaxed"><span class="text-red-500 mr-1 opacity-70">❌</span> "Please <span class="bg-red-100 underline decoration-red-300">do the needful</span>"</p>
+            </div>
+            <div class="mt-6 pt-4 border-t border-red-100">
+              <div class="text-[11px] text-brand-textmuted">Used in:</div>
+              <div class="text-xs font-medium text-brand-text mt-1 flex items-center gap-1.5 flex-wrap">India 🇮🇳 Pakistan 🇵🇰</div>
+            </div>
+          </div>
+          <div class="p-6 bg-[#ECFDF5] flex flex-col justify-between h-full relative">
+            <div>
+              <div class="text-[10px] font-bold text-emerald-600/60 mb-3 tracking-widest uppercase border-b border-emerald-200 pb-2">AFTER</div>
+              <p class="text-[15px] font-medium text-brand-text leading-relaxed"><span class="text-emerald-500 mr-1">✅</span> "Please <span class="bg-emerald-100 font-semibold px-1 rounded text-emerald-800">handle this</span>"</p>
+            </div>
+            <div class="mt-6 pt-4 border-t border-emerald-100">
+              <div class="text-[11px] text-emerald-700/70">Sounds native everywhere ✨</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 2 -->
+      <div class="min-w-[320px] w-[85vw] sm:w-auto flex-shrink-0 bg-white border border-brand-border rounded-2xl shadow-sm overflow-hidden animate-on-scroll snap-center" style="transition-delay: 80ms;">
+        <div class="grid grid-cols-2 divide-x divide-brand-border h-full">
+          <div class="p-6 bg-red-50/50 flex flex-col justify-between h-full relative">
+            <div>
+              <div class="text-[10px] font-bold text-gray-400 mb-3 tracking-widest uppercase border-b border-gray-200 pb-2">BEFORE</div>
+              <p class="text-[15px] font-medium text-brand-text leading-relaxed"><span class="text-red-500 mr-1 opacity-70">❌</span> "I'll <span class="bg-red-100 underline decoration-red-300">revert back</span> tomorrow."</p>
+            </div>
+            <div class="mt-6 pt-4 border-t border-red-100">
+              <div class="text-[11px] text-brand-textmuted">Used in:</div>
+              <div class="text-xs font-medium text-brand-text mt-1 flex flex-wrap gap-1.5 align-middle items-center"><div>India 🇮🇳</div><div class="whitespace-nowrap">Middle East 🌍</div></div>
+            </div>
+          </div>
+          <div class="p-6 bg-[#ECFDF5] flex flex-col justify-between h-full relative">
+            <div>
+              <div class="text-[10px] font-bold text-emerald-600/60 mb-3 tracking-widest uppercase border-b border-emerald-200 pb-2">AFTER</div>
+              <p class="text-[15px] font-medium text-brand-text leading-relaxed"><span class="text-emerald-500 mr-1">✅</span> "I'll <span class="bg-emerald-100 font-semibold px-1 rounded text-emerald-800">reply</span> tomorrow."</p>
+            </div>
+            <div class="mt-6 pt-4 border-t border-emerald-100">
+              <div class="text-[11px] text-emerald-700/70">Sounds native everywhere ✨</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 3 -->
+      <div class="min-w-[320px] w-[85vw] sm:w-auto flex-shrink-0 bg-white border border-brand-border rounded-2xl shadow-sm overflow-hidden animate-on-scroll snap-center">
+        <div class="grid grid-cols-2 divide-x divide-brand-border h-full">
+          <div class="p-6 bg-red-50/50 flex flex-col justify-between h-full relative">
+            <div>
+              <div class="text-[10px] font-bold text-gray-400 mb-3 tracking-widest uppercase border-b border-gray-200 pb-2">BEFORE</div>
+              <p class="text-[15px] font-medium text-brand-text leading-relaxed"><span class="text-red-500 mr-1 opacity-70">❌</span> "Kindly note I am <span class="bg-red-100 underline decoration-red-300">out of station</span>"</p>
+            </div>
+            <div class="mt-6 pt-4 border-t border-red-100">
+              <div class="text-[11px] text-brand-textmuted">Used in:</div>
+              <div class="text-xs font-medium text-brand-text mt-1 flex items-center gap-1.5 flex-wrap">India 🇮🇳 Sri Lanka 🇱🇰</div>
+            </div>
+          </div>
+          <div class="p-6 bg-[#ECFDF5] flex flex-col justify-between h-full relative">
+            <div>
+              <div class="text-[10px] font-bold text-emerald-600/60 mb-3 tracking-widest uppercase border-b border-emerald-200 pb-2">AFTER</div>
+              <p class="text-[15px] font-medium text-brand-text leading-relaxed"><span class="text-emerald-500 mr-1">✅</span> "Please note I am <span class="bg-emerald-100 font-semibold px-1 rounded text-emerald-800">away</span>"</p>
+            </div>
+            <div class="mt-6 pt-4 border-t border-emerald-100">
+              <div class="text-[11px] text-emerald-700/70">Sounds native everywhere ✨</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 4 -->
+      <div class="min-w-[320px] w-[85vw] sm:w-auto flex-shrink-0 bg-white border border-brand-border rounded-2xl shadow-sm overflow-hidden animate-on-scroll snap-center" style="transition-delay: 80ms;">
+        <div class="grid grid-cols-2 divide-x divide-brand-border h-full">
+          <div class="p-6 bg-red-50/50 flex flex-col justify-between h-full relative">
+            <div>
+              <div class="text-[10px] font-bold text-gray-400 mb-3 tracking-widest uppercase border-b border-gray-200 pb-2">BEFORE</div>
+              <p class="text-[15px] font-medium text-brand-text leading-relaxed"><span class="text-red-500 mr-1 opacity-70">❌</span> "Hold on <span class="bg-red-100 underline decoration-red-300">for a while</span>."</p>
+            </div>
+            <div class="mt-6 pt-4 border-t border-red-100">
+              <div class="text-[11px] text-brand-textmuted">Used in:</div>
+              <div class="text-xs font-medium text-brand-text mt-1 flex items-center gap-1.5 flex-wrap">Philippines 🇵🇭</div>
+            </div>
+          </div>
+          <div class="p-6 bg-[#ECFDF5] flex flex-col justify-between h-full relative">
+            <div>
+              <div class="text-[10px] font-bold text-emerald-600/60 mb-3 tracking-widest uppercase border-b border-emerald-200 pb-2">AFTER</div>
+              <p class="text-[15px] font-medium text-brand-text leading-relaxed"><span class="text-emerald-500 mr-1">✅</span> "Hold on <span class="bg-emerald-100 font-semibold px-1 rounded text-emerald-800">one moment</span>."</p>
+            </div>
+            <div class="mt-6 pt-4 border-t border-emerald-100">
+              <div class="text-[11px] text-emerald-700/70">Sounds native everywhere ✨</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+    
+    <div class="text-center mt-12 animate-on-scroll">
+      <p class="text-sm text-brand-textmuted mb-2">+ 47 more patterns ReplyPals automatically fixes</p>
+      <!-- TODO: Update with real link if there's a pattern directory -->
+      <!-- <a href="#" class="text-brand-orange text-sm font-semibold hover:text-brand-orangedark transition">See all patterns →</a> -->
+    </div>
+  </div>
+</section>
+
+
+<!-- SECTION 4 — HOW IT WORKS -->
+<section id="how-it-works" class="py-24 bg-white">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    
+    <div class="text-center max-w-2xl mx-auto mb-20 animate-on-scroll">
+      <div class="text-brand-orange text-sm font-bold uppercase tracking-widest mb-3">HOW IT WORKS</div>
+      <h2 class="font-syne font-bold text-3xl md:text-4xl lg:text-[40px] text-brand-navy leading-tight mb-4">From embarrassing to excellent in 3 seconds.</h2>
+    </div>
+
+    <!-- 3 Steps -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-12 md:gap-8 relative">
+      
+      <!-- Connecting Dashed Line (Desktop only) -->
+      <div class="hidden md:block absolute top-12 left-[16%] right-[16%] h-px border-t-2 border-dashed border-brand-orange/30 z-0"></div>
+
+      <!-- Step 1 -->
+      <div class="relative z-10 text-center animate-on-scroll">
+        <div class="absolute -top-6 left-1/2 -translate-x-1/2 font-syne font-black text-8xl text-[#FFE8DD] -z-10 tracking-widest leading-none select-none">01</div>
+        <div class="w-20 h-20 mx-auto bg-white border-4 border-brand-orange rounded-full flex items-center justify-center mb-6 shadow-md relative z-10 transition-transform duration-300 hover:scale-110">
+          <svg class="w-8 h-8 text-brand-orange" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"></path></svg>
+        </div>
+        <h3 class="font-syne font-bold text-xl text-brand-navy mb-4">Highlight any text</h3>
+        <p class="text-brand-textmuted text-[15px] leading-relaxed max-w-xs mx-auto">
+          Select any text you've typed on any website. Or just click the ReplyPals button that appears in Gmail and WhatsApp.
+        </p>
+      </div>
+
+      <!-- Step 2 -->
+      <div class="relative z-10 text-center animate-on-scroll" style="transition-delay: 100ms;">
+        <div class="absolute -top-6 left-1/2 -translate-x-1/2 font-syne font-black text-8xl text-[#FFE8DD] -z-10 tracking-widest leading-none select-none">02</div>
+        <div class="w-20 h-20 mx-auto bg-white border-4 border-[#FFAE8F] rounded-full flex items-center justify-center mb-6 shadow-md relative z-10 transition-transform duration-300 hover:scale-110">
+          <svg class="w-8 h-8 text-brand-orange" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path></svg>
+        </div>
+        <h3 class="font-syne font-bold text-xl text-brand-navy mb-4">Pick your tone</h3>
+        <p class="text-brand-textmuted text-[15px] leading-relaxed max-w-xs mx-auto">
+          Choose from Confident, Polite, Formal, Casual, Friendly, or Assertive. ReplyPals remembers your preference per site.
+        </p>
+      </div>
+
+      <!-- Step 3 -->
+      <div class="relative z-10 text-center animate-on-scroll" style="transition-delay: 200ms;">
+        <div class="absolute -top-6 left-1/2 -translate-x-1/2 font-syne font-black text-8xl text-[#FFE8DD] -z-10 tracking-widest leading-none select-none">03</div>
+        <div class="w-20 h-20 mx-auto bg-white border-4 border-[#FFCCB8] rounded-full flex items-center justify-center mb-6 shadow-md relative z-10 transition-transform duration-300 hover:scale-110">
+          <svg class="w-8 h-8 text-brand-orange" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
+        </div>
+        <h3 class="font-syne font-bold text-xl text-brand-navy mb-4">Replace and send</h3>
+        <p class="text-brand-textmuted text-[15px] leading-relaxed max-w-xs mx-auto">
+          One click replaces your text with the native-sounding version. Your Native Sound Score shows how natural it sounds.
+        </p>
+      </div>
+
+    </div>
+
+    <!-- Feature Chips row -->
+    <div class="mt-20 flex flex-nowrap overflow-x-auto pb-4 gap-3 md:gap-4 md:justify-center items-center px-4 md:px-0 -mx-4 md:mx-0 snap-x hide-scrollbar text-sm whitespace-nowrap animate-on-scroll" style="scrollbar-width: none;">
+      <div class="bg-gray-50 border border-gray-200 text-gray-600 px-4 py-2 rounded-full font-medium inline-flex items-center gap-2 snap-center flex-shrink-0">
+        <span class="w-2 h-2 rounded-full bg-red-500"></span> Gmail
+      </div>
+      <div class="bg-gray-50 border border-gray-200 text-gray-600 px-4 py-2 rounded-full font-medium inline-flex items-center gap-2 snap-center flex-shrink-0">
+        <span class="w-2 h-2 rounded-full bg-green-500"></span> WhatsApp Web
+      </div>
+      <div class="bg-gray-50 border border-gray-200 text-gray-600 px-4 py-2 rounded-full font-medium inline-flex items-center gap-2 snap-center flex-shrink-0">
+        <span class="w-2 h-2 rounded-full bg-[#0a66c2]"></span> LinkedIn
+      </div>
+      <div class="bg-gray-50 border border-gray-200 text-gray-600 px-4 py-2 rounded-full font-medium inline-flex items-center gap-2 snap-center flex-shrink-0">
+        <span class="w-2 h-2 rounded-full bg-black"></span> Twitter/X
+      </div>
+      <div class="bg-gray-50 border border-gray-200 text-gray-600 px-4 py-2 rounded-full font-medium inline-flex items-center gap-2 snap-center flex-shrink-0">
+        <span class="w-2 h-2 rounded-full bg-[#E01E5A]"></span> Slack
+      </div>
+      <div class="bg-gray-50 border border-gray-200 text-gray-600 px-4 py-2 rounded-full font-medium inline-flex items-center gap-2 snap-center flex-shrink-0">
+        <span class="w-2 h-2 rounded-full bg-brand-orange"></span> Any website
+      </div>
+    </div>
+    
+  </div>
+</section>
+
+<!-- SECTION 5 — FEATURES GRID -->
+<section id="features" class="py-24 bg-brand-bggrey">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    
+    <div class="text-center max-w-2xl mx-auto mb-16 animate-on-scroll">
+      <div class="text-brand-orange text-sm font-bold uppercase tracking-widest mb-3">FEATURES</div>
+      <h2 class="font-syne font-bold text-3xl md:text-4xl lg:text-[40px] text-brand-navy leading-tight mb-4">Everything you need to write like a native.</h2>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
+      
+      <!-- Card 1 -->
+      <div class="feature-card bg-white rounded-2xl p-6 md:p-8 border border-brand-border transition-all duration-300 animate-on-scroll group">
+        <div class="w-12 h-12 bg-orange-50 rounded-full flex items-center justify-center text-2xl mb-6 group-hover:bg-brand-orange/10 transition-colors">🎯</div>
+        <h3 class="font-syne font-bold text-xl text-brand-navy mb-3">Native Sound Score</h3>
+        <p class="text-brand-textmuted text-[15px] leading-relaxed mb-6">
+          Every rewrite gets scored 0-100 on how natural it sounds to native speakers. Track your improvement over time.
+        </p>
+        <div class="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+          <div class="h-full bg-gradient-to-r from-orange-300 to-green-500 w-[91%] rounded-full shadow-inner"></div>
+        </div>
+      </div>
+
+      <!-- Card 2 -->
+      <div class="feature-card bg-white rounded-2xl p-6 md:p-8 border border-brand-border transition-all duration-300 animate-on-scroll group" style="transition-delay: 80ms;">
+        <div class="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center text-2xl mb-6 group-hover:bg-blue-100 transition-colors">🌐</div>
+        <h3 class="font-syne font-bold text-xl text-brand-navy mb-3">Works Everywhere You Type</h3>
+        <p class="text-brand-textmuted text-[15px] leading-relaxed mb-6">
+          Gmail, WhatsApp Web, LinkedIn, Twitter, Slack, Notion — one click Fix This button appears wherever you write.
+        </p>
+        <div class="flex gap-2">
+          <div class="w-8 h-8 rounded bg-red-100 flex items-center justify-center text-xs">M</div>
+          <div class="w-8 h-8 rounded bg-green-100 flex items-center justify-center text-xs">W</div>
+          <div class="w-8 h-8 rounded bg-blue-100 flex items-center justify-center text-xs">in</div>
+        </div>
+      </div>
+
+      <!-- Card 3 -->
+      <div class="feature-card bg-white rounded-2xl p-6 md:p-8 border border-brand-border transition-all duration-300 animate-on-scroll group" style="transition-delay: 160ms;">
+        <div class="w-12 h-12 bg-purple-50 rounded-full flex items-center justify-center text-2xl mb-6 group-hover:bg-purple-100 transition-colors">⌨️</div>
+        <h3 class="font-syne font-bold text-xl text-brand-navy mb-3">Slash Commands</h3>
+        <p class="text-brand-textmuted text-[15px] leading-relaxed mb-6">
+          Type /formal or /confident at the end of any message and press Enter. Your text rewrites instantly. No mouse needed.
+        </p>
+        <div class="bg-gray-50 border border-gray-100 rounded px-3 py-2 text-sm font-mono text-gray-500 overflow-hidden flex items-center">
+          Hey team<span class="text-brand-orange font-bold animate-pulse">/formal_</span>
+        </div>
+      </div>
+
+      <!-- Card 4 -->
+      <div class="feature-card bg-white rounded-2xl p-6 md:p-8 border border-brand-border transition-all duration-300 animate-on-scroll group">
+        <div class="w-12 h-12 bg-pink-50 rounded-full flex items-center justify-center text-2xl mb-6 group-hover:bg-pink-100 transition-colors">💬</div>
+        <h3 class="font-syne font-bold text-xl text-brand-navy mb-3">Smart Reply Generator</h3>
+        <p class="text-brand-textmuted text-[15px] leading-relaxed mb-6">
+          Highlight any email you received. ReplyPals generates a perfect reply in your chosen tone — ready to send in seconds.
+        </p>
+        <div class="flex items-center gap-2 text-sm"><div class="bg-gray-100 rounded p-1.5 flex-1 h-6"></div><span class="text-brand-orange">→</span><div class="bg-orange-100 border border-orange-200 rounded p-1.5 flex-1 h-8"></div></div>
+      </div>
+
+      <!-- Card 5 -->
+      <div class="feature-card bg-white rounded-2xl p-6 md:p-8 border border-brand-border transition-all duration-300 animate-on-scroll group" style="transition-delay: 80ms;">
+        <div class="w-12 h-12 bg-yellow-50 rounded-full flex items-center justify-center text-2xl mb-6 group-hover:bg-yellow-100 transition-colors">🧠</div>
+        <h3 class="font-syne font-bold text-xl text-brand-navy mb-3">Tone Memory</h3>
+        <p class="text-brand-textmuted text-[15px] leading-relaxed mb-6">
+          ReplyPals learns that you use Formal on Gmail and Casual on WhatsApp. Your preference auto-selects every time.
+        </p>
+        <div class="flex items-center gap-3 text-xs font-medium">
+          <span class="bg-gray-50 px-2 py-1 rounded border border-gray-200">Gmail <span class="text-brand-orange ml-1">Formal</span></span>
+          <span class="bg-gray-50 px-2 py-1 rounded border border-gray-200">Wa <span class="text-brand-orange ml-1">Casual</span></span>
+        </div>
+      </div>
+
+      <!-- Card 6 -->
+      <div class="feature-card bg-white rounded-2xl p-6 md:p-8 border border-brand-border transition-all duration-300 animate-on-scroll group" style="transition-delay: 160ms;">
+        <div class="w-12 h-12 bg-emerald-50 rounded-full flex items-center justify-center text-2xl mb-6 group-hover:bg-emerald-100 transition-colors">📁</div>
+        <h3 class="font-syne font-bold text-xl text-brand-navy mb-3">25+ Email Templates</h3>
+        <p class="text-brand-textmuted text-[15px] leading-relaxed mb-6">
+          Leave requests, follow-ups, apologies, salary discussions — fill in 2 fields and get a perfect email instantly.
+        </p>
+        <div class="space-y-1.5">
+          <div class="h-2.5 w-full bg-gray-100 rounded-sm"></div>
+          <div class="h-2.5 w-3/4 bg-gray-100 rounded-sm"></div>
+          <div class="h-2 w-1/2 bg-gray-100 rounded-sm mt-3"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+
+<!-- SECTION 6 — SOCIAL PROOF -->
+<section class="py-24 bg-brand-navy text-white overflow-hidden relative" id="social-proof">
+  <!-- Decorative background elements -->
+  <div class="absolute top-0 right-0 w-[600px] h-[600px] bg-brand-orange opacity-5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3"></div>
+  <div class="absolute bottom-0 left-0 w-[400px] h-[400px] bg-white opacity-5 rounded-full blur-3xl translate-y-1/3 -translate-x-1/2"></div>
+  
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+    
+    <div class="text-center max-w-3xl mx-auto mb-16 animate-on-scroll">
+      <h2 class="font-syne font-bold text-3xl md:text-4xl lg:text-[40px] leading-tight text-white shadow-sm">
+        Trusted by professionals across South Asia, Southeast Asia & the Middle East
+      </h2>
+    </div>
+
+    <!-- Stats Row -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-8 mb-20 md:divide-x divide-white/10 animate-on-scroll" id="stats-row">
+      <div class="text-center px-4">
+        <div class="font-syne font-black text-4xl lg:text-5xl text-brand-orange mb-2 stat-counter" data-target="50000">0</div>
+        <div class="text-white/60 text-sm tracking-wide">Rewrites<br>Done</div>
+      </div>
+      <div class="text-center px-4">
+        <div class="font-syne font-black text-4xl lg:text-5xl text-brand-orange mb-2"><span class="stat-counter" data-target="91">0</span>/100</div>
+        <div class="text-white/60 text-sm tracking-wide">Avg<br>Score</div>
+      </div>
+      <div class="text-center px-4">
+        <div class="font-syne font-black text-4xl lg:text-5xl text-brand-orange mb-2"><span class="stat-counter" data-target="47">0</span>+</div>
+        <div class="text-white/60 text-sm tracking-wide">Non-native<br>Patterns</div>
+      </div>
+      <div class="text-center px-4">
+        <div class="font-syne font-black text-4xl lg:text-5xl text-brand-orange mb-2"><span class="stat-counter" data-target="4.9">0.0</span>/5</div>
+        <div class="text-white/60 text-sm tracking-wide flex flex-col items-center">Rating<span class="text-[10px] mt-1 space-x-px">⭐⭐⭐⭐⭐</span></div>
+      </div>
+    </div>
+
+    <!-- Testimonials -->
+    <div class="flex overflow-x-auto pb-8 -mx-4 px-4 sm:overflow-visible sm:pb-0 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-3 gap-6 lg:gap-8 snap-x relative z-10 hide-scrollbar" style="scrollbar-width: none;">
+      
+      <!-- Card 1 -->
+      <div class="min-w-[300px] w-[80vw] sm:w-auto flex-shrink-0 bg-white/5 border border-white/10 rounded-2xl p-6 md:p-8 backdrop-blur-sm animate-on-scroll snap-center">
+        <div class="flex gap-1 mb-4 text-[#FBBF24] text-xs">⭐⭐⭐⭐⭐</div>
+        <p class="text-[15px] leading-relaxed text-white font-medium mb-6">
+          "I used to spend 20 minutes rewriting every important email. Now it takes 5 seconds. My manager actually complimented my writing."
+        </p>
+        <div class="text-[13px] text-white/70 italic">— Priya S., Software Engineer, Bangalore</div>
+      </div>
+
+      <!-- Card 2 -->
+      <div class="min-w-[300px] w-[80vw] sm:w-auto flex-shrink-0 bg-white/5 border border-white/10 rounded-2xl p-6 md:p-8 backdrop-blur-sm animate-on-scroll snap-center" style="transition-delay: 100ms;">
+        <div class="flex gap-1 mb-4 text-[#FBBF24] text-xs">⭐⭐⭐⭐⭐</div>
+        <p class="text-[15px] leading-relaxed text-white font-medium mb-6">
+          "Finally a tool that understands how we write. Not just grammar — the actual phrases we use. Worth every rupee."
+        </p>
+        <div class="text-[13px] text-white/70 italic">— Akash M., BPO Team Lead, Mumbai</div>
+      </div>
+
+      <!-- Card 3 -->
+      <div class="min-w-[300px] w-[80vw] sm:w-auto flex-shrink-0 bg-white/5 border border-white/10 rounded-2xl p-6 md:p-8 backdrop-blur-sm animate-on-scroll snap-center" style="transition-delay: 200ms;">
+        <div class="flex gap-1 mb-4 text-[#FBBF24] text-xs">⭐⭐⭐⭐⭐</div>
+        <p class="text-[15px] leading-relaxed text-white font-medium mb-6">
+          "I work with US clients every day. ReplyPals makes me sound like I've been writing English my whole life."
+        </p>
+        <div class="text-[13px] text-white/70 italic">— Maria C., Virtual Assistant, Manila</div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 7 — PRICING -->
+<section id="pricing" class="py-24 bg-white relative">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    
+    <div class="text-center max-w-2xl mx-auto mb-16 animate-on-scroll">
+      <div class="text-brand-orange text-sm font-bold uppercase tracking-widest mb-3">PRICING</div>
+      <h2 class="font-syne font-bold text-3xl md:text-4xl lg:text-[40px] text-brand-navy leading-tight mb-4">Start free. Upgrade when you're ready.</h2>
+      <p class="text-brand-textmuted text-[17px] mb-4">
+        Pricing is automatically adjusted for your country. No hidden fees.
+      </p>
+      <div id="pricing-country-label" class="inline-flex items-center gap-1.5 px-3 py-1 bg-gray-50 border border-gray-200 rounded-full text-[13px] text-gray-500 font-medium">
+        <span>🌍</span> <span id="pricing-country-text">Detecting region...</span>
+      </div>
+    </div>
+
+    <!-- Pricing Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8 items-center max-w-[1000px] mx-auto mb-24">
+      
+      <!-- Starter -->
+      <div class="bg-white border border-brand-border rounded-3xl p-8 hover:shadow-xl transition-shadow animate-on-scroll relative">
+        <h3 class="font-syne font-bold text-xl text-brand-navy mb-2">Starter</h3>
+        <div class="flex items-baseline gap-1 mb-1">
+          <span class="text-3xl font-extrabold text-brand-navy price-starter">$2</span>
+          <span class="text-brand-textmuted font-medium text-sm price-per">/mo</span>
+        </div>
+        <div class="text-[13px] text-gray-400 mb-8 pb-8 border-b border-brand-border">Billed monthly</div>
+        
+        <ul class="space-y-4 mb-8 text-[15px] text-brand-text">
+          <li class="flex items-start gap-3"><span class="text-green-500 mt-0.5">✅</span> <span><strong>50 rewrites</strong> per month</span></li>
+          <li class="flex items-start gap-3"><span class="text-green-500 mt-0.5">✅</span> All 6 tones</li>
+          <li class="flex items-start gap-3"><span class="text-green-500 mt-0.5">✅</span> Works everywhere</li>
+          <li class="flex items-start gap-3"><span class="text-green-500 mt-0.5">✅</span> Native Sound Score</li>
+          <li class="flex items-start gap-3 opacity-50"><span class="text-gray-300 mt-0.5">❌</span> Tone Memory</li>
+          <li class="flex items-start gap-3 opacity-50"><span class="text-gray-300 mt-0.5">❌</span> Smart Reply</li>
+          <li class="flex items-start gap-3 opacity-50"><span class="text-gray-300 mt-0.5">❌</span> Template Library</li>
+        </ul>
+        <!-- TODO: Replace with your Chrome Web Store extension ID -->
+        <a href="https://chromewebstore.google.com/detail/replypal/EXTENSION_ID_HERE" onclick="trackCTAClick('pricing_starter')" class="block w-full text-center py-3.5 rounded-full border-2 border-brand-orange text-brand-orange hover:bg-orange-50 font-bold transition-colors">
+          Get Started
+        </a>
+      </div>
+
+      <!-- Pro -->
+      <div class="bg-white border-2 border-brand-orange rounded-3xl p-8 shadow-[0_16px_40px_rgba(255,107,53,0.15)] relative scale-100 md:scale-105 z-10 animate-on-scroll">
+        <div class="absolute -top-4 left-1/2 -translate-x-1/2 bg-brand-orange text-white px-4 py-1 rounded-full text-xs font-bold tracking-wider uppercase shadow-md">MOST POPULAR</div>
+        <h3 class="font-syne font-bold text-2xl text-brand-navy mb-2">Pro</h3>
+        <div class="flex items-baseline gap-1 mb-1">
+          <span class="text-4xl font-extrabold text-brand-navy price-pro">$9</span>
+          <span class="text-brand-textmuted font-medium text-sm price-per">/mo</span>
+        </div>
+        <div class="text-[13px] text-brand-orange font-medium mb-8 pb-8 border-b border-brand-border">Billed monthly · Save 20% annually</div>
+        
+        <ul class="space-y-4 mb-8 text-[15px] text-brand-text">
+          <li class="flex items-start gap-3"><span class="text-brand-orange mt-0.5">✅</span> <span><strong>Unlimited</strong> rewrites</span></li>
+          <li class="flex items-start gap-3"><span class="text-brand-orange mt-0.5">✅</span> All 6 tones</li>
+          <li class="flex items-start gap-3"><span class="text-brand-orange mt-0.5">✅</span> Native Sound Score</li>
+          <li class="flex items-start gap-3"><span class="text-brand-orange mt-0.5">✅</span> <strong>Tone Memory</strong></li>
+          <li class="flex items-start gap-3"><span class="text-brand-orange mt-0.5">✅</span> Smart Reply Generator</li>
+          <li class="flex items-start gap-3"><span class="text-brand-orange mt-0.5">✅</span> 25+ Templates</li>
+          <li class="flex items-start gap-3"><span class="text-brand-orange mt-0.5">✅</span> Slash Commands</li>
+          <li class="flex items-start gap-3"><span class="text-brand-orange mt-0.5">✅</span> Progress Tracker</li>
+        </ul>
+        <!-- TODO: Replace with your Chrome Web Store extension ID -->
+        <a href="https://chromewebstore.google.com/detail/replypal/EXTENSION_ID_HERE" onclick="trackCTAClick('pricing_pro')" class="block w-full text-center py-3.5 rounded-full bg-brand-orange text-white hover:bg-brand-orangedark font-bold shadow-lg shadow-orange-500/30 transition-all hover:-translate-y-0.5">
+          Get Pro Access
+        </a>
+      </div>
+
+      <!-- Team -->
+      <div class="bg-white border border-brand-border rounded-3xl p-8 hover:shadow-xl transition-shadow animate-on-scroll relative">
+        <h3 class="font-syne font-bold text-xl text-brand-navy mb-2">Team</h3>
+        <div class="flex items-baseline gap-1 mb-1">
+          <span class="text-3xl font-extrabold text-brand-navy price-team">$25</span>
+          <span class="text-brand-textmuted font-medium text-sm price-per">/mo</span>
+        </div>
+        <div class="text-[13px] text-gray-500 mb-8 pb-8 border-b border-brand-border">Up to 5 team members</div>
+        
+        <ul class="space-y-4 mb-8 text-[15px] text-brand-text">
+          <li class="flex items-start gap-3"><span class="text-brand-navy mt-0.5">✅</span> Everything in Pro</li>
+          <li class="flex items-start gap-3"><span class="text-brand-navy mt-0.5">✅</span> <strong>5 team seats</strong></li>
+          <li class="flex items-start gap-3"><span class="text-brand-navy mt-0.5">✅</span> Brand Voice Training</li>
+          <li class="flex items-start gap-3"><span class="text-brand-navy mt-0.5">✅</span> Team Admin Dashboard</li>
+          <li class="flex items-start gap-3"><span class="text-brand-navy mt-0.5">✅</span> Priority support</li>
+          <li class="flex items-start gap-3"><span class="text-brand-navy mt-0.5">✅</span> Onboarding call</li>
+        </ul>
+        <a href="mailto:support@replypals.in?subject=Team%20Plan%20Inquiry" class="block w-full text-center py-3.5 rounded-full bg-brand-navy text-white hover:bg-brand-navylight font-bold transition-colors">
+          Contact Us
+        </a>
+      </div>
+
+    </div>
+
+    <!-- Objection busters (Simple list) -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-8 max-w-4xl mx-auto border-t border-brand-border pt-16 animate-on-scroll">
+      <div>
+        <h4 class="font-bold text-brand-navy mb-2">Can I cancel anytime?</h4>
+        <p class="text-brand-textmuted text-sm leading-relaxed">Yes. Cancel in one click. No questions asked.</p>
+      </div>
+      <div>
+        <h4 class="font-bold text-brand-navy mb-2">Is my email data safe?</h4>
+        <p class="text-brand-textmuted text-sm leading-relaxed">ReplyPals never stores or reads your text. Your writing is processed and immediately deleted.</p>
+      </div>
+      <div>
+        <h4 class="font-bold text-brand-navy mb-2">Does it work on Firefox or Edge?</h4>
+        <p class="text-brand-textmuted text-sm leading-relaxed">Currently Chrome only. Firefox coming soon.</p>
+      </div>
+      <div>
+        <h4 class="font-bold text-brand-navy mb-2">What if I don't like it?</h4>
+        <p class="text-brand-textmuted text-sm leading-relaxed">You get 5 free rewrites before paying anything. No credit card needed to start.</p>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+
+<!-- SECTION 8 — FAQ -->
+<section id="faq" class="py-24 bg-brand-bggrey">
+  <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+    
+    <div class="text-center mb-16 animate-on-scroll">
+      <div class="text-brand-orange text-sm font-bold uppercase tracking-widest mb-3">FAQ</div>
+      <h2 class="font-syne font-bold text-3xl md:text-4xl text-brand-navy leading-tight">Questions? We've got answers.</h2>
+    </div>
+
+    <div class="bg-white border border-brand-border rounded-2xl shadow-sm overflow-hidden animate-on-scroll">
+      
+      <!-- FAQ 1 -->
+      <div class="faq-item border-b border-brand-border cursor-pointer group">
+        <div class="px-6 py-5 flex justify-between items-center bg-white hover:bg-gray-50 transition-colors">
+          <h4 class="font-semibold text-brand-navy text-[16px]">What is ReplyPals?</h4>
+          <svg class="faq-icon w-5 h-5 text-gray-400 group-hover:text-brand-orange transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+        </div>
+        <div class="faq-answer px-6 bg-white">
+          <p class="text-[15px] text-brand-textmuted pb-6 leading-relaxed">
+            ReplyPals is a Chrome extension that rewrites your text to sound completely natural to native English speakers. It's built specifically for people who learned English as a second language and want to communicate more confidently.
+          </p>
+        </div>
+      </div>
+
+      <!-- FAQ 2 -->
+      <div class="faq-item border-b border-brand-border cursor-pointer group">
+        <div class="px-6 py-5 flex justify-between items-center bg-white hover:bg-gray-50 transition-colors">
+          <h4 class="font-semibold text-brand-navy text-[16px]">Which websites does it work on?</h4>
+          <svg class="faq-icon w-5 h-5 text-gray-400 group-hover:text-brand-orange transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+        </div>
+        <div class="faq-answer px-6 bg-white">
+          <p class="text-[15px] text-brand-textmuted pb-6 leading-relaxed">
+            ReplyPals works on every website where you can type — Gmail, WhatsApp Web, LinkedIn, Twitter/X, Slack, Notion, Outlook, and any other website with a text field.
+          </p>
+        </div>
+      </div>
+
+      <!-- FAQ 3 -->
+      <div class="faq-item border-b border-brand-border cursor-pointer group">
+        <div class="px-6 py-5 flex justify-between items-center bg-white hover:bg-gray-50 transition-colors">
+          <h4 class="font-semibold text-brand-navy text-[16px]">What's the Native Sound Score?</h4>
+          <svg class="faq-icon w-5 h-5 text-gray-400 group-hover:text-brand-orange transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+        </div>
+        <div class="faq-answer px-6 bg-white">
+          <p class="text-[15px] text-brand-textmuted pb-6 leading-relaxed">
+            After every rewrite, ReplyPals gives your text a score from 0-100 based on how natural it sounds to a native English speaker. 90+ means it's indistinguishable from a native writer. You can track your improvement over time.
+          </p>
+        </div>
+      </div>
+
+      <!-- FAQ 4 -->
+      <div class="faq-item border-b border-brand-border cursor-pointer group">
+        <div class="px-6 py-5 flex justify-between items-center bg-white hover:bg-gray-50 transition-colors">
+          <h4 class="font-semibold text-brand-navy text-[16px]">Does ReplyPals store my emails?</h4>
+          <svg class="faq-icon w-5 h-5 text-gray-400 group-hover:text-brand-orange transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+        </div>
+        <div class="faq-answer px-6 bg-white">
+          <p class="text-[15px] text-brand-textmuted pb-6 leading-relaxed">
+            No. Your text is sent to our AI for rewriting and immediately deleted. We never store, read, or share your writing. See our Privacy Policy.
+          </p>
+        </div>
+      </div>
+
+      <!-- FAQ 5 -->
+      <div class="faq-item border-b border-brand-border cursor-pointer group">
+        <div class="px-6 py-5 flex justify-between items-center bg-white hover:bg-gray-50 transition-colors">
+          <h4 class="font-semibold text-brand-navy text-[16px]">What languages does it support?</h4>
+          <svg class="faq-icon w-5 h-5 text-gray-400 group-hover:text-brand-orange transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+        </div>
+        <div class="faq-answer px-6 bg-white">
+          <p class="text-[15px] text-brand-textmuted pb-6 leading-relaxed">
+            You can write in Hindi, Arabic, Filipino (Tagalog), Malayalam, Portuguese, Spanish, or French and ReplyPals will translate and rewrite in natural English automatically.
+          </p>
+        </div>
+      </div>
+
+      <!-- FAQ 6 -->
+      <div class="faq-item border-b border-brand-border cursor-pointer group">
+        <div class="px-6 py-5 flex justify-between items-center bg-white hover:bg-gray-50 transition-colors">
+          <h4 class="font-semibold text-brand-navy text-[16px]">How is this different from Grammarly?</h4>
+          <svg class="faq-icon w-5 h-5 text-gray-400 group-hover:text-brand-orange transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+        </div>
+        <div class="faq-answer px-6 bg-white">
+          <p class="text-[15px] text-brand-textmuted pb-6 leading-relaxed">
+            Grammarly fixes grammar. ReplyPals fixes tone and non-native patterns. If you write grammatically correct but unnatural English (like "please do the needful"), Grammarly won't catch it. ReplyPals will.
+          </p>
+        </div>
+      </div>
+
+      <!-- FAQ 7 -->
+      <div class="faq-item border-b border-brand-border cursor-pointer group">
+        <div class="px-6 py-5 flex justify-between items-center bg-white hover:bg-gray-50 transition-colors">
+          <h4 class="font-semibold text-brand-navy text-[16px]">Can I use it for WhatsApp messages?</h4>
+          <svg class="faq-icon w-5 h-5 text-gray-400 group-hover:text-brand-orange transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+        </div>
+        <div class="faq-answer px-6 bg-white">
+          <p class="text-[15px] text-brand-textmuted pb-6 leading-relaxed">
+            Yes. ReplyPals works inside WhatsApp Web. A small button appears in your message box — click it and your message is rewritten before you send.
+          </p>
+        </div>
+      </div>
+
+      <!-- FAQ 8 -->
+      <div class="faq-item border-b border-brand-border cursor-pointer group">
+        <div class="px-6 py-5 flex justify-between items-center bg-white hover:bg-gray-50 transition-colors">
+          <h4 class="font-semibold text-brand-navy text-[16px]">Can I use my voice instead of typing?</h4>
+          <svg class="faq-icon w-5 h-5 text-gray-400 group-hover:text-brand-orange transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+        </div>
+        <div class="faq-answer px-6 bg-white">
+          <p class="text-[15px] text-brand-textmuted pb-6 leading-relaxed">
+            Yes! Click the microphone button and speak in English, Malayalam, Hindi, Arabic, or any supported language. ReplyPals transcribes and rewrites your speech automatically. No typing needed.
+          </p>
+        </div>
+      </div>
+
+      <div class="faq-item cursor-pointer group">
+        <div class="px-6 py-5 flex justify-between items-center bg-white hover:bg-gray-50 transition-colors">
+          <h4 class="font-semibold text-brand-navy text-[16px]">What happens when I hit the free limit?</h4>
+          <svg class="faq-icon w-5 h-5 text-gray-400 group-hover:text-brand-orange transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+        </div>
+        <div class="faq-answer px-6 bg-white">
+          <p class="text-[15px] text-brand-textmuted pb-6 leading-relaxed">
+            You get 5 free rewrites to try ReplyPals. After that, you can upgrade to Starter or Pro. Pricing is automatically adjusted for your country.
+          </p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 9 — FINAL CTA -->
+<section class="py-24 relative overflow-hidden" style="background: linear-gradient(135deg, #FF6B35 0%, #FF8C42 100%);">
+  <!-- Decorative Blob SVGs (Top left, Bottom right) -->
+  <svg class="absolute top-0 left-0 text-white opacity-10 blur-xl w-[400px] h-[400px] -translate-x-1/2 -translate-y-1/2" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+    <path fill="currentColor" d="M47.7,-64.3C60.2,-56.3,67.8,-39.8,72.4,-23.5C77,-7.1,78.7,9.2,74.2,23.6C69.7,38.1,59.1,50.7,46.1,59.3C33,67.9,16.5,72.6,2,69.9C-12.5,67.1,-25.1,56.9,-38.4,47.8C-51.8,38.7,-65.9,30.8,-73.4,18.4C-80.9,6,-81.8,-11,-75.3,-25.8C-68.8,-40.5,-54.9,-53.1,-40.5,-60.7C-26.1,-68.3,-13.1,-70.9,2.4,-74C17.9,-77.2,35.3,-72.3,47.7,-64.3Z" transform="translate(100 100)" />
+  </svg>
+  <svg class="absolute bottom-0 right-0 text-white opacity-10 blur-xl w-[400px] h-[400px] translate-x-1/2 translate-y-1/2" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+    <path fill="currentColor" d="M51.8,-63.9C64.9,-54.7,71.7,-36.8,75,-19.1C78.3,-1.3,78.2,16.3,71.2,30.5C64.1,44.8,50.1,55.8,35.2,63C20.4,70.2,4.6,73.5,-10.1,71.2C-24.8,68.8,-38.3,60.8,-50.2,50.2C-62.1,39.5,-72.3,26.2,-75.5,11.5C-78.6,-3.3,-74.6,-19.5,-65.6,-32.1C-56.7,-44.7,-42.8,-53.6,-29.4,-61.1C-16.1,-68.6,8.4,-76.3,51.8,-63.9Z" transform="translate(100 100)" />
+  </svg>
+  
+  <div class="max-w-4xl mx-auto px-4 relative z-10 text-center animate-on-scroll">
+    <h2 class="font-syne text-white font-extrabold text-4xl sm:text-5xl lg:text-[48px] leading-tight mb-6">Start writing like a native today.</h2>
+    <p class="text-white/80 text-lg sm:text-xl font-sans max-w-xl mx-auto mb-10 leading-relaxed">
+      5 free rewrites. No credit card. No signup.<br class="hidden sm:block"> Just install and start writing better English.
+    </p>
+    
+    <!-- TODO: Replace with your Chrome Web Store extension ID -->
+    <a href="https://chromewebstore.google.com/detail/replypal/EXTENSION_ID_HERE" 
+       onclick="trackCTAClick('final_cta')"
+       class="inline-flex items-center gap-2 bg-white text-brand-orange hover:bg-orange-50 font-syne font-bold text-[16px] px-10 py-5 rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.15)] hover:shadow-[0_12px_40px_rgba(0,0,0,0.2)] hover:scale-[1.03] transition-all transform duration-300 mx-auto">
+      <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/></svg>
+      Add to Chrome — It's Free
+    </a>
+    
+    <div class="mt-6 text-[13px] text-white/70 flex items-center justify-center gap-2 font-medium">
+      <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22ZM12 4C16.4183 4 20 7.58172 20 12V18L13 11V6.5C13 5.39543 14.3431 5.39543 15 6L15 4H12Z"/></svg>
+      Available on Chrome Web Store
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 10 — FOOTER -->
+<footer class="bg-brand-navy pt-20 pb-8 text-white">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    
+    <!-- Top Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 lg:gap-8 mb-16">
+      
+      <!-- Col 1: Brand -->
+      <div class="col-span-1">
+        <div class="flex items-center gap-2 mb-4 group inline-flex cursor-pointer">
+          <div class="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center group-hover:bg-brand-orange transition-colors">
+            <span class="font-syne font-bold text-white text-[12px]">R</span>
+          </div>
+          <span class="font-syne font-bold text-lg text-white tracking-tight">ReplyPals</span>
+        </div>
+        <p class="text-white/50 text-[13px] mb-6 max-w-xs">AI writing for everyone.</p>
+        
+        <!-- Social Icons -->
+        <div class="flex items-center gap-4">
+          <a href="#" class="text-white/60 hover:text-brand-orange transition-colors">
+            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M22.46 6c-.77.35-1.6.58-2.46.69.88-.53 1.56-1.37 1.88-2.38-.83.5-1.75.85-2.72 1.05C18.37 4.5 17.26 4 16 4c-2.35 0-4.27 1.92-4.27 4.29 0 .34.04.67.11.98C8.28 9.09 5.11 7.38 3 4.79c-.37.63-.58 1.37-.58 2.15 0 1.49.75 2.81 1.91 3.56-.71 0-1.37-.2-1.95-.5v.03c0 2.08 1.48 3.82 3.44 4.21a4.22 4.22 0 0 1-1.93.07 4.28 4.28 0 0 0 4 2.98 8.521 8.521 0 0 1-5.33 1.84c-.34 0-.68-.02-1.02-.06C3.44 20.29 5.7 21 8.12 21 16 21 20.33 14.46 20.33 8.79c0-.19 0-.37-.01-.56.84-.6 1.56-1.36 2.14-2.23z"></path></svg>
+          </a>
+          <a href="#" class="text-white/60 hover:text-brand-orange transition-colors">
+            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"></path></svg>
+          </a>
+          <a href="#" class="text-white/60 hover:text-brand-orange transition-colors">
+            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"></path></svg>
+          </a>
+        </div>
+      </div>
+
+      <!-- Col 2: Product -->
+      <div class="col-span-1">
+        <h4 class="font-syne font-bold text-[15px] mb-5">Product</h4>
+        <ul class="space-y-3 text-[14px] text-white/60">
+          <li><a href="#features" class="hover:text-white transition-colors">Features</a></li>
+          <li><a href="#how-it-works" class="hover:text-white transition-colors">How it Works</a></li>
+          <li><a href="#pricing" class="hover:text-white transition-colors">Pricing</a></li>
+          <li><a href="#" class="hover:text-white transition-colors">Templates</a></li>
+          <!-- TODO: Replace with your Chrome Web Store extension ID -->
+          <li><a href="https://chromewebstore.google.com/detail/replypal/EXTENSION_ID_HERE" class="hover:text-white transition-colors flex items-center gap-1 group">Chrome Web Store <span class="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform text-xs">↗</span></a></li>
+        </ul>
+      </div>
+
+      <!-- Col 3: Company -->
+      <div class="col-span-1">
+        <h4 class="font-syne font-bold text-[15px] mb-5">Company</h4>
+        <ul class="space-y-3 text-[14px] text-white/60">
+          <li><a href="#" class="hover:text-white transition-colors">About</a></li>
+          <li><a href="#" class="hover:text-white transition-colors">Blog</a></li>
+          <li><a href="#" class="hover:text-white transition-colors">Privacy Policy</a></li>
+          <li><a href="#" class="hover:text-white transition-colors">Terms of Service</a></li>
+          <li><a href="mailto:support@replypals.in" class="hover:text-white transition-colors">Contact</a></li>
+        </ul>
+      </div>
+
+      <!-- Col 4: Languages -->
+      <div class="col-span-1">
+        <h4 class="font-syne font-bold text-[15px] mb-5">Works for writers in:</h4>
+        <ul class="space-y-3 text-[14px] text-white/60">
+          <li class="flex items-center gap-2"><span>🇮🇳</span> Hindi</li>
+          <li class="flex items-center gap-2"><span>🇸🇦</span> Arabic</li>
+          <li class="flex items-center gap-2"><span>🇵🇭</span> Filipino</li>
+          <li class="flex items-center gap-2"><span>🇧🇷</span> Portuguese</li>
+          <li class="flex items-center gap-2"><span>🇪🇸</span> Spanish</li>
+          <li class="flex items-center gap-2"><span>🇫🇷</span> French</li>
+          <li class="flex items-center gap-2"><span>🇮🇳</span> Malayalam</li>
+        </ul>
+      </div>
+
+    </div>
+
+    <!-- Bottom Bar -->
+    <div class="border-t border-white/10 pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-center">
+      <div class="text-[12px] text-white/40">© 2026 ReplyPals. All rights reserved.</div>
+      <div class="text-[12px] text-white/40">Made with <span class="text-red-500">❤️</span> for non-native English speakers worldwide.</div>
+    </div>
+  </div>
+</footer>
+
+<!-- BACKEND API BASE -->
+<!-- TODO: Update with your live Railway URL if deployed -->
+<script>
+  const API_BASE = '';  // same origin — API and website served together
+</script>
+
+<!-- SCRIPTS -->
+<script>
+  // 1. Navbar Scroll Effect & Mobile Menu
+  document.addEventListener('DOMContentLoaded', () => {
+    const navbar = document.getElementById('navbar');
+    let lastScroll = window.scrollY;
+    
+    window.addEventListener('scroll', () => {
+      const currentScroll = window.scrollY;
+      
+      // Shadow logic
+      if (currentScroll > 100) {
+        navbar.classList.add('nav-shadow');
+      } else {
+        navbar.classList.remove('nav-shadow');
+      }
+      
+      // Hide/Show on scroll up/down
+      if (currentScroll > lastScroll && currentScroll > 200) {
+        navbar.classList.add('nav-hidden'); // Scrolling down
+      } else {
+        navbar.classList.remove('nav-hidden'); // Scrolling up
+      }
+      
+      lastScroll = currentScroll;
+    });
+
+    // Mobile Menu Toggle
+    const btn = document.getElementById('mobile-menu-btn');
+    const menu = document.getElementById('mobile-menu');
+    btn.addEventListener('click', () => {
+      menu.classList.toggle('hidden');
+    });
+    
+    // Close mobile menu on link click
+    menu.querySelectorAll('a').forEach(link => {
+      link.addEventListener('click', () => {
+        menu.classList.add('hidden');
+      });
+    });
+  });
+
+  // 2. Intersection Observer Animations
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+        
+        // Custom stat counter animation
+        if (entry.target.id === 'stats-row') {
+          animateCounters();
+        }
+        
+        // Stop observing once animated
+        observer.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.1 });
+  
+  document.querySelectorAll('.animate-on-scroll').forEach(el => observer.observe(el));
+
+  // Stat Counter function
+  function animateCounters() {
+    const counters = document.querySelectorAll('.stat-counter');
+    const duration = 1500;
+    
+    counters.forEach(counter => {
+      const target = parseFloat(counter.getAttribute('data-target'));
+      const isDecimal = target % 1 !== 0;
+      const startTime = performance.now();
+      
+      function update(currentTime) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        
+        // easeOut timing
+        const ease = 1 - Math.pow(1 - progress, 3);
+        const current = target * ease;
+        
+        if (target > 1000) {
+          counter.innerText = Math.floor(current).toLocaleString() + "+";
+        } else if (isDecimal) {
+          counter.innerText = current.toFixed(1);
+        } else {
+          counter.innerText = Math.floor(current);
+        }
+        
+        if (progress < 1) {
+          requestAnimationFrame(update);
+        } else {
+          // Final value snap
+          if (target > 1000) counter.innerText = "50,000+";
+          else if (isDecimal) counter.innerText = "4.9";
+          else counter.innerText = target;
+        }
+      }
+      
+      requestAnimationFrame(update);
+    });
+  }
+
+  // 3. Demo Card Auto-play Logic
+  const demoOriginal = document.getElementById('demo-original');
+  const demoLoading = document.getElementById('demo-loading');
+  const demoResult = document.getElementById('demo-result');
+  const originalText = document.getElementById('demo-original-text');
+  const rewrittenText = document.getElementById('demo-rewritten-text');
+  const tipText = document.getElementById('demo-tip-text');
+
+  const examples = [
+    {
+      orig: "Please do the needful and revert at the earliest. I am having a doubt regarding the project timeline.",
+      res: "Please handle this and get back to me as soon as possible. I also have a question about the project timeline.",
+      tip: "\"Do the needful\" → \"handle this\""
+    },
+    {
+      orig: "Kindly note I am out of station today and cannot jump on a call.",
+      res: "Please note I am out of the office today and won't be able to join a call.",
+      tip: "\"out of station\" → \"out of the office\""
+    },
+    {
+      orig: "I want to prepone the meeting to 2PM if you have bandwidth.",
+      res: "I'd like to move the meeting forward to 2 PM if you're available.",
+      tip: "\"prepone\" → \"move forward\""
+    }
+  ];
+
+  let currentEx = 0;
+
+  function runDemoCycle() {
+    // Start STATE 1
+    demoOriginal.classList.remove('opacity-0', '-translate-y-8');
+    demoOriginal.classList.add('opacity-100', 'translate-y-0');
+    
+    demoLoading.classList.add('opacity-0', 'translate-y-8');
+    demoResult.classList.add('opacity-0', 'translate-y-8');
+    
+    // Set text
+    originalText.innerText = examples[currentEx].orig;
+    rewrittenText.innerText = examples[currentEx].res;
+    tipText.innerText = examples[currentEx].tip;
+
+    // After 3s -> STATE 2 (Loading)
+    setTimeout(() => {
+      demoOriginal.classList.remove('opacity-100', 'translate-y-0');
+      demoOriginal.classList.add('opacity-0', '-translate-y-8');
+      
+      demoLoading.classList.remove('translate-y-8');
+      demoLoading.classList.add('opacity-100', 'translate-y-0');
+      
+      const progressBar = demoLoading.querySelector('.bg-brand-orange');
+      progressBar.classList.remove('animate-[progress_1.5s_ease-out_forwards]');
+      void progressBar.offsetWidth; // trigger reflow
+      progressBar.classList.add('animate-[progress_1.5s_ease-out_forwards]');
+
+      // After 1.5s -> STATE 3 (Result)
+      setTimeout(() => {
+        demoLoading.classList.remove('opacity-100', 'translate-y-0');
+        demoLoading.classList.add('opacity-0', '-translate-y-8');
+        
+        demoResult.classList.remove('translate-y-8');
+        demoResult.classList.add('opacity-100', 'translate-y-0');
+
+        // After 4s -> cycle back
+        setTimeout(() => {
+          demoResult.classList.remove('opacity-100', 'translate-y-0');
+          demoResult.classList.add('opacity-0', '-translate-y-8');
+          
+          currentEx = (currentEx + 1) % examples.length;
+          
+          setTimeout(runDemoCycle, 300); // Wait for fade out
+        }, 4000);
+      }, 1500);
+    }, 3000);
+  }
+
+  // Start demo loop
+  setTimeout(runDemoCycle, 1000);
+
+  // 4. FAQ Accordion Logic
+  document.querySelectorAll('.faq-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const wasOpen = item.classList.contains('open');
+      // optional: close others
+      // document.querySelectorAll('.faq-item').forEach(i => i.classList.remove('open'));
+      if (!wasOpen) {
+        item.classList.add('open');
+      } else {
+        item.classList.remove('open');
+      }
+    });
+  });
+
+  // 5. Fetch Dynamic Pricing
+  async function fetchPricingData() {
+    try {
+      const cached = sessionStorage.getItem('rp_pricing');
+      if (cached) {
+        applyPricingData(JSON.parse(cached));
+        return;
+      }
+
+      // Timeout wrapper
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+      const res = await fetch(`${API_BASE}/pricing`, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      
+      if (!res.ok) throw new Error('API failed');
+      const data = await res.json();
+      
+      sessionStorage.setItem('rp_pricing', JSON.stringify(data));
+      applyPricingData(data);
+    } catch (err) {
+      console.log('Pricing fetch failed, showing US defaults', err);
+      // Fallback is already hardcoded in HTML, just remove the detecting text
+      document.getElementById('pricing-country-label').classList.add('hidden');
+    }
+  }
+
+  function applyPricingData(data) {
+    if (!data.plans) return;
+    
+    // Update prices
+    document.querySelector('.price-starter').innerText = data.plans.starter.display;
+    document.querySelector('.price-pro').innerText = data.plans.pro.display;
+    document.querySelector('.price-team').innerText = data.plans.team.display;
+    
+    // Update per/mo
+    document.querySelectorAll('.price-per').forEach(el => el.innerText = data.plans.starter.per);
+
+    // Update country detect
+    const label = document.getElementById('pricing-country-text');
+    if (label) {
+      let cName = new Intl.DisplayNames(['en'], { type: 'region' }).of(data.country) || data.country;
+      label.innerText = `Showing prices for: ${cName}`;
+      if (data.tier === 'tier1') {
+        document.getElementById('pricing-country-label').classList.add('hidden');
+      }
+    }
+  }
+
+  // Run immediately on page load
+  fetchPricingData();
+
+  // 6. Basic CTA Tracking
+  function trackCTAClick(locationId) {
+    try {
+      fetch(`${API_BASE}/track`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          event: 'cta_click',
+          location: locationId,
+          referrer: document.referrer || ''
+        })
+      });
+    } catch (e) { }
+  }
+
+  // 7. Auth-Aware Navbar
+  // <!-- REPLACE these with your Supabase project values -->
+  const SUPABASE_URL_NAV = 'https://lcnusuiwxamjvosjgsrl.supabase.co';
+  const SUPABASE_ANON_KEY_NAV = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxjbnVzdWl3eGFtanZvc2pnc3JsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxNTQ2OTUsImV4cCI6MjA4ODczMDY5NX0.edcKlXnNdzACCsQmTp4-xPOCp4TVCmwjPlXkORcjQ24';
+  (async () => {
+    try {
+      if (typeof supabase === 'undefined') return;
+      const sbNav = supabase.createClient(SUPABASE_URL_NAV, SUPABASE_ANON_KEY_NAV);
+      const { data: { session } } = await sbNav.auth.getSession();
+      if (session) {
+        const user = session.user;
+        const name = user.user_metadata?.full_name || user.email?.split('@')[0] || 'U';
+        const initial = (name[0] || 'U').toUpperCase();
+
+        // Show logged-in nav
+        const loggedOut = document.getElementById('navLoggedOut');
+        const loggedIn = document.getElementById('navLoggedIn');
+        const mobileLink = document.getElementById('mobileAuthLink');
+        if (loggedOut) loggedOut.style.display = 'none';
+        if (loggedIn) { loggedIn.style.display = 'flex'; loggedIn.classList.remove('hidden'); }
+        if (mobileLink) { mobileLink.href = 'dashboard.html'; mobileLink.textContent = '📊 Dashboard'; }
+
+        const avatarBtn = document.getElementById('navAvatar');
+        if (avatarBtn) avatarBtn.textContent = initial;
+
+        // Toggle dropdown
+        if (avatarBtn) {
+          avatarBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const dd = document.getElementById('navDropdown');
+            dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
+          });
+        }
+        document.addEventListener('click', () => {
+          const dd = document.getElementById('navDropdown');
+          if (dd) dd.style.display = 'none';
+        });
+
+        // Sign out
+        const signOutBtn = document.getElementById('navSignOut');
+        if (signOutBtn) {
+          signOutBtn.addEventListener('click', async () => {
+            await sbNav.auth.signOut();
+            window.location.reload();
+          });
+        }
+      }
+    } catch (e) {}
+  })();
+
+</script>
+</body>
+</html>
+
