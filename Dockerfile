@@ -25,4 +25,5 @@ USER replypal
 EXPOSE 8150
 
 # Production: no --reload, single worker per container (scale horizontally)
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8150", "--workers", "1"]
+# Use Railway-provided PORT when available.
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8150} --workers 1"]
