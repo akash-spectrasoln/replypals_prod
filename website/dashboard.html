@@ -858,6 +858,7 @@
         <div class="referral-hero-sub">Share your personal invite link with friends and teammates. Rewards apply automatically after successful signup.</div>
       </div>
       <div class="referral-link" id="referralLink">Loading...</div>
+      <div id="referralBonusTip" style="font-size:12px;color:#6B7280;margin-bottom:8px;"></div>
       <div class="referral-actions">
         <button class="btn-outline" id="copyRefBtn">📋 Copy Link</button>
         <button class="btn-outline btn-wa" id="shareWaBtn">💬 Share on WhatsApp</button>
@@ -1002,17 +1003,21 @@
     // ── Referral ─────────────────────────────────────────
     async function loadReferral(token) {
       try {
-        const res  = await fetch(API_BASE + '/account/referral', {
+        const { ok, status, data } = await apiJson(API_BASE + '/account/referral', {
           headers: { 'Authorization': 'Bearer ' + token }
         });
-        const data = await res.json();
+        if (!ok) throw new Error(data?.detail || `Referral failed (${status})`);
         const url  = data.referral_url || '';
         const el   = document.getElementById('referralLink');
-        if (el) el.textContent = url;
+        if (el) el.textContent = url || 'Referral link unavailable right now.';
 
         const bonus = data.bonus_rewrites || 0;
         const bonusTip = document.getElementById('referralBonusTip');
-        if (bonusTip && bonus > 0) bonusTip.textContent = `You've earned ${bonus} bonus rewrites from referrals!`;
+        if (bonusTip) {
+          bonusTip.textContent = bonus > 0
+            ? `You've earned ${bonus} bonus rewrites from referrals.`
+            : 'Invite friends to unlock bonus rewrites for both of you.';
+        }
 
         const copyBtn = document.getElementById('copyRefBtn');
         if (copyBtn) {
@@ -1030,6 +1035,10 @@
         }
       } catch (e) {
         console.warn('Referral load error:', e);
+        const el = document.getElementById('referralLink');
+        if (el) el.textContent = 'Could not load referral link. Refresh and try again.';
+        const bonusTip = document.getElementById('referralBonusTip');
+        if (bonusTip) bonusTip.textContent = '';
       }
     }
 
@@ -1059,6 +1068,19 @@
       toast.textContent = msg;
       toast.style.display = 'block';
       setTimeout(() => toast.style.display = 'none', 3000);
+    }
+
+    async function apiJson(url, options = {}, timeoutMs = 10000) {
+      const ctl = new AbortController();
+      const t = setTimeout(() => ctl.abort(), timeoutMs);
+      try {
+        const res = await fetch(url, { ...options, signal: ctl.signal });
+        let data = {};
+        try { data = await res.json(); } catch (_) {}
+        return { ok: res.ok, status: res.status, data };
+      } finally {
+        clearTimeout(t);
+      }
     }
 
     // Avatar Dropdown
@@ -1127,10 +1149,10 @@
 
     async function loadAccountStatus(token) {
       try {
-        const res = await fetch(API_BASE + '/account/status', {
+        const { ok, status, data } = await apiJson(API_BASE + '/account/status', {
           headers: { 'Authorization': 'Bearer ' + token }
         });
-        const data = await res.json();
+        if (!ok) throw new Error(data?.detail || `Status failed (${status})`);
         const el = document.getElementById('planContent');
 
         if (data.plan === 'free' || !data.active) {
@@ -1193,7 +1215,7 @@
           });
         }
       } catch (e) {
-        document.getElementById('planContent').innerHTML = `<div style="color:#EF4444;font-size:14px;padding:12px;">Could not load plan status. <a href="javascript:location.reload()" style="color:#FF6B35;">Retry</a></div>`;
+        document.getElementById('planContent').innerHTML = `<div style="color:#EF4444;font-size:14px;padding:12px;">Could not load plan status (${String(e.message || 'request failed')}). <a href="javascript:location.reload()" style="color:#FF6B35;">Retry</a></div>`;
         console.error('Status error:', e);
       }
     }
@@ -1202,14 +1224,13 @@
     async function loadStats(token) {
       try {
         // Fetch stats from backend with Authorization header
-        const res = await fetch(API_BASE + '/account/stats', {
+        const { ok, status, data } = await apiJson(API_BASE + '/account/stats', {
           headers: {
             'Authorization': 'Bearer ' + token
           }
         });
 
-        if (!res.ok) throw new Error('Failed to load stats');
-        const data = await res.json();
+        if (!ok) throw new Error(data?.detail || `Stats failed (${status})`);
 
         const el = document.getElementById('statsContent');
         
@@ -1243,7 +1264,7 @@
         }
 
       } catch (e) {
-        document.getElementById('statsContent').innerHTML = '<p style="color:#6B7280;">Could not load stats.</p>';
+        document.getElementById('statsContent').innerHTML = `<p style="color:#6B7280;">Could not load stats (${String(e.message || 'request failed')}).</p>`;
       }
     }
 
