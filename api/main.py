@@ -1849,6 +1849,16 @@ async def track_event(request: Request, body: TrackRequest):
     return {"status": "ok"}
 
 
+@app.get("/public-config")
+async def public_config():
+    """Public frontend config (safe values only)."""
+    return {
+        "supabase_url": SUPABASE_URL or "",
+        "supabase_anon_key": SUPABASE_ANON_KEY or "",
+        "app_base_url": os.getenv("APP_BASE_URL", "").strip(),
+    }
+
+
 @app.post("/contact-us")
 async def contact_us(body: ContactSupportRequest):
     """Accept contact requests from website and route to support inbox."""

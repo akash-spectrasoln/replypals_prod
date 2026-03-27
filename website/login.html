@@ -118,20 +118,12 @@
   <script>
     // ── Config ─────────────────────────────────────────────
     // REPLACE THESE with your actual values
-    const SUPABASE_URL  = 'https://lcnusuiwxamjvosjgsrl.supabase.co';
-    const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxjbnVzdWl3eGFtanZvc2pnc3JsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxNTQ2OTUsImV4cCI6MjA4ODczMDY5NX0.edcKlXnNdzACCsQmTp4-xPOCp4TVCmwjPlXkORcjQ24';
+    const FALLBACK_SUPABASE_URL = 'https://nutchvfpcmowrlqjwkns.supabase.co';
     const apiBaseOverride = new URLSearchParams(window.location.search).get('api_base');
     const API_BASE = apiBaseOverride || window.location.origin;
 
     const { createClient } = supabase;
-    const sb = createClient(SUPABASE_URL, SUPABASE_ANON, {
-      auth: {
-        // IMPORTANT: these must match what you set in Supabase dashboard
-        redirectTo: window.location.origin + '/auth-callback.html',
-        persistSession: true,
-        autoRefreshToken: true,
-      }
-    });
+    let sb = null;
     const HOST = window.location.hostname || '';
     const IS_LOCAL_DEV =
       /^(localhost|127\.0\.0\.1|0\.0\.0\.0)$/i.test(HOST) ||
@@ -178,13 +170,38 @@
       );
     }
 
+    async function initSupabaseClient() {
+      if (sb) return sb;
+      let url = FALLBACK_SUPABASE_URL;
+      let anon = '';
+      try {
+        const r = await fetch(API_BASE + '/public-config');
+        if (r.ok) {
+          const cfg = await r.json();
+          url = cfg.supabase_url || url;
+          anon = cfg.supabase_anon_key || '';
+        }
+      } catch (_) {}
+      if (!url || !anon) return null;
+      sb = createClient(url, anon, {
+        auth: {
+          redirectTo: window.location.origin + '/auth-callback.html',
+          persistSession: true,
+          autoRefreshToken: true,
+        }
+      });
+      return sb;
+    }
+
     // ── Check if already logged in ─────────────────────────
     window.addEventListener('DOMContentLoaded', async () => {
+      await initSupabaseClient();
       const localSession = localStorage.getItem(RP_LOCAL_SESSION_KEY);
       if (localSession) {
         window.location.href = '/dashboard.html';
         return;
       }
+      if (!sb) return;
       try {
         const { data: { session } } = await sb.auth.getSession();
         if (session) {
@@ -235,6 +252,20 @@
 
       setLoading(true);
       try {
+        if (!sb) await initSupabaseClient();
+        if (!sb && IS_LOCAL_DEV) {
+          const ok = fallbackSignIn(email, password);
+          if (ok) {
+            window.location.href = '/dashboard.html';
+          } else {
+            showAlert('Local account not found. Please sign up first.');
+          }
+          return;
+        }
+        if (!sb) {
+          showAlert('Auth is not configured on server. Please set SUPABASE_ANON_KEY in Railway variables.');
+          return;
+        }
         const { data, error } = await sb.auth.signInWithPassword({
           email,
           password,
@@ -285,6 +316,11 @@
     // ── Google OAuth ───────────────────────────────────────
     async function signInWithGoogle() {
       hideAlert();
+      if (!sb) await initSupabaseClient();
+      if (!sb) {
+        showAlert('Google sign-in is not configured on server yet.');
+        return;
+      }
       const btn = document.getElementById('google-btn');
       btn.disabled = true;
       btn.innerHTML = `

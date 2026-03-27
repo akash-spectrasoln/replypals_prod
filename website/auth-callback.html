@@ -67,13 +67,12 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
-    const SUPABASE_URL  = 'https://lcnusuiwxamjvosjgsrl.supabase.co';
-    const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxjbnVzdWl3eGFtanZvc2pnc3JsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxNTQ2OTUsImV4cCI6MjA4ODczMDY5NX0.edcKlXnNdzACCsQmTp4-xPOCp4TVCmwjPlXkORcjQ24';
+    const FALLBACK_SUPABASE_URL = 'https://nutchvfpcmowrlqjwkns.supabase.co';
     const apiBaseOverride = new URLSearchParams(window.location.search).get('api_base');
     const API_BASE = apiBaseOverride || window.location.origin;
 
     const { createClient } = supabase;
-    const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
+    let sb = null;
 
     function setUI(state, title, message, actionHtml = '') {
       document.getElementById('spinner').style.display = 
@@ -86,8 +85,33 @@
       document.getElementById('action').innerHTML = actionHtml;
     }
 
+    async function initSupabaseClient() {
+      if (sb) return sb;
+      let url = FALLBACK_SUPABASE_URL;
+      let anon = '';
+      try {
+        const r = await fetch(API_BASE + '/public-config');
+        if (r.ok) {
+          const cfg = await r.json();
+          url = cfg.supabase_url || url;
+          anon = cfg.supabase_anon_key || '';
+        }
+      } catch (_) {}
+      if (!url || !anon) return null;
+      sb = createClient(url, anon);
+      return sb;
+    }
+
     async function handleCallback() {
       try {
+        await initSupabaseClient();
+        if (!sb) {
+          setUI('error', 'Auth not configured',
+            'Missing SUPABASE_ANON_KEY on server. Please contact support.',
+            '<a href="/login.html" class="btn">Back to Login</a>'
+          );
+          return;
+        }
         // Parse the URL — Supabase uses hash fragments for OAuth
         // and query params for email confirmations
         const hash   = window.location.hash.substring(1);
