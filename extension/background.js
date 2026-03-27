@@ -4,10 +4,14 @@
 const DEV_API_BASE = 'http://' + 'localhost' + ':8150';
 const PROD_API_BASE = 'https://www.replypals.in';
 const IS_DEV_BUILD = chrome.runtime.getManifest?.().update_url === undefined;
+const BUILD_TIME_API_BASE = '__REPLYPAL_API_URL__';
+const BUILD_TIME_MIXPANEL_TOKEN = '__MIXPANEL_TOKEN__';
 
-const API_BASE = (typeof REPLYPAL_API_URL !== 'undefined' && REPLYPAL_API_URL)
-  ? REPLYPAL_API_URL
-  : (IS_DEV_BUILD ? DEV_API_BASE : PROD_API_BASE);
+const injectedApiBase = (BUILD_TIME_API_BASE && !BUILD_TIME_API_BASE.startsWith('__'))
+  ? BUILD_TIME_API_BASE
+  : '';
+
+const API_BASE = injectedApiBase || (IS_DEV_BUILD ? DEV_API_BASE : PROD_API_BASE);
 
 const ALLOWED_EXTERNAL_ORIGINS = new Set([
   'https://replypals.in',
@@ -127,7 +131,11 @@ async function syncFreeUsageSnapshot(emailHint = null, anonHint = null) {
 
 // ─── Analytics (Mixpanel via HTTP) ───
 // Injected at build time via build script (see scripts/build.sh)
-const MIXPANEL_TOKEN = (typeof __MIXPANEL_TOKEN__ !== 'undefined') ? __MIXPANEL_TOKEN__ : '';
+const injectedMixpanelToken = (BUILD_TIME_MIXPANEL_TOKEN && !BUILD_TIME_MIXPANEL_TOKEN.startsWith('__'))
+  ? BUILD_TIME_MIXPANEL_TOKEN
+  : '';
+
+const MIXPANEL_TOKEN = injectedMixpanelToken || '';
 
 async function track(event, properties = {}) {
   try {

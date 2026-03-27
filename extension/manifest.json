@@ -10,8 +10,7 @@
     "activeTab",
     "scripting",
     "sidePanel",
-    "contextMenus",
-    "microphone"
+    "contextMenus"
   ],
   "host_permissions": [
     "<all_urls>"

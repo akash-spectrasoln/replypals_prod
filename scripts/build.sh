@@ -36,14 +36,10 @@ rm -f "$DIST/new_logic.js" "$DIST/temp.txt" "$DIST/build2.js" "$DIST/voice-test.
 # ── Inject build-time constants ───────────────────────────────────────────────
 echo "🔧 Injecting build constants..."
 
-# Replace placeholder constants in background.js
+# Inject concrete build-time placeholders in background.js
 sed -i.bak \
-  "s|typeof REPLYPAL_API_URL !== 'undefined' && REPLYPAL_API_URL|true|g; \
-   s|'https://www.replypals.in'|'${REPLYPAL_API_URL}'|g" \
-  "$DIST/background.js"
-
-sed -i.bak \
-  "s|typeof __MIXPANEL_TOKEN__ !== 'undefined') ? __MIXPANEL_TOKEN__ : ''|true) ? '${MIXPANEL_TOKEN}' : ''|g" \
+  "s|__REPLYPAL_API_URL__|${REPLYPAL_API_URL}|g; \
+   s|__MIXPANEL_TOKEN__|${MIXPANEL_TOKEN}|g" \
   "$DIST/background.js"
 
 # Clean sed backups
