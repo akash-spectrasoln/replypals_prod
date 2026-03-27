@@ -772,38 +772,62 @@
 
   <script>
     // ── Config ─────────────────────────────────────────────
-    const SUPABASE_URL  = 'https://lcnusuiwxamjvosjgsrl.supabase.co';
-    const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxjbnVzdWl3eGFtanZvc2pnc3JsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxNTQ2OTUsImV4cCI6MjA4ODczMDY5NX0.edcKlXnNdzACCsQmTp4-xPOCp4TVCmwjPlXkORcjQ24';
+    const FALLBACK_SUPABASE_URL = 'https://nutchvfpcmowrlqjwkns.supabase.co';
     const apiBaseOverride = new URLSearchParams(window.location.search).get('api_base');
     const API_BASE = apiBaseOverride || window.location.origin;
 
     const { createClient } = supabase;
-    const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
+    let sb = null;
+    let authListenerBound = false;
     const RP_LOCAL_SESSION_KEY = 'rp_local_auth_session_v1';
     const IS_LOCAL_DEV = ['localhost', '127.0.0.1'].includes(window.location.hostname);
 
     let chartInstance = null;
 
-    // ── Supabase Auth Listener ─────────────────────────────
-    sb.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN' && session) {
-        syncSessionToExtension(session.access_token);
-      } else if (event === 'SIGNED_OUT') {
-        syncSessionToExtension(null);
-        window.location.href = '/login';
-      }
-    });
+    async function initSupabaseClient() {
+      if (sb) return sb;
+      let url = FALLBACK_SUPABASE_URL;
+      let anon = '';
+      try {
+        const r = await fetch(API_BASE + '/public-config');
+        if (r.ok) {
+          const cfg = await r.json();
+          url = cfg.supabase_url || url;
+          anon = cfg.supabase_anon_key || '';
+        }
+      } catch (_) {}
+      if (!url || !anon) return null;
+      sb = createClient(url, anon);
+      return sb;
+    }
+
+    function bindAuthListener() {
+      if (!sb || authListenerBound) return;
+      authListenerBound = true;
+      sb.auth.onAuthStateChange((event, session) => {
+        if (event === 'SIGNED_IN' && session) {
+          syncSessionToExtension(session.access_token);
+        } else if (event === 'SIGNED_OUT') {
+          syncSessionToExtension(null);
+          window.location.href = '/login';
+        }
+      });
+    }
 
     // ── Init Dashboard ─────────────────────────────────────
     async function initDashboard() {
+      await initSupabaseClient();
+      bindAuthListener();
       let session = null;
       let error = null;
-      try {
-        const result = await sb.auth.getSession();
-        session = result?.data?.session || null;
-        error = result?.error || null;
-      } catch (e) {
-        error = e;
+      if (sb) {
+        try {
+          const result = await sb.auth.getSession();
+          session = result?.data?.session || null;
+          error = result?.error || null;
+        } catch (e) {
+          error = e;
+        }
       }
 
       let localUser = null;
