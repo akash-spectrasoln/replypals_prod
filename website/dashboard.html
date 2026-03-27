@@ -407,20 +407,114 @@
       color: #6B7280;
     }
 
-    .referral-link {
-      background: #F8F9FE;
-      border: 1.5px solid #EAECF4;
-      border-radius: 10px;
-      padding: 10px 14px;
+    .plan-card-opt {
+      border: 2px solid #EAECF4;
+      border-radius: 16px;
+      padding: 20px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+      background: #fff;
+      box-shadow: 0 2px 14px rgba(15, 37, 68, 0.04);
+    }
+
+    .plan-card-opt:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 30px rgba(15, 37, 68, 0.1);
+    }
+
+    .plan-card-opt.is-selected {
+      border-color: #FF6B35;
+      background: linear-gradient(180deg, #FFF8F5 0%, #ffffff 90%);
+      box-shadow: 0 14px 32px rgba(255, 107, 53, 0.18);
+    }
+
+    .plan-card-opt .plan-tag {
+      position: absolute;
+      top: -12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #FF6B35;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 12px;
+      border-radius: 100px;
+      white-space: nowrap;
+    }
+
+    .plan-card-opt .price {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 30px;
+      color: #0F2544;
+    }
+
+    .plan-card-opt.is-selected .price {
+      color: #FF6B35;
+    }
+
+    .plan-card-opt .price small {
       font-size: 14px;
+      color: #6B7280;
+      font-weight: 500;
+    }
+
+    .plan-features {
+      margin-top: 12px;
+      font-size: 12px;
+      color: #6B7280;
+      line-height: 1.8;
+    }
+
+    .referral-hero {
+      background: radial-gradient(circle at 90% 0%, rgba(255, 107, 53, 0.14), rgba(255, 107, 53, 0.02) 45%),
+                  linear-gradient(135deg, #0F2544 0%, #1C3F75 70%);
+      border-radius: 16px;
+      padding: 18px 18px 14px;
+      color: #fff;
+      margin-bottom: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+    }
+
+    .referral-hero-title {
+      font-family: 'Syne', sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .referral-hero-sub {
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.82);
+      line-height: 1.6;
+    }
+
+    .referral-link {
+      background: rgba(255, 255, 255, 0.9);
+      border: 1.5px dashed rgba(255, 107, 53, 0.5);
+      border-radius: 12px;
+      padding: 12px 14px;
+      font-size: 13px;
       color: #0F2544;
       word-break: break-all;
-      margin: 12px 0;
+      margin: 12px 0 2px;
     }
 
     .referral-actions {
       display: flex;
       gap: 10px;
+    }
+
+    .btn-wa {
+      background: #25D366;
+      color: #fff;
+      border-color: #25D366;
+    }
+
+    .btn-wa:hover {
+      filter: brightness(0.95);
+      color: #fff;
     }
 
     .toast {
@@ -644,10 +738,10 @@
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:24px;" id="planCardsGrid">
 
           <!-- Starter -->
-          <div class="plan-card-opt" data-plan="starter" onclick="selectPlan('starter')" style="border:2px solid #EAECF4;border-radius:16px;padding:22px;cursor:pointer;transition:all 0.2s;position:relative;">
+          <div class="plan-card-opt" data-plan="starter" onclick="selectPlan('starter')">
             <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;color:#0F2544;margin-bottom:4px;">Starter</div>
-            <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:30px;color:#0F2544;">$2<span style="font-size:15px;font-weight:500;color:#6B7280;">/mo</span></div>
-            <div style="font-size:12px;color:#6B7280;margin:12px 0;line-height:1.8;">
+            <div class="price">$2<small>/mo</small></div>
+            <div class="plan-features">
               ✅ 50 rewrites/month<br>
               ✅ All tones & modes<br>
               ✅ Gmail, WhatsApp, LinkedIn<br>
@@ -657,11 +751,11 @@
           </div>
 
           <!-- Pro (Popular) -->
-          <div class="plan-card-opt selected-plan" data-plan="pro" onclick="selectPlan('pro')" style="border:2px solid #FF6B35;border-radius:16px;padding:22px;cursor:pointer;transition:all 0.2s;position:relative;background:linear-gradient(180deg,#FFF8F5,#fff);">
-            <div style="position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:#FF6B35;color:#fff;font-size:11px;font-weight:700;padding:3px 14px;border-radius:100px;white-space:nowrap;">⭐ MOST POPULAR</div>
+          <div class="plan-card-opt is-selected" data-plan="pro" onclick="selectPlan('pro')">
+            <div class="plan-tag">⭐ MOST POPULAR</div>
             <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;color:#0F2544;margin-bottom:4px;">Pro</div>
-            <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:30px;color:#FF6B35;">$9<span style="font-size:15px;font-weight:500;color:#6B7280;">/mo</span></div>
-            <div style="font-size:12px;color:#6B7280;margin:12px 0;line-height:1.8;">
+            <div class="price">$9<small>/mo</small></div>
+            <div class="plan-features">
               ✅ <strong>Unlimited</strong> rewrites<br>
               ✅ Voice in 8 languages<br>
               ✅ Tone Memory<br>
@@ -671,10 +765,10 @@
           </div>
 
           <!-- Team -->
-          <div class="plan-card-opt" data-plan="team" onclick="selectPlan('team')" style="border:2px solid #EAECF4;border-radius:16px;padding:22px;cursor:pointer;transition:all 0.2s;position:relative;">
+          <div class="plan-card-opt" data-plan="team" onclick="selectPlan('team')">
             <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;color:#0F2544;margin-bottom:4px;">Team</div>
-            <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:30px;color:#0F2544;">$25<span style="font-size:15px;font-weight:500;color:#6B7280;">/mo</span></div>
-            <div style="font-size:12px;color:#6B7280;margin:12px 0;line-height:1.8;">
+            <div class="price">$25<small>/mo</small></div>
+            <div class="plan-features">
               ✅ Up to 5 team members<br>
               ✅ Shared brand voice<br>
               ✅ Team usage dashboard<br>
@@ -759,11 +853,14 @@
     <!-- Referral -->
     <div class="section" id="referralSection">
       <div class="section-title">🎁 Refer Friends, Earn Free Rewrites</div>
-      <p style="font-size:14px;color:#6B7280;margin-bottom:8px;">Share your link and you both get 5 bonus rewrites</p>
+      <div class="referral-hero">
+        <div class="referral-hero-title">Give 5 rewrites. Get 5 rewrites.</div>
+        <div class="referral-hero-sub">Share your personal invite link with friends and teammates. Rewards apply automatically after successful signup.</div>
+      </div>
       <div class="referral-link" id="referralLink">Loading...</div>
       <div class="referral-actions">
         <button class="btn-outline" id="copyRefBtn">📋 Copy Link</button>
-        <button class="btn-outline" id="shareWaBtn" style="background:#25D366;color:#fff;border-color:#25D366;">💬 Share on WhatsApp</button>
+        <button class="btn-outline btn-wa" id="shareWaBtn">💬 Share on WhatsApp</button>
       </div>
     </div>
   </div>
@@ -989,8 +1086,11 @@
       selectedPlan = plan;
       document.querySelectorAll('.plan-card-opt').forEach(el => {
         const isPicked = el.dataset.plan === plan;
-        el.style.border = isPicked ? '2px solid #FF6B35' : '2px solid #EAECF4';
-        el.style.background = isPicked ? (plan === 'pro' ? 'linear-gradient(180deg,#FFF8F5,#fff)' : '#FFF8F5') : '';
+        if (isPicked) {
+          el.classList.add('is-selected');
+        } else {
+          el.classList.remove('is-selected');
+        }
       });
       const labels = { starter: 'Starter', pro: 'Pro', team: 'Team' };
       document.getElementById('selectedPlanLabel').textContent = labels[plan] || 'Pro';
