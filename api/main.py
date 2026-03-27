@@ -84,12 +84,19 @@ _LOG_WRITE_RETRIES = 3
 _LOG_WRITE_RETRY_SLEEP_SEC = 0.25
 _ASYNC_LOG_WRITES = os.getenv("ASYNC_LOG_WRITES", "0").strip() == "1"
 _USAGE_DEBUG = os.getenv("USAGE_DEBUG", "0").strip() == "1"
+_DASHBOARD_DEBUG = os.getenv("DASHBOARD_DEBUG", "0").strip() == "1"
 
 def _usage_dbg(msg: str, **fields) -> None:
     if not _USAGE_DEBUG:
         return
     kv = " ".join([f"{k}={fields[k]!r}" for k in fields])
     print(f"[usage-debug] {msg} {kv}".strip())
+
+def _dash_dbg(msg: str, **fields) -> None:
+    if not _DASHBOARD_DEBUG:
+        return
+    kv = " ".join([f"{k}={fields[k]!r}" for k in fields])
+    print(f"[dashboard-debug] {msg} {kv}".strip())
 
 FREE_BASE_LIMIT = 5
 PLAN_POLICY = {
@@ -2979,10 +2986,12 @@ async def account_register(
 async def account_status(authorization: str = Header(None)):
     user = get_user_from_token(authorization)
     if not user:
+        _dash_dbg("account_status unauthorized", has_auth=bool(authorization))
         raise HTTPException(status_code=401, detail="Unauthorized")
     
     user_id = user.get("sub")
     email   = user.get("email", "")
+    _dash_dbg("account_status start", user_id=user_id, email=email)
     
     # Check if user has a license
     license_result = supabase.table("licenses")\
@@ -2995,6 +3004,7 @@ async def account_status(authorization: str = Header(None)):
     
     if license_result.data:
         lic = license_result.data[0]
+        _dash_dbg("account_status paid", plan=lic.get("plan", "pro"), active=bool(lic.get("active", True)))
         return {
             "plan":        lic.get("plan", "pro"),
             "active":      True,
@@ -3017,6 +3027,7 @@ async def account_status(authorization: str = Header(None)):
     if free_result.data:
         rewrites_used = free_result.data[0].get("rewrites_used", 0)
         bonus         = free_result.data[0].get("bonus_rewrites", 0)
+    _dash_dbg("account_status free", rewrites_used=rewrites_used, bonus=bonus)
     
     return {
         "plan":          "free",
@@ -3046,9 +3057,11 @@ async def account_license_key(authorization: str = Header(None)):
 async def account_stats(authorization: str = Header(None)):
     user = get_user_from_token(authorization)
     if not user:
+        _dash_dbg("account_stats unauthorized", has_auth=bool(authorization))
         raise HTTPException(status_code=401, detail="Unauthorized")
     
     user_id = user.get("sub")
+    _dash_dbg("account_stats start", user_id=user_id)
     try:
         profile = supabase.table("user_profiles")\
             .select("*")\
@@ -3057,6 +3070,7 @@ async def account_stats(authorization: str = Header(None)):
             .execute()
         
         if not profile.data:
+            _dash_dbg("account_stats no_profile", user_id=user_id)
             return {
                 "total_rewrites": 0,
                 "avg_score":      0,
@@ -3099,6 +3113,7 @@ async def account_stats(authorization: str = Header(None)):
             "recent_tips":    recent_tips,
         }
     except Exception as e:
+        _dash_dbg("account_stats error", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -3110,10 +3125,12 @@ async def account_referral(authorization: str = Header(None)):
     """Get or create referral code for the authenticated user."""
     user = get_user_from_token(authorization)
     if not user:
+        _dash_dbg("account_referral unauthorized", has_auth=bool(authorization))
         raise HTTPException(status_code=401, detail="Unauthorized")
     
     email   = user.get("email", "")
     user_id = user.get("sub", "")
+    _dash_dbg("account_referral start", user_id=user_id, email=email)
     if not email:
         raise HTTPException(status_code=400, detail="No email in token")
 
@@ -3122,6 +3139,7 @@ async def account_referral(authorization: str = Header(None)):
             import hashlib
             ref_code = hashlib.md5(email.lower().encode()).hexdigest()[:8].upper()
             referral_url = f"{os.getenv('APP_BASE_URL', 'https://replypals.in')}/signup?ref={ref_code}"
+            _dash_dbg("account_referral degraded_backoff", ref_code=ref_code)
             return {"ref_code": ref_code, "referral_url": referral_url, "bonus_rewrites": 0, "degraded": True}
 
         # Find existing row
@@ -3149,6 +3167,7 @@ async def account_referral(authorization: str = Header(None)):
             bonus = 0
 
         referral_url = f"{os.getenv('APP_BASE_URL', 'https://replypals.in')}/signup?ref={ref_code}"
+        _dash_dbg("account_referral ok", ref_code=ref_code, bonus=bonus)
         return {
             "ref_code":     ref_code,
             "referral_url": referral_url,
@@ -3159,6 +3178,7 @@ async def account_referral(authorization: str = Header(None)):
         import hashlib
         ref_code = hashlib.md5(email.lower().encode()).hexdigest()[:8].upper()
         referral_url = f"{os.getenv('APP_BASE_URL', 'https://replypals.in')}/signup?ref={ref_code}"
+        _dash_dbg("account_referral fallback_error", error=str(e), ref_code=ref_code)
         return {"ref_code": ref_code, "referral_url": referral_url, "bonus_rewrites": 0, "degraded": True}
 
 

@@ -873,6 +873,7 @@
     const FALLBACK_SUPABASE_URL = 'https://nutchvfpcmowrlqjwkns.supabase.co';
     const apiBaseOverride = new URLSearchParams(window.location.search).get('api_base');
     const API_BASE = apiBaseOverride || window.location.origin;
+    const DASH_DEBUG = new URLSearchParams(window.location.search).get('debug') === '1';
 
     const { createClient } = supabase;
     let sb = null;
@@ -882,6 +883,11 @@
 
     let chartInstance = null;
     let referralUrlCache = '';
+
+    function dlog(...args) {
+      if (!DASH_DEBUG) return;
+      console.log('[dashboard-debug]', ...args);
+    }
 
     async function initSupabaseClient() {
       if (sb) return sb;
@@ -897,6 +903,7 @@
       } catch (_) {}
       if (!url || !anon) return null;
       sb = createClient(url, anon);
+      dlog('supabase client initialized', { url, hasAnon: !!anon });
       return sb;
     }
 
@@ -915,6 +922,7 @@
 
     // ── Init Dashboard ─────────────────────────────────────
     async function initDashboard() {
+      dlog('initDashboard start', { host: window.location.host, path: window.location.pathname });
       await initSupabaseClient();
       bindAuthListener();
       let session = null;
@@ -924,8 +932,10 @@
           const result = await sb.auth.getSession();
           session = result?.data?.session || null;
           error = result?.error || null;
+          dlog('getSession result', { hasSession: !!session, error: error?.message || null });
         } catch (e) {
           error = e;
+          dlog('getSession exception', { error: String(e) });
         }
       }
 
@@ -973,6 +983,7 @@
       document.getElementById('avatarInitial').textContent = name.charAt(0).toUpperCase();
 
       const token = session?.access_token || null;
+      dlog('token ready', { hasToken: !!token });
 
       // 2. Sync token to extension immediately
       syncSessionToExtension(token);
@@ -1006,6 +1017,7 @@
         const { ok, status, data } = await apiJson(API_BASE + '/account/referral', {
           headers: { 'Authorization': 'Bearer ' + token }
         });
+        dlog('loadReferral response', { ok, status, data });
         if (!ok) throw new Error(data?.detail || `Referral failed (${status})`);
         const url  = data.referral_url || '';
         referralUrlCache = url;
@@ -1021,6 +1033,7 @@
         }
       } catch (e) {
         console.warn('Referral load error:', e);
+        dlog('loadReferral error', { error: String(e) });
         const el = document.getElementById('referralLink');
         if (el) el.textContent = 'Could not load referral link. Refresh and try again.';
         const bonusTip = document.getElementById('referralBonusTip');
@@ -1211,6 +1224,7 @@
         const { ok, status, data } = await apiJson(API_BASE + '/account/status', {
           headers: { 'Authorization': 'Bearer ' + token }
         });
+        dlog('loadAccountStatus response', { ok, status, data });
         if (!ok) throw new Error(data?.detail || `Status failed (${status})`);
         const el = document.getElementById('planContent');
 
@@ -1274,6 +1288,7 @@
           });
         }
       } catch (e) {
+        dlog('loadAccountStatus error', { error: String(e) });
         document.getElementById('planContent').innerHTML = `<div style="color:#EF4444;font-size:14px;padding:12px;">Could not load plan status (${String(e.message || 'request failed')}). <a href="javascript:location.reload()" style="color:#FF6B35;">Retry</a></div>`;
         console.error('Status error:', e);
       }
@@ -1288,6 +1303,7 @@
             'Authorization': 'Bearer ' + token
           }
         });
+        dlog('loadStats response', { ok, status, data });
 
         if (!ok) throw new Error(data?.detail || `Stats failed (${status})`);
 
@@ -1323,6 +1339,7 @@
         }
 
       } catch (e) {
+        dlog('loadStats error', { error: String(e) });
         document.getElementById('statsContent').innerHTML = `<p style="color:#6B7280;">Could not load stats (${String(e.message || 'request failed')}).</p>`;
       }
     }
