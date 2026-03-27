@@ -983,17 +983,18 @@
       document.getElementById('avatarInitial').textContent = name.charAt(0).toUpperCase();
 
       const token = session?.access_token || null;
-      dlog('token ready', { hasToken: !!token });
+      const tokenRef = { value: token };
+      dlog('token ready', { hasToken: !!tokenRef.value });
 
       // 2. Sync token to extension immediately
-      syncSessionToExtension(token);
+      syncSessionToExtension(tokenRef.value);
 
-      if (token) {
+      if (tokenRef.value) {
         // Load all sections in parallel for faster dashboard rendering.
         await Promise.allSettled([
-          loadAccountStatus(token),
-          loadStats(token),
-          loadReferral(token),
+          loadAccountStatus(tokenRef),
+          loadStats(tokenRef),
+          loadReferral(tokenRef),
         ]);
         ensureDashboardSectionsRendered(user.email || '');
       } else {
@@ -1012,11 +1013,9 @@
     }
 
     // ── Referral ─────────────────────────────────────────
-    async function loadReferral(token) {
+    async function loadReferral(tokenRef) {
       try {
-        const { ok, status, data } = await apiJson(API_BASE + '/account/referral', {
-          headers: { 'Authorization': 'Bearer ' + token }
-        });
+        const { ok, status, data } = await apiJsonAuthed('/account/referral', tokenRef);
         dlog('loadReferral response', { ok, status, data });
         if (!ok) throw new Error(data?.detail || `Referral failed (${status})`);
         const url  = data.referral_url || '';
@@ -1113,6 +1112,32 @@
       } finally {
         clearTimeout(t);
       }
+    }
+
+    async function apiJsonAuthed(path, tokenRef, timeoutMs = 10000) {
+      const firstToken = tokenRef?.value || '';
+      let res = await apiJson(API_BASE + path, {
+        headers: { 'Authorization': 'Bearer ' + firstToken }
+      }, timeoutMs);
+
+      if (res.status === 401 && sb) {
+        dlog('apiJsonAuthed 401, attempting refresh', { path });
+        try {
+          const rr = await sb.auth.refreshSession();
+          const newToken = rr?.data?.session?.access_token || '';
+          if (newToken) {
+            if (tokenRef) tokenRef.value = newToken;
+            res = await apiJson(API_BASE + path, {
+              headers: { 'Authorization': 'Bearer ' + newToken }
+            }, timeoutMs);
+            dlog('apiJsonAuthed retry result', { path, status: res.status });
+          }
+        } catch (e) {
+          dlog('apiJsonAuthed refresh failed', { path, error: String(e) });
+        }
+      }
+
+      return res;
     }
 
     function shortRefCodeFromEmail(email) {
@@ -1219,11 +1244,9 @@
       }
     }
 
-    async function loadAccountStatus(token) {
+    async function loadAccountStatus(tokenRef) {
       try {
-        const { ok, status, data } = await apiJson(API_BASE + '/account/status', {
-          headers: { 'Authorization': 'Bearer ' + token }
-        });
+        const { ok, status, data } = await apiJsonAuthed('/account/status', tokenRef);
         dlog('loadAccountStatus response', { ok, status, data });
         if (!ok) throw new Error(data?.detail || `Status failed (${status})`);
         const el = document.getElementById('planContent');
@@ -1282,7 +1305,7 @@
 
           // Resend key
           document.getElementById('resendKeyBtn')?.addEventListener('click', async () => {
-            const r = await fetch(API_BASE + '/resend-license', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token } });
+            const r = await fetch(API_BASE + '/resend-license', { method: 'POST', headers: { 'Authorization': 'Bearer ' + (tokenRef?.value || '') } });
             const d = await r.json();
             showToast(d.ok ? '📧 Key sent to your email!' : '⚠️ ' + (d.error || 'Failed to resend'));
           });
@@ -1295,14 +1318,10 @@
     }
 
     // ── Load Stats ─────────────────────────────────────────
-    async function loadStats(token) {
+    async function loadStats(tokenRef) {
       try {
         // Fetch stats from backend with Authorization header
-        const { ok, status, data } = await apiJson(API_BASE + '/account/stats', {
-          headers: {
-            'Authorization': 'Bearer ' + token
-          }
-        });
+        const { ok, status, data } = await apiJsonAuthed('/account/stats', tokenRef);
         dlog('loadStats response', { ok, status, data });
 
         if (!ok) throw new Error(data?.detail || `Stats failed (${status})`);
