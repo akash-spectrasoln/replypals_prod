@@ -105,14 +105,20 @@ async function renderDashboard() {
             <span class="badge badge-gray">Log write errors: ${diag.log_write_errors || 0}</span>
           </div>` : '';
         const rwPct = d.rewrites_yesterday > 0 ? Math.round((d.rewrites_today - d.rewrites_yesterday) / d.rewrites_yesterday * 100) : 0;
+        const userSub = `+${d.users_today} today · ${d.anonymous_users_total || 0} anon`;
         el.innerHTML = `
     ${dbWarn}
     ${diagBar}
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-      ${statCard('Total Users', d.total_users.toLocaleString(), `+${d.users_today} today`, '👥', d.users_today > 0)}
+      ${statCard('Total Users', d.total_users.toLocaleString(), userSub, '👥', d.users_today > 0)}
       ${statCard('Active Licenses', d.active_licenses.toLocaleString(), `+${d.licenses_today} today`, '🔑', d.licenses_today > 0)}
       ${statCard('Rewrites Today', d.rewrites_today.toLocaleString(), `${rwPct >= 0 ? '+' : ''}${rwPct}% vs yday`, '✍️', rwPct >= 0)}
       ${statCard('MRR', '$' + d.mrr.toLocaleString(), `+$${d.mrr_today || 0} today`, '💰', true)}
+    </div>
+    <div class="mb-6 flex flex-wrap gap-2 text-xs">
+      <span class="badge badge-gray">Registered: ${d.registered_users_total || 0}</span>
+      <span class="badge badge-blue">Leads (email only): ${d.lead_users_total || 0}</span>
+      <span class="badge badge-orange">Anonymous temp: ${d.anonymous_users_total || 0}</span>
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">

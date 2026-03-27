@@ -202,6 +202,9 @@ async def dashboard_stats(request: Request, admin=Depends(require_admin)):
     from main import supabase
     stats = {
         "total_users": 0, "users_today": 0,
+        "registered_users_total": 0, "registered_users_today": 0,
+        "anonymous_users_total": 0, "anonymous_users_today": 0,
+        "lead_users_total": 0, "lead_users_today": 0,
         "active_licenses": 0, "licenses_today": 0,
         "rewrites_today": 0, "rewrites_yesterday": 0,
         "mrr": 0, "mrr_today": 0,
@@ -220,12 +223,49 @@ async def dashboard_stats(request: Request, admin=Depends(require_admin)):
     first_db_error = None
 
     try:
-        # Total free users
-        r = supabase.table("free_users").select("id", count="exact").execute()
-        stats["total_users"] = r.count if hasattr(r, 'count') and r.count else len(r.data or [])
+        # User census from DB:
+        # - registered users: user_profiles rows
+        # - anonymous temporary users: free_users with synthetic anon email
+        # - lead users: free_users non-anon rows not yet linked to user_id
+        pr = supabase.table("user_profiles").select("id,created_at", count="exact").execute()
+        stats["registered_users_total"] = pr.count if hasattr(pr, 'count') and pr.count else len(pr.data or [])
+        stats["registered_users_today"] = sum(
+            1 for row in (pr.data or [])
+            if (row.get("created_at") or "") >= today.isoformat()
+        )
 
-        r2 = supabase.table("free_users").select("id", count="exact").gte("created_at", today.isoformat()).execute()
-        stats["users_today"] = r2.count if hasattr(r2, 'count') and r2.count else len(r2.data or [])
+        fr = supabase.table("free_users").select("email,user_id,created_at").limit(20000).execute()
+        free_rows = fr.data or []
+        anon_total = 0
+        anon_today = 0
+        lead_total = 0
+        lead_today = 0
+        for row in free_rows:
+            email = (row.get("email") or "").strip().lower()
+            created_at = row.get("created_at") or ""
+            has_user_id = bool(row.get("user_id"))
+            is_anon = email.startswith("anon_") and email.endswith("@replypal.internal")
+            if is_anon:
+                anon_total += 1
+                if created_at >= today.isoformat():
+                    anon_today += 1
+            elif not has_user_id:
+                lead_total += 1
+                if created_at >= today.isoformat():
+                    lead_today += 1
+
+        stats["anonymous_users_total"] = anon_total
+        stats["anonymous_users_today"] = anon_today
+        stats["lead_users_total"] = lead_total
+        stats["lead_users_today"] = lead_today
+
+        # Expose a consistent total used by dashboard cards.
+        stats["total_users"] = (
+            stats["registered_users_total"] + anon_total + lead_total
+        )
+        stats["users_today"] = (
+            stats["registered_users_today"] + anon_today + lead_today
+        )
     except Exception as e:
         had_db_error = True
         if not first_db_error:

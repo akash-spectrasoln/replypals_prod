@@ -2492,28 +2492,39 @@ try {
           return tok && tok.charCodeAt(0) < 0xd800; // skip surrogate-pair emoji tokens
         }).join(' ').trim() || 'English';
       }
-      rpShowLoadingPanel(mode);
-      safeSendMessage(
-        { type: 'selectionAction', payload: {
-            text: text,
-            mode: mode,
-            tone: null,
-            targetLang: cleanName,
-            targetLangCode: targetLang ? targetLang.code : 'en',
-            targetLangName: cleanName,
-          }
-        },
-        function(res) {
-          if (res && res.success && res.data) {
-            var out = res.data.rewritten || res.data.generated || res.data.text || '';
-            rpShowResultPanel(mode, out, null);
-          } else {
-            var msg = (res && (res.error || res.message)) || 'Translation failed';
-            rpShowResultPanel(mode, '⚠️ ' + msg, null);
-            rpShowErrorToast(msg);
-          }
+      rpHydrateQuotaFromStorage(function() {
+        var effectiveLimit = FREE_LIMIT_BASE + bonusRewrites;
+        if (!licenseKey && freeCount >= effectiveLimit) {
+          rpOpenUpgradeForLimit(text);
+          return;
         }
-      );
+
+        rpShowLoadingPanel(mode);
+        safeSendMessage(
+          { type: 'selectionAction', payload: {
+              text: text,
+              mode: mode,
+              tone: null,
+              targetLang: cleanName,
+              targetLangCode: targetLang ? targetLang.code : 'en',
+              targetLangName: cleanName,
+            }
+          },
+          function(res) {
+            if (res && res.success && res.data) {
+              rpApplyQuotaFromApi(res.data);
+              var out = res.data.rewritten || res.data.generated || res.data.text || '';
+              rpShowResultPanel(mode, out, null);
+            } else if (rpIsLimitReachedError(res)) {
+              rpOpenUpgradeForLimit(text);
+            } else {
+              var msg = (res && (res.error || res.message)) || 'Translation failed';
+              rpShowResultPanel(mode, '⚠️ ' + msg, null);
+              rpShowErrorToast(msg);
+            }
+          }
+        );
+      });
     }
 
 
