@@ -984,6 +984,7 @@
           loadStats(token),
           loadReferral(token),
         ]);
+        ensureDashboardSectionsRendered(user.email || '');
       } else {
         // Local dev fallback when Supabase is unreachable in browser.
         document.getElementById('planContent').innerHTML = `
@@ -1090,6 +1091,46 @@
         return { ok: res.ok, status: res.status, data };
       } finally {
         clearTimeout(t);
+      }
+    }
+
+    function shortRefCodeFromEmail(email) {
+      const src = String(email || '').toLowerCase().trim();
+      let h = 0;
+      for (let i = 0; i < src.length; i++) {
+        h = ((h << 5) - h) + src.charCodeAt(i);
+        h |= 0;
+      }
+      return Math.abs(h).toString(16).slice(0, 8).toUpperCase().padEnd(8, '0');
+    }
+
+    function ensureDashboardSectionsRendered(email = '') {
+      const planEl = document.getElementById('planContent');
+      if (planEl && planEl.querySelector('.skeleton')) {
+        planEl.innerHTML = `
+          <div class="plan-card free" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+            <div>
+              <div class="plan-name" style="margin-bottom:6px;">🆓 Free Plan <span style="font-size:13px;font-weight:400;color:#6B7280;">· 5 rewrites left</span></div>
+              <div style="font-size:12px;color:#6B7280;">Plan API is slow right now. You can still continue using the app.</div>
+            </div>
+            <button onclick="scrollToPlans()" style="background:linear-gradient(135deg,#FF6B35,#FF8C42);border:none;color:#fff;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;padding:10px 22px;border-radius:10px;cursor:pointer;">⚡ Upgrade</button>
+          </div>`;
+      }
+
+      const statsEl = document.getElementById('statsContent');
+      if (statsEl && statsEl.querySelector('.skeleton')) {
+        statsEl.innerHTML = '<p style="color:#6B7280;">Stats are taking longer than expected. Refresh in a few seconds.</p>';
+      }
+
+      const refEl = document.getElementById('referralLink');
+      if (refEl && (!refEl.textContent || refEl.textContent.trim() === 'Loading...')) {
+        const code = shortRefCodeFromEmail(email || 'replypals-user');
+        referralUrlCache = `${window.location.origin}/signup?ref=${code}`;
+        refEl.textContent = referralUrlCache;
+        const bonusTip = document.getElementById('referralBonusTip');
+        if (bonusTip && !bonusTip.textContent) {
+          bonusTip.textContent = 'Share this link now. Bonus syncs automatically once referrals are processed.';
+        }
       }
     }
 
