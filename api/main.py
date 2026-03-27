@@ -2618,7 +2618,7 @@ def _send_welcome_email(to_email: str, name: str = ""):
           <p style="color:#6B7280;font-size:13px;margin:4px 0 0;">(Pro) ReplyPals learns your preferred writing style</p>
         </div>
       </div>
-      <a href="{os.getenv('APP_BASE_URL', 'https://replypals.in')}/dashboard.html" style="display:inline-block;background:linear-gradient(135deg,#FF6B35,#FF8C42);color:#fff;text-decoration:none;font-weight:700;font-size:15px;padding:14px 32px;border-radius:12px;">Go to Dashboard →</a>
+      <a href="{os.getenv('APP_BASE_URL', 'https://replypals.in')}/dashboard" style="display:inline-block;background:linear-gradient(135deg,#FF6B35,#FF8C42);color:#fff;text-decoration:none;font-weight:700;font-size:15px;padding:14px 32px;border-radius:12px;">Go to Dashboard →</a>
       <p style="color:#9CA3AF;font-size:12px;margin:20px 0 0;">You'll receive a weekly writing progress report every Sunday.</p>
     """)
     _send_email(to_email, subject, plain, email_type="welcome", body_html=html)
@@ -2863,6 +2863,14 @@ async def account_register(
         return {"ok": False, "error": "Invalid user_id"}
 
     try:
+        # Send welcome only on first account creation, not on repeated sign-ins.
+        existing_profile = None
+        try:
+            existing_profile = supabase.table("user_profiles").select("id").eq("id", resolved_user_id).maybe_single().execute()
+        except Exception:
+            existing_profile = None
+        is_first_registration = not bool(existing_profile and existing_profile.data)
+
         # Upsert user profile (create or update if exists)
         supabase.table("user_profiles").upsert({
             "id":        resolved_user_id,
@@ -2911,6 +2919,10 @@ async def account_register(
                     }).eq("id", anon_row.data["id"]).execute()
             except Exception as _e:
                 print(f"[register anon-link] non-fatal: {_e}")
+
+        if is_first_registration:
+            first_name = (full_name or "").strip().split(" ")[0] if full_name else ""
+            asyncio.create_task(asyncio.to_thread(_send_welcome_email, email, first_name))
 
         return {"ok": True}
     except Exception as e:
