@@ -345,12 +345,12 @@ async def list_users(
         pr_res = pr_query.execute()
         profiles = pr_res.data or []
 
-        # 2. Fetch all active licenses (paginated to 1000 max — sufficient for admin view)
-        lic_res = supabase.table("licenses").select("*").eq("active", True).limit(1000).execute()
+        # 2. Fetch active licenses (high cap to avoid silently missing records)
+        lic_res = supabase.table("licenses").select("*").eq("active", True).limit(20000).execute()
         licenses = lic_res.data or []
 
-        # 3. Fetch free_users (paginated to 1000 max)
-        free_res = supabase.table("free_users").select("*").limit(1000).execute()
+        # 3. Fetch free_users (high cap so anonymous/temp users are visible in admin)
+        free_res = supabase.table("free_users").select("*").limit(20000).execute()
         free_users = free_res.data or []
     except Exception as e:
         # Degrade gracefully if DB is temporarily unreachable.
