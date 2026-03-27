@@ -454,28 +454,46 @@ try {
       "Polishing the final result…"
     ];
 
+    function getWriteTarget(el) {
+      if (!el) return null;
+      if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') return el;
+      if (el.isContentEditable || el.getAttribute('role') === 'textbox') return el;
+      try {
+        var child = el.querySelector && el.querySelector('[contenteditable="true"],[role="textbox"],textarea,input,[g_editable="true"],div[aria-label="Message Body"]');
+        if (child) return child;
+      } catch (_) {}
+      return el;
+    }
+
     function readText(el) {
-      if (!el) return '';
-      if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') return el.value || '';
-      return el.innerText || el.textContent || '';
+      var target = getWriteTarget(el);
+      if (!target) return '';
+      if (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT') return target.value || '';
+      return target.innerText || target.textContent || '';
     }
     function setText(el, text) {
-      if (!el) return;
-      if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') {
-        el.value = text;
-        el.dispatchEvent(new Event('input', { bubbles: true }));
-        el.dispatchEvent(new Event('change', { bubbles: true }));
+      var target = getWriteTarget(el);
+      if (!target) return;
+      if (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT') {
+        target.value = text;
+        target.dispatchEvent(new Event('input', { bubbles: true }));
+        target.dispatchEvent(new Event('change', { bubbles: true }));
       } else {
-        el.focus();
+        target.focus();
         var sel = window.getSelection();
         if (sel) {
           var range = document.createRange();
-          range.selectNodeContents(el);
+          range.selectNodeContents(target);
           sel.removeAllRanges();
           sel.addRange(range);
         }
-        if (!document.execCommand('insertText', false, text)) el.innerText = text;
-        el.dispatchEvent(new InputEvent('input', { bubbles: true }));
+        // Prefer native insertion for editors like Gmail/LinkedIn.
+        if (!document.execCommand('insertText', false, text)) {
+          target.innerText = text;
+        }
+        target.dispatchEvent(new InputEvent('input', { bubbles: true }));
+        target.dispatchEvent(new Event('change', { bubbles: true }));
+        target.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, key: ' ' }));
       }
     }
     function getEditableRoot(el) {
@@ -594,8 +612,9 @@ try {
     var _popup = null, _activeEl = null, _tipTimer = null;
 
     function doInlineRewrite(el) {
-      _activeEl = el;
-      openPopup(el.getBoundingClientRect(), readText(el), false);
+      var target = getWriteTarget(el) || el;
+      _activeEl = target;
+      openPopup(target.getBoundingClientRect(), readText(target), false);
     }
 
     function positionPopup(p, rect) {
