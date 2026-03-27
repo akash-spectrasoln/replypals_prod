@@ -1226,7 +1226,7 @@
       btn.disabled = true;
       try {
         const { data: { session } } = await sb.auth.getSession();
-        const res = await fetch(API_BASE + '/checkout', {
+        const res = await fetch(API_BASE + '/create-checkout', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session?.access_token },
           body: JSON.stringify({ plan: selectedPlan, email: session?.user?.email })
