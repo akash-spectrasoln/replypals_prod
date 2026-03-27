@@ -2849,14 +2849,21 @@ def get_user_from_token(authorization: str) -> Optional[dict]:
         return None
     token = authorization.split(" ")[1]
     try:
-        # Verify with Supabase JWT secret
-        payload = pyjwt.decode(
-            token,
-            os.getenv("SUPABASE_JWT_SECRET"),
-            algorithms=["HS256"],
-            audience="authenticated",
-        )
-        return payload
+        # Verify with decoded project JWT secret first; fallback to raw env for compatibility.
+        for secret in (SUPABASE_JWT_SECRET, os.getenv("SUPABASE_JWT_SECRET", "")):
+            if not secret:
+                continue
+            try:
+                payload = pyjwt.decode(
+                    token,
+                    secret,
+                    algorithms=["HS256"],
+                    audience="authenticated",
+                )
+                return payload
+            except Exception:
+                continue
+        return None
     except Exception:
         return None
 
