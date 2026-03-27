@@ -44,7 +44,7 @@
 <body>
   <nav class="nav">
     <div class="nav-inner">
-      <a href="index.html" class="logo"><div class="logo-mark">R</div><span class="logo-text">ReplyPals</span></a>
+      <a href="/" class="logo"><div class="logo-mark">R</div><span class="logo-text">ReplyPals</span></a>
     </div>
   </nav>
 
@@ -74,7 +74,7 @@
         <div class="step"><div class="step-num">4</div><div class="step-text">Start writing like a native! ✨</div></div>
 
         <div>
-          <a href="dashboard.html?upgraded=true" class="btn-orange">Go to Dashboard →</a>
+          <a href="/dashboard?upgraded=true" class="btn-orange">Go to Dashboard →</a>
         </div>
 
         <button class="resend-link" id="resendBtn">Can't find your email? Resend license →</button>
@@ -91,7 +91,7 @@
 
   async function loadPayment() {
     if (!sessionId) {
-      document.getElementById('loadingState').innerHTML = '<p style="color:#991B1B;">No session found. <a href="index.html" style="color:#FF6B35;">Go home →</a></p>';
+      document.getElementById('loadingState').innerHTML = '<p style="color:#991B1B;">No session found. <a href="/" style="color:#FF6B35;">Go home →</a></p>';
       return;
     }
 
@@ -109,7 +109,7 @@
       document.getElementById('loadingState').style.display = 'none';
       document.getElementById('successState').style.display = 'block';
     } catch (e) {
-      document.getElementById('loadingState').innerHTML = '<p style="color:#991B1B;">Could not load payment details. <a href="dashboard.html" style="color:#FF6B35;">Go to dashboard →</a></p>';
+      document.getElementById('loadingState').innerHTML = '<p style="color:#991B1B;">Could not load payment details. <a href="dashboard" style="color:#FF6B35;">Go to dashboard →</a></p>';
     }
   }
 

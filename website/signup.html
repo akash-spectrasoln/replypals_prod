@@ -109,7 +109,7 @@
 
     <p class="text-center text-sm text-slate-500 mt-6">
       Already have an account?
-      <a href="/login.html" class="text-orange-500 font-semibold hover:text-orange-600">Sign in</a>
+      <a href="/login" class="text-orange-500 font-semibold hover:text-orange-600">Sign in</a>
     </p>
   </div>
 
@@ -200,13 +200,13 @@
       await initSupabaseClient();
       const localSession = localStorage.getItem(RP_LOCAL_SESSION_KEY);
       if (localSession) {
-        window.location.href = '/dashboard.html';
+        window.location.href = '/dashboard';
         return;
       }
       if (!sb) return;
       try {
         const { data: { session } } = await sb.auth.getSession();
-        if (session) window.location.href = '/dashboard.html';
+        if (session) window.location.href = '/dashboard';
       } catch (_) {
         // Ignore transient auth network errors on local dev.
       }
@@ -274,7 +274,7 @@
           const ok = fallbackSignUp(email, password, name);
           if (ok) {
             await registerUserWithBackend(email, 'local-' + Date.now(), name);
-            window.location.href = '/dashboard.html';
+            window.location.href = '/dashboard';
           }
           return;
         }
@@ -288,7 +288,7 @@
           options: {
             data: { full_name: name },
             // After email confirmation, redirect here:
-            emailRedirectTo: window.location.origin + '/auth-callback.html',
+            emailRedirectTo: window.location.origin + '/auth-callback',
           }
         });
 
@@ -297,7 +297,7 @@
             const ok = fallbackSignUp(email, password, name);
             if (ok) {
               await registerUserWithBackend(email, 'local-' + Date.now(), name);
-              window.location.href = '/dashboard.html';
+              window.location.href = '/dashboard';
             }
             return;
           }
@@ -320,14 +320,14 @@
         } else if (data.session) {
           // Email confirmation disabled — direct login
           await registerUserWithBackend(email, data.user.id, name, data.session.access_token);
-          window.location.href = '/dashboard.html';
+          window.location.href = '/dashboard';
         }
       } catch (e) {
         if (IS_LOCAL_DEV && isNetworkFetchFailure(e)) {
           const ok = fallbackSignUp(email, password, name);
           if (ok) {
             await registerUserWithBackend(email, 'local-' + Date.now(), name);
-            window.location.href = '/dashboard.html';
+            window.location.href = '/dashboard';
           }
           return;
         }
@@ -347,7 +347,7 @@
       const { error } = await sb.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: window.location.origin + '/auth-callback.html',
+          redirectTo: window.location.origin + '/auth-callback',
           scopes: 'email profile',
         }
       });

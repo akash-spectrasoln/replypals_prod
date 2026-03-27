@@ -574,7 +574,7 @@
       <div class="nav-right">
         <div class="avatar" id="avatarBtn"><span id="avatarInitial">?</span>
           <div class="dropdown" id="dropdown">
-            <a href="dashboard.html">📊 Dashboard</a>
+            <a href="dashboard">📊 Dashboard</a>
             <div class="sep"></div>
             <button id="signOutBtn">🚪 Sign Out</button>
           </div>
@@ -790,7 +790,7 @@
         syncSessionToExtension(session.access_token);
       } else if (event === 'SIGNED_OUT') {
         syncSessionToExtension(null);
-        window.location.href = '/login.html';
+        window.location.href = '/login';
       }
     });
 
@@ -825,11 +825,11 @@
               You are not signed in yet. Redirecting to login...
             </p>
             <div style="margin-top:14px;">
-              <a href="/login.html" class="btn-orange" style="text-decoration:none;display:inline-block;">Go to Login</a>
+              <a href="/login" class="btn-orange" style="text-decoration:none;display:inline-block;">Go to Login</a>
             </div>
           </div>`;
         setTimeout(() => {
-          window.location.href = '/login.html';
+          window.location.href = '/login';
         }, 800);
         return;
       }
@@ -955,7 +955,7 @@
       try {
         await sb.auth.signOut();
       } catch (_) {
-        window.location.href = '/login.html';
+        window.location.href = '/login';
       }
     });
 

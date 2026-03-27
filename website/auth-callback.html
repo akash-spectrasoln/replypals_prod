@@ -108,7 +108,7 @@
         if (!sb) {
           setUI('error', 'Auth not configured',
             'Missing SUPABASE_ANON_KEY on server. Please contact support.',
-            '<a href="/login.html" class="btn">Back to Login</a>'
+            '<a href="/login" class="btn">Back to Login</a>'
           );
           return;
         }
@@ -124,7 +124,7 @@
         if (errorParam) {
           setUI('error', 'Sign-in failed', 
             errorDesc || errorParam,
-            '<a href="/login.html" class="btn">Try Again</a>'
+            '<a href="/login" class="btn">Try Again</a>'
           );
           return;
         }
@@ -138,7 +138,7 @@
           if (accessToken) {
             await sb.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
           }
-          window.location.href = '/reset-password.html';
+          window.location.href = '/reset-password';
           return;
         }
 
@@ -148,7 +148,7 @@
 
         if (error) {
           setUI('error', 'Authentication failed', error.message,
-            '<a href="/login.html" class="btn">Try Again</a>'
+            '<a href="/login" class="btn">Try Again</a>'
           );
           return;
         }
@@ -162,7 +162,7 @@
 
           // Redirect after brief success display
           setTimeout(() => {
-            window.location.href = '/dashboard.html';
+            window.location.href = '/dashboard';
           }, 1200);
           return;
         }
@@ -177,7 +177,7 @@
           if (exchangeError) {
             setUI('error', 'Link expired', 
               'This link has expired. Please request a new one.',
-              '<a href="/login.html" class="btn">Sign In</a>'
+              '<a href="/login" class="btn">Sign In</a>'
             );
             return;
           }
@@ -186,7 +186,7 @@
             setUI('success', '✅ Email confirmed!', 'Setting up your account...');
             await registerWithBackend(exchangeData.session);
             setTimeout(() => {
-              window.location.href = '/dashboard.html';
+              window.location.href = '/dashboard';
             }, 1500);
             return;
           }
@@ -195,13 +195,13 @@
         // Fallback — no session, no code
         setUI('error', 'Something went wrong',
           'Could not complete sign-in. Please try again.',
-          '<a href="/login.html" class="btn">Back to Login</a>'
+          '<a href="/login" class="btn">Back to Login</a>'
         );
 
       } catch (e) {
         console.error('Auth callback error:', e);
         setUI('error', 'Unexpected error', e.message || 'Please try again.',
-          '<a href="/login.html" class="btn">Back to Login</a>'
+          '<a href="/login" class="btn">Back to Login</a>'
         );
       }
     }

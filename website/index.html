@@ -153,7 +153,7 @@
 
       <!-- Right Buttons (logged out state) -->
       <div id="navLoggedOut" class="hidden md:flex items-center gap-4">
-        <a href="login.html" class="text-sm font-medium text-brand-textmuted hover:text-brand-navy transition-colors">Log In</a>
+        <a href="login" class="text-sm font-medium text-brand-textmuted hover:text-brand-navy transition-colors">Log In</a>
         <!-- Replace YOUR_EXTENSION_ID with Chrome Web Store extension ID -->
         <a href="https://chromewebstore.google.com/detail/replypal/EXTENSION_ID_HERE" 
            onclick="trackCTAClick('navbar')"
@@ -170,8 +170,8 @@
         <div class="relative">
           <button id="navAvatar" class="w-[34px] h-[34px] rounded-full bg-gradient-to-br from-brand-orange to-[#FF8C42] text-white font-bold text-sm flex items-center justify-center cursor-pointer" title="Account">?</button>
           <div id="navDropdown" class="absolute right-0 top-[42px] w-[200px] bg-white border border-brand-border rounded-xl shadow-xl overflow-hidden z-50" style="display:none;">
-            <a href="dashboard.html" class="flex items-center gap-2 px-4 py-2.5 text-sm text-brand-text hover:bg-gray-50 transition-colors">📊 Dashboard</a>
-            <a href="dashboard.html" class="flex items-center gap-2 px-4 py-2.5 text-sm text-brand-text hover:bg-gray-50 transition-colors">🔑 License Key</a>
+            <a href="dashboard" class="flex items-center gap-2 px-4 py-2.5 text-sm text-brand-text hover:bg-gray-50 transition-colors">📊 Dashboard</a>
+            <a href="dashboard" class="flex items-center gap-2 px-4 py-2.5 text-sm text-brand-text hover:bg-gray-50 transition-colors">🔑 License Key</a>
             <div class="h-px bg-brand-border"></div>
             <button id="navSignOut" class="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-brand-text hover:bg-gray-50 transition-colors text-left">🚪 Sign Out</button>
           </div>
@@ -195,7 +195,7 @@
     <a href="#pricing" class="block text-brand-text font-medium py-2">Pricing</a>
     <a href="#faq" class="block text-brand-text font-medium py-2">FAQ</a>
     <div class="pt-2 border-t border-brand-border">
-      <a id="mobileAuthLink" href="login.html" class="block text-brand-text font-medium py-2">Log In</a>
+      <a id="mobileAuthLink" href="login" class="block text-brand-text font-medium py-2">Log In</a>
       <!-- Replace YOUR_EXTENSION_ID with Chrome Web Store extension ID -->
       <a href="https://chromewebstore.google.com/detail/replypal/EXTENSION_ID_HERE" 
          onclick="trackCTAClick('mobile_navbar')"
@@ -1359,7 +1359,7 @@
         const mobileLink = document.getElementById('mobileAuthLink');
         if (loggedOut) loggedOut.style.display = 'none';
         if (loggedIn) { loggedIn.style.display = 'flex'; loggedIn.classList.remove('hidden'); }
-        if (mobileLink) { mobileLink.href = 'dashboard.html'; mobileLink.textContent = '📊 Dashboard'; }
+        if (mobileLink) { mobileLink.href = 'dashboard'; mobileLink.textContent = '📊 Dashboard'; }
 
         const avatarBtn = document.getElementById('navAvatar');
         if (avatarBtn) avatarBtn.textContent = initial;

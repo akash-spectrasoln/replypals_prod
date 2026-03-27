@@ -82,7 +82,7 @@
             <input type="checkbox" id="remember" class="rounded border-slate-300 text-orange-500">
             Remember me
           </label>
-          <a href="/forgot-password.html" class="text-sm text-orange-500 hover:text-orange-600 font-medium">
+          <a href="/forgot-password" class="text-sm text-orange-500 hover:text-orange-600 font-medium">
             Forgot password?
           </a>
         </div>
@@ -109,7 +109,7 @@
 
     <p class="text-center text-sm text-slate-500 mt-6">
       Don't have an account? 
-      <a href="/signup.html" class="text-orange-500 font-semibold hover:text-orange-600">Sign up free</a>
+      <a href="/signup" class="text-orange-500 font-semibold hover:text-orange-600">Sign up free</a>
     </p>
   </div>
 
@@ -185,7 +185,7 @@
       if (!url || !anon) return null;
       sb = createClient(url, anon, {
         auth: {
-          redirectTo: window.location.origin + '/auth-callback.html',
+          redirectTo: window.location.origin + '/auth-callback',
           persistSession: true,
           autoRefreshToken: true,
         }
@@ -198,14 +198,14 @@
       await initSupabaseClient();
       const localSession = localStorage.getItem(RP_LOCAL_SESSION_KEY);
       if (localSession) {
-        window.location.href = '/dashboard.html';
+        window.location.href = '/dashboard';
         return;
       }
       if (!sb) return;
       try {
         const { data: { session } } = await sb.auth.getSession();
         if (session) {
-          window.location.href = '/dashboard.html';
+          window.location.href = '/dashboard';
         }
       } catch (_) {
         // Ignore transient auth network failures on local dev.
@@ -256,7 +256,7 @@
         if (!sb && IS_LOCAL_DEV) {
           const ok = fallbackSignIn(email, password);
           if (ok) {
-            window.location.href = '/dashboard.html';
+            window.location.href = '/dashboard';
           } else {
             showAlert('Local account not found. Please sign up first.');
           }
@@ -275,7 +275,7 @@
           if (IS_LOCAL_DEV && isNetworkFetchFailure(error)) {
             const ok = fallbackSignIn(email, password);
             if (ok) {
-              window.location.href = '/dashboard.html';
+              window.location.href = '/dashboard';
             } else {
               showAlert('Local account not found. Please sign up first.');
             }
@@ -294,13 +294,13 @@
         if (data.session) {
           // Register user with backend (links Supabase user_id)
           await registerUserWithBackend(data.session);
-          window.location.href = '/dashboard.html';
+          window.location.href = '/dashboard';
         }
       } catch (e) {
         if (IS_LOCAL_DEV && isNetworkFetchFailure(e)) {
           const ok = fallbackSignIn(email, password);
           if (ok) {
-            window.location.href = '/dashboard.html';
+            window.location.href = '/dashboard';
           } else {
             showAlert('Local account not found. Please sign up first.');
           }
@@ -337,7 +337,7 @@
             // CRITICAL: This MUST match exactly what you set in:
             // 1. Supabase Auth > URL Configuration > Redirect URLs
             // 2. Google Cloud Console > Authorized redirect URIs
-            redirectTo: window.location.origin + '/auth-callback.html',
+            redirectTo: window.location.origin + '/auth-callback',
             scopes: 'email profile',
             queryParams: {
               access_type: 'offline',
@@ -377,7 +377,7 @@
       const { error } = await sb.auth.signInWithOtp({
         email,
         options: {
-          emailRedirectTo: window.location.origin + '/auth-callback.html',
+          emailRedirectTo: window.location.origin + '/auth-callback',
         }
       });
 
