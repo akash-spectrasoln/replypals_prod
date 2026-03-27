@@ -1,12 +1,32 @@
 // ─── ReplyPals Background Service Worker ───
-// API base — set REPLYPAL_API_URL build-time (production build script injects this)
-// Dev default: local API on port 8150.
+// API base — set REPLYPAL_API_URL at build time for production packages.
+// Defaults keep local dev simple while making unpacked builds work in production.
 const DEV_API_BASE = 'http://' + 'localhost' + ':8150';
-const PROD_API_BASE = 'https://api.replypals.in';
+const PROD_API_BASE = 'https://www.replypals.in';
+const IS_DEV_BUILD = chrome.runtime.getManifest?.().update_url === undefined;
 
 const API_BASE = (typeof REPLYPAL_API_URL !== 'undefined' && REPLYPAL_API_URL)
   ? REPLYPAL_API_URL
-  : DEV_API_BASE;
+  : (IS_DEV_BUILD ? DEV_API_BASE : PROD_API_BASE);
+
+const ALLOWED_EXTERNAL_ORIGINS = new Set([
+  'https://replypals.in',
+  'https://www.replypals.in',
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:5173',
+]);
+
+function isAllowedExternalSender(sender) {
+  try {
+    const u = sender?.url ? new URL(sender.url) : null;
+    if (!u) return false;
+    return ALLOWED_EXTERNAL_ORIGINS.has(u.origin);
+  } catch (_) {
+    return false;
+  }
+}
 
 // ─── Onboarding + Install ───
 chrome.runtime.onInstalled.addListener(async (details) => {
@@ -262,6 +282,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 // ─── External Messaging (from Dashboard) ───
 chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => {
+  if (!isAllowedExternalSender(sender)) {
+    sendResponse({ success: false, error: 'forbidden_origin' });
+    return false;
+  }
   if (message.type === 'setSupabaseSession') {
     chrome.storage.local.set({ replypalSupabaseToken: message.token })
       .then(() => sendResponse({ success: true }))

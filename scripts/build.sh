@@ -3,7 +3,7 @@
 # ReplyPals — Production Extension Build Script
 #
 # Usage:
-#   MIXPANEL_TOKEN=abc123 REPLYPAL_API_URL=https://api.replypals.in ./scripts/build.sh
+#   MIXPANEL_TOKEN=abc123 REPLYPAL_API_URL=https://www.replypals.in ./scripts/build.sh
 #
 # Outputs: dist/extension/  (ready to zip and upload to Chrome Web Store)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -15,7 +15,7 @@ SRC="$ROOT/extension"
 DIST="$ROOT/dist/extension"
 
 # ── Validate required vars ────────────────────────────────────────────────────
-: "${REPLYPAL_API_URL:=https://api.replypals.in}"
+: "${REPLYPAL_API_URL:=https://www.replypals.in}"
 : "${MIXPANEL_TOKEN:=}"
 
 if [[ -z "$MIXPANEL_TOKEN" ]]; then
@@ -39,7 +39,7 @@ echo "🔧 Injecting build constants..."
 # Replace placeholder constants in background.js
 sed -i.bak \
   "s|typeof REPLYPAL_API_URL !== 'undefined' && REPLYPAL_API_URL|true|g; \
-   s|'https://api.replypals.in'|'${REPLYPAL_API_URL}'|g" \
+   s|'https://www.replypals.in'|'${REPLYPAL_API_URL}'|g" \
   "$DIST/background.js"
 
 sed -i.bak \
