@@ -3017,49 +3017,72 @@ async def account_status(authorization: str = Header(None)):
     user_id = user.get("sub")
     email   = user.get("email", "")
     _dash_dbg("account_status start", user_id=user_id, email=email)
-    
-    # Check if user has a license
-    license_result = supabase.table("licenses")\
-        .select("*")\
-        .or_(f"user_id.eq.{user_id},email.eq.{email}")\
-        .eq("active", True)\
-        .order("created_at", desc=True)\
-        .limit(1)\
-        .execute()
-    
-    if license_result.data:
-        lic = license_result.data[0]
-        _dash_dbg("account_status paid", plan=lic.get("plan", "pro"), active=bool(lic.get("active", True)))
+    if not supabase:
+        _dash_dbg("account_status no_supabase")
         return {
-            "plan":        lic.get("plan", "pro"),
-            "active":      True,
-            "license_key": lic.get("license_key", "")[:8] + "••••••••",
-            "renews_at":   lic.get("renews_at"),
-            "rewrites_used": lic.get("rewrites_used", 0),
-            "rewrites_limit": lic.get("rewrites_limit", -1),
-            "reset_date": lic.get("reset_date")
+            "plan": "free",
+            "active": False,
+            "rewrites_used": 0,
+            "rewrites_limit": 5,
+            "mode": "memory_only",
         }
-    
-    # Check free_users
-    free_result = supabase.table("free_users")\
-        .select("rewrites_used,bonus_rewrites")\
-        .or_(f"user_id.eq.{user_id},email.eq.{email}")\
-        .limit(1)\
-        .execute()
-    
-    rewrites_used = 0
-    bonus         = 0
-    if free_result.data:
-        rewrites_used = free_result.data[0].get("rewrites_used", 0)
-        bonus         = free_result.data[0].get("bonus_rewrites", 0)
-    _dash_dbg("account_status free", rewrites_used=rewrites_used, bonus=bonus)
-    
-    return {
-        "plan":          "free",
-        "active":        False,
-        "rewrites_used": rewrites_used,
-        "rewrites_limit": 5 + bonus,
-    }
+    try:
+        # Check if user has a license
+        license_result = await _sb_execute(
+            supabase.table("licenses")
+            .select("*")
+            .or_(f"user_id.eq.{user_id},email.eq.{email}")
+            .eq("active", True)
+            .order("created_at", desc=True)
+            .limit(1),
+            timeout_sec=3.0,
+        )
+
+        if license_result.data:
+            lic = license_result.data[0]
+            _dash_dbg("account_status paid", plan=lic.get("plan", "pro"), active=bool(lic.get("active", True)))
+            return {
+                "plan":        lic.get("plan", "pro"),
+                "active":      True,
+                "license_key": lic.get("license_key", "")[:8] + "••••••••",
+                "renews_at":   lic.get("renews_at"),
+                "rewrites_used": lic.get("rewrites_used", 0),
+                "rewrites_limit": lic.get("rewrites_limit", -1),
+                "reset_date": lic.get("reset_date")
+            }
+
+        # Check free_users
+        free_result = await _sb_execute(
+            supabase.table("free_users")
+            .select("rewrites_used,bonus_rewrites")
+            .or_(f"user_id.eq.{user_id},email.eq.{email}")
+            .limit(1),
+            timeout_sec=3.0,
+        )
+
+        rewrites_used = 0
+        bonus = 0
+        if free_result.data:
+            rewrites_used = free_result.data[0].get("rewrites_used", 0)
+            bonus = free_result.data[0].get("bonus_rewrites", 0)
+        _dash_dbg("account_status free", rewrites_used=rewrites_used, bonus=bonus)
+
+        return {
+            "plan":          "free",
+            "active":        False,
+            "rewrites_used": rewrites_used,
+            "rewrites_limit": 5 + bonus,
+        }
+    except Exception as e:
+        _mark_supabase_down(e)
+        _dash_dbg("account_status fallback_error", error=str(e))
+        return {
+            "plan": "free",
+            "active": False,
+            "rewrites_used": 0,
+            "rewrites_limit": 5,
+            "degraded": True,
+        }
 
 
 @app.get("/account/license-key")
@@ -3087,12 +3110,24 @@ async def account_stats(authorization: str = Header(None)):
     
     user_id = user.get("sub")
     _dash_dbg("account_stats start", user_id=user_id)
+    if not supabase:
+        _dash_dbg("account_stats no_supabase")
+        return {
+            "total_rewrites": 0,
+            "avg_score":      0,
+            "top_tone":       None,
+            "scores_by_day":  [],
+            "recent_tips":    [],
+            "mode": "memory_only",
+        }
     try:
-        profile = supabase.table("user_profiles")\
-            .select("*")\
-            .eq("id", user_id)\
-            .single()\
-            .execute()
+        profile = await _sb_execute(
+            supabase.table("user_profiles")
+            .select("*")
+            .eq("id", user_id)
+            .single(),
+            timeout_sec=3.0,
+        )
         
         if not profile.data:
             _dash_dbg("account_stats no_profile", user_id=user_id)
@@ -3138,8 +3173,16 @@ async def account_stats(authorization: str = Header(None)):
             "recent_tips":    recent_tips,
         }
     except Exception as e:
-        _dash_dbg("account_stats error", error=str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+        _mark_supabase_down(e)
+        _dash_dbg("account_stats fallback_error", error=str(e))
+        return {
+            "total_rewrites": 0,
+            "avg_score":      0,
+            "top_tone":       None,
+            "scores_by_day":  [],
+            "recent_tips":    [],
+            "degraded": True,
+        }
 
 
 # ═══════════════════════════════════════════
