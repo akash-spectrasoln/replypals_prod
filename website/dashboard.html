@@ -1055,21 +1055,29 @@
 
     // ── Sync to Extension ──────────────────────────────────
     function syncSessionToExtension(token) {
-      // REPLACE with your actual Chrome Extension ID
-      const EXTENSION_ID = window.REPLYPAL_EXTENSION_ID || 'EXTENSION_ID_HERE'; // Set after CWS publish
-      
+      const EXTENSION_ID = (window.REPLYPAL_EXTENSION_ID || '').trim();
+      const isLikelyValidId = /^[a-p]{32}$/.test(EXTENSION_ID);
+      if (!isLikelyValidId) {
+        // Website should work even when extension ID is not configured.
+        return;
+      }
+
       if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
-        chrome.runtime.sendMessage(
-          EXTENSION_ID,
-          { type: 'setSupabaseSession', token: token },
-          (response) => {
-            if (chrome.runtime.lastError) {
-              console.log('Extension not installed or not listening');
-            } else {
-              console.log('Session synced to extension:', response);
+        try {
+          chrome.runtime.sendMessage(
+            EXTENSION_ID,
+            { type: 'setSupabaseSession', token: token },
+            (response) => {
+              if (chrome.runtime.lastError) {
+                console.log('Extension not installed or not listening');
+              } else {
+                console.log('Session synced to extension:', response);
+              }
             }
-          }
-        );
+          );
+        } catch (_) {
+          // Ignore sync failures; do not break dashboard UX.
+        }
       }
     }
 
