@@ -2870,6 +2870,28 @@ def get_user_from_token(authorization: str) -> Optional[dict]:
                 return payload
             except Exception:
                 continue
+
+        # Fallback: verify token by calling Supabase Auth user endpoint.
+        # This avoids hard-failing dashboard endpoints when JWT secret env is mismatched.
+        if SUPABASE_URL and SUPABASE_ANON_KEY:
+            try:
+                auth_url = SUPABASE_URL.rstrip("/") + "/auth/v1/user"
+                r = httpx.get(
+                    auth_url,
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                        "apikey": SUPABASE_ANON_KEY,
+                    },
+                    timeout=5.0,
+                )
+                if r.status_code == 200:
+                    u = r.json() or {}
+                    uid = u.get("id") or u.get("sub")
+                    email = u.get("email", "")
+                    if uid:
+                        return {"sub": uid, "email": email, "aud": "authenticated"}
+            except Exception:
+                pass
         return None
     except Exception:
         return None
