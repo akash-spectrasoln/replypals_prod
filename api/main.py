@@ -34,7 +34,7 @@ import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -3402,6 +3402,15 @@ async def serve_home():
     if f.exists():
         return FileResponse(str(f), media_type="text/html")
     return {"message": "ReplyPals API is running"}
+
+
+@app.get("/robots.txt", include_in_schema=False)
+async def serve_robots():
+    f = _website_dir / "robots.txt"
+    if f.exists():
+        return FileResponse(str(f), media_type="text/plain")
+    # Safe default if file is absent.
+    return PlainTextResponse(content="User-agent: *\nAllow: /\n")
 
 # Map all website pages
 _WEBSITE_PAGES = [
