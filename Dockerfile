@@ -17,9 +17,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy app source
 COPY api/ .
+COPY website/ /website/
 
 # Non-root ownership
-RUN chown -R replypal:replypal /app
+RUN chown -R replypal:replypal /app /website
 USER replypal
 
 EXPOSE 8150
