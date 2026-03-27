@@ -174,7 +174,15 @@ async function renderUsers() {
   <div class="bg-white rounded-xl shadow-sm p-4 mb-4">
     <div class="flex flex-wrap gap-3 items-center">
       <input id="uSearch" type="text" placeholder="🔍 Search by email" class="border rounded-lg px-3 py-2 text-sm flex-1 min-w-[200px]" value="${escHtml(usersSearch)}"/>
-      <select id="uFilter" class="border rounded-lg px-3 py-2 text-sm"><option value="all">All</option><option value="active">Active (7d)</option><option value="inactive">Inactive</option><option value="referred">Referred</option></select>
+      <select id="uFilter" class="border rounded-lg px-3 py-2 text-sm">
+        <option value="all">All</option>
+        <option value="registered">Registered users</option>
+        <option value="anonymous">Anonymous temp users</option>
+        <option value="lead">Leads (email only)</option>
+        <option value="active">Active (7d)</option>
+        <option value="inactive">Inactive</option>
+        <option value="referred">Referred</option>
+      </select>
       <select id="uSort" class="border rounded-lg px-3 py-2 text-sm"><option value="created_at">Newest</option><option value="total_rewrites">Rewrites ↓</option><option value="avg_score">Score ↓</option><option value="last_active">Last Active</option></select>
       <button onclick="exportCSV('free_users')" class="text-sm text-gray-500 hover:text-rp">📥 Export CSV</button>
       <span id="uTotal" class="text-sm text-gray-400 ml-auto"></span>

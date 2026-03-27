@@ -445,9 +445,20 @@ async def list_users(
     week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
     
     for u in merged_users:
+        email_l = (u.get("email") or "").strip().lower()
+        is_anon = email_l.startswith("anon_") and email_l.endswith("@replypal.internal")
+        is_registered = bool(u.get("user_id")) and not is_anon
+        is_lead = (not u.get("user_id")) and not is_anon
+
         if filter == "active" and (not u.get("last_seen") or u.get("last_seen") < week_ago):
             continue
         if filter == "inactive" and (u.get("last_seen") and u.get("last_seen") >= week_ago):
+            continue
+        if filter == "anonymous" and not is_anon:
+            continue
+        if filter == "registered" and not is_registered:
+            continue
+        if filter == "lead" and not is_lead:
             continue
         # Since bonus info is only in free_users, we check the original map
         if filter == "referred":
