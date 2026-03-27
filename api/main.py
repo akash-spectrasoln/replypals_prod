@@ -34,7 +34,7 @@ import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse
 from pydantic import BaseModel, Field
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -659,6 +659,32 @@ limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(title="ReplyPals API", version="1.2.0")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+@app.middleware("http")
+async def canonical_host_and_no_cache(request: Request, call_next):
+    """
+    - Optionally keep auth/session on one host (set CANONICAL_HOST_REDIRECT=1).
+    - Avoid stale HTML during frequent deploys.
+    """
+    app_base = (os.getenv("APP_BASE_URL", "") or "").strip()
+    canonical_redirect = os.getenv("CANONICAL_HOST_REDIRECT", "0").strip() == "1"
+    host = (request.headers.get("host", "") or "").split(":")[0].lower()
+    if app_base and canonical_redirect:
+        try:
+            target_host = (urlparse(app_base).hostname or "").lower()
+        except Exception:
+            target_host = ""
+        if target_host and host in {"replypals.in", "www.replypals.in"} and host != target_host:
+            new_url = str(request.url).replace(f"://{host}", f"://{target_host}", 1)
+            return RedirectResponse(url=new_url, status_code=307)
+
+    response = await call_next(request)
+    ctype = (response.headers.get("content-type", "") or "").lower()
+    if "text/html" in ctype:
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
 
 app.add_middleware(
     CORSMiddleware,
