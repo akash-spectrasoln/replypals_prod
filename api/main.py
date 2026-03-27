@@ -3103,7 +3103,7 @@ async def account_referral(authorization: str = Header(None)):
             ).execute()
             bonus = 0
 
-        referral_url = f"{os.getenv('APP_BASE_URL', 'https://replypals.in')}/signup.html?ref={ref_code}"
+        referral_url = f"{os.getenv('APP_BASE_URL', 'https://replypals.in')}/signup?ref={ref_code}"
         return {
             "ref_code":     ref_code,
             "referral_url": referral_url,
