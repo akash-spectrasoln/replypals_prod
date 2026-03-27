@@ -508,9 +508,33 @@ try {
     // ── Inline Icon ──
     var _fixBtn = null, _fixEl = null;
 
+    function rpResolveAnchorElement(el) {
+      if (!el) return null;
+      var anchor = el;
+      var r = anchor.getBoundingClientRect ? anchor.getBoundingClientRect() : { width: 0, height: 0 };
+      if (r.width > 0 || r.height > 0) return anchor;
+
+      var ae = document.activeElement;
+      if (ae && (ae === el || (el.contains && el.contains(ae)))) {
+        var ra = ae.getBoundingClientRect ? ae.getBoundingClientRect() : { width: 0, height: 0 };
+        if (ra.width > 0 || ra.height > 0) return ae;
+      }
+
+      try {
+        var cand = el.querySelector && el.querySelector('[contenteditable="true"],[role="textbox"],textarea,input,[g_editable="true"],div[aria-label="Message Body"]');
+        if (cand) {
+          var rc = cand.getBoundingClientRect ? cand.getBoundingClientRect() : { width: 0, height: 0 };
+          if (rc.width > 0 || rc.height > 0) return cand;
+        }
+      } catch (_) {}
+
+      return el;
+    }
+
     function positionIcon() {
       if (!_fixBtn || !_fixEl) return;
-      var r = _fixEl.getBoundingClientRect();
+      var anchor = rpResolveAnchorElement(_fixEl) || _fixEl;
+      var r = anchor.getBoundingClientRect();
       if (r.width === 0 && r.height === 0) { _fixBtn.style.display = 'none'; return; }
       // Position inside the bottom right corner of the field
       _fixBtn.style.display = 'flex';
@@ -555,7 +579,7 @@ try {
 
       document.body.appendChild(btn);
       _fixBtn = btn;
-      _fixEl = el;
+      _fixEl = rpResolveAnchorElement(el) || el;
       positionIcon();
     }
 
@@ -1653,7 +1677,8 @@ try {
       var badge = document.getElementById('rp-input-badge');
       var pill  = document.getElementById('rp-input-pill');
       if (!badge || !el) return;
-      var r = el.getBoundingClientRect();
+      var anchor = rpResolveAnchorElement(el) || el;
+      var r = anchor.getBoundingClientRect();
       if (r.width === 0 && r.height === 0) return;
 
       // Badge sits at bottom-right corner of the field (like Grammarly)
@@ -1785,6 +1810,8 @@ try {
       '.msg-form__contenteditable',
       '.comments-comment-box__form [contenteditable]',
       '[g_editable="true"]', '.Am.Al.editable',
+      'div[aria-label="Message Body"]',
+      'div[aria-label="Message Body"] [contenteditable="true"]',
       '[data-testid="tweetTextarea_0"]',
       '[data-testid="tweetTextarea_0_label"]',
       '.ql-editor', '.ProseMirror', '.public-DraftEditor-content',
