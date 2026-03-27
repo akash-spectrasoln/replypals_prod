@@ -881,6 +881,7 @@
     const IS_LOCAL_DEV = ['localhost', '127.0.0.1'].includes(window.location.hostname);
 
     let chartInstance = null;
+    let referralUrlCache = '';
 
     async function initSupabaseClient() {
       if (sb) return sb;
@@ -977,14 +978,12 @@
       syncSessionToExtension(token);
 
       if (token) {
-        // 3. Load account status (plan, license)
-        await loadAccountStatus(token);
-
-        // 4. Load writing stats
-        await loadStats(token);
-
-        // 5. Load referral link
-        loadReferral(token);
+        // Load all sections in parallel for faster dashboard rendering.
+        await Promise.allSettled([
+          loadAccountStatus(token),
+          loadStats(token),
+          loadReferral(token),
+        ]);
       } else {
         // Local dev fallback when Supabase is unreachable in browser.
         document.getElementById('planContent').innerHTML = `
@@ -1008,6 +1007,7 @@
         });
         if (!ok) throw new Error(data?.detail || `Referral failed (${status})`);
         const url  = data.referral_url || '';
+        referralUrlCache = url;
         const el   = document.getElementById('referralLink');
         if (el) el.textContent = url || 'Referral link unavailable right now.';
 
@@ -1018,27 +1018,37 @@
             ? `You've earned ${bonus} bonus rewrites from referrals.`
             : 'Invite friends to unlock bonus rewrites for both of you.';
         }
-
-        const copyBtn = document.getElementById('copyRefBtn');
-        if (copyBtn) {
-          copyBtn.addEventListener('click', () => {
-            navigator.clipboard.writeText(url).then(() => showToast('✅ Referral link copied!'));
-          });
-        }
-
-        const waBtn = document.getElementById('shareWaBtn');
-        if (waBtn) {
-          waBtn.addEventListener('click', () => {
-            const msg = encodeURIComponent(`Hey! I've been using ReplyPals to write better emails in English. It's great for non-native speakers 🚀 Try it free: ${url}`);
-            window.open(`https://wa.me/?text=${msg}`, '_blank');
-          });
-        }
       } catch (e) {
         console.warn('Referral load error:', e);
         const el = document.getElementById('referralLink');
         if (el) el.textContent = 'Could not load referral link. Refresh and try again.';
         const bonusTip = document.getElementById('referralBonusTip');
         if (bonusTip) bonusTip.textContent = '';
+      }
+    }
+
+    function bindReferralActions() {
+      const copyBtn = document.getElementById('copyRefBtn');
+      if (copyBtn) {
+        copyBtn.addEventListener('click', () => {
+          if (!referralUrlCache) {
+            showToast('⚠️ Referral link is not ready yet');
+            return;
+          }
+          navigator.clipboard.writeText(referralUrlCache).then(() => showToast('✅ Referral link copied!'));
+        });
+      }
+
+      const waBtn = document.getElementById('shareWaBtn');
+      if (waBtn) {
+        waBtn.addEventListener('click', () => {
+          if (!referralUrlCache) {
+            showToast('⚠️ Referral link is not ready yet');
+            return;
+          }
+          const msg = encodeURIComponent(`Hey! I've been using ReplyPals to write better emails in English. It's great for non-native speakers 🚀 Try it free: ${referralUrlCache}`);
+          window.open(`https://wa.me/?text=${msg}`, '_blank');
+        });
       }
     }
 
@@ -1315,6 +1325,7 @@
 
     // ── Run on page load ───────────────────────────────────
     document.addEventListener('DOMContentLoaded', () => {
+      bindReferralActions();
       initDashboard();
     });
   </script>

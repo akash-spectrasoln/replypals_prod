@@ -3085,10 +3085,19 @@ async def account_referral(authorization: str = Header(None)):
         raise HTTPException(status_code=400, detail="No email in token")
 
     try:
+        if _supabase_in_backoff():
+            import hashlib
+            ref_code = hashlib.md5(email.lower().encode()).hexdigest()[:8].upper()
+            referral_url = f"{os.getenv('APP_BASE_URL', 'https://replypals.in')}/signup?ref={ref_code}"
+            return {"ref_code": ref_code, "referral_url": referral_url, "bonus_rewrites": 0, "degraded": True}
+
         # Find existing row
-        res = supabase.table("free_users").select("ref_code,bonus_rewrites").or_(
-            f"user_id.eq.{user_id},email.eq.{email}"
-        ).limit(1).execute()
+        res = await _sb_execute(
+            supabase.table("free_users").select("ref_code,bonus_rewrites").or_(
+                f"user_id.eq.{user_id},email.eq.{email}"
+            ).limit(1),
+            timeout_sec=3.0,
+        )
 
         if res.data and res.data[0].get("ref_code"):
             ref_code = res.data[0]["ref_code"]
@@ -3098,9 +3107,12 @@ async def account_referral(authorization: str = Header(None)):
             import hashlib
             ref_code = hashlib.md5(email.lower().encode()).hexdigest()[:8].upper()
             # Upsert it
-            supabase.table("free_users").update({"ref_code": ref_code}).or_(
-                f"user_id.eq.{user_id},email.eq.{email}"
-            ).execute()
+            await _sb_execute(
+                supabase.table("free_users").update({"ref_code": ref_code}).or_(
+                    f"user_id.eq.{user_id},email.eq.{email}"
+                ),
+                timeout_sec=3.0,
+            )
             bonus = 0
 
         referral_url = f"{os.getenv('APP_BASE_URL', 'https://replypals.in')}/signup?ref={ref_code}"
@@ -3110,7 +3122,11 @@ async def account_referral(authorization: str = Header(None)):
             "bonus_rewrites": bonus,
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        _mark_supabase_down(e)
+        import hashlib
+        ref_code = hashlib.md5(email.lower().encode()).hexdigest()[:8].upper()
+        referral_url = f"{os.getenv('APP_BASE_URL', 'https://replypals.in')}/signup?ref={ref_code}"
+        return {"ref_code": ref_code, "referral_url": referral_url, "bonus_rewrites": 0, "degraded": True}
 
 
 @app.post("/referral/use")
