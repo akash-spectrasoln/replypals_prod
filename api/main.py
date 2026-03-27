@@ -1053,6 +1053,15 @@ class AddTeamMemberRequest(BaseModel):
     member_email: str
 
 
+class ContactSupportRequest(BaseModel):
+    name: str = Field(..., min_length=2, max_length=120)
+    email: str = Field(..., min_length=5, max_length=254)
+    subject: str = Field(..., min_length=3, max_length=160)
+    message: str = Field(..., min_length=10, max_length=4000)
+    inquiry_type: str = Field(default="general", max_length=64)
+    company: Optional[str] = Field(default="", max_length=120)
+
+
 # ═══════════════════════════════════════════
 # PROMPT BUILDER
 # ═══════════════════════════════════════════
@@ -1838,6 +1847,65 @@ async def admin_user_calls(email: str, credentials=Depends(require_admin)):
 async def track_event(request: Request, body: TrackRequest):
     """Simple event tracking for marketing site (no DB write)."""
     return {"status": "ok"}
+
+
+@app.post("/contact-us")
+async def contact_us(body: ContactSupportRequest):
+    """Accept contact requests from website and route to support inbox."""
+    email = (body.email or "").strip().lower()
+    name = (body.name or "").strip()
+    subject = (body.subject or "").strip()
+    message = (body.message or "").strip()
+    inquiry_type = (body.inquiry_type or "general").strip().lower()
+    company = (body.company or "").strip()
+
+    if "@" not in email:
+        raise HTTPException(400, "Valid email is required")
+
+    support_email = os.getenv("SUPPORT_EMAIL", GMAIL_ADDRESS or "support@replypals.in")
+    safe_type = inquiry_type.replace("\n", " ").replace("\r", " ")[:64]
+    safe_company = company.replace("\n", " ").replace("\r", " ")[:120]
+    safe_subject = subject.replace("\n", " ").replace("\r", " ")[:160]
+
+    final_subject = f"[Website:{safe_type}] {safe_subject}"
+    body_plain = (
+        f"New website inquiry\n\n"
+        f"Type: {safe_type}\n"
+        f"Name: {name}\n"
+        f"Email: {email}\n"
+        f"Company: {safe_company or '-'}\n\n"
+        f"Message:\n{message}\n"
+    )
+    body_html = _make_html_email(
+        "New Website Inquiry",
+        f"{name} sent a {safe_type} request",
+        f"""
+        <h2 style="color:#0F2544;font-size:22px;font-weight:700;margin:0 0 8px;">New inquiry from {name}</h2>
+        <p style="color:#6B7280;font-size:15px;margin:0 0 20px;">ReplyPals website contact form submission.</p>
+        <table style="width:100%;border-collapse:collapse;margin:0 0 16px;">
+          <tr><td style="padding:8px 0;color:#6B7280;">Type</td><td style="padding:8px 0;color:#0F2544;font-weight:600;">{safe_type}</td></tr>
+          <tr><td style="padding:8px 0;color:#6B7280;">Name</td><td style="padding:8px 0;color:#0F2544;font-weight:600;">{name}</td></tr>
+          <tr><td style="padding:8px 0;color:#6B7280;">Email</td><td style="padding:8px 0;color:#0F2544;font-weight:600;">{email}</td></tr>
+          <tr><td style="padding:8px 0;color:#6B7280;">Company</td><td style="padding:8px 0;color:#0F2544;font-weight:600;">{safe_company or "-"}</td></tr>
+          <tr><td style="padding:8px 0;color:#6B7280;">Subject</td><td style="padding:8px 0;color:#0F2544;font-weight:600;">{safe_subject}</td></tr>
+        </table>
+        <div style="background:#F8F9FE;border:1px solid #EAECF4;border-radius:12px;padding:16px;white-space:pre-wrap;color:#111827;line-height:1.6;">{message}</div>
+        """,
+    )
+
+    try:
+        await asyncio.to_thread(
+            _send_email,
+            support_email,
+            final_subject,
+            body_plain,
+            "support_contact",
+            body_html,
+        )
+    except Exception as e:
+        print(f"[contact-us] email dispatch error: {e}")
+
+    return {"ok": True, "message": "Thanks. Our team will get back within 1 business day."}
 
 
 @app.post("/rewrite", response_model=RewriteResponse)
@@ -3327,7 +3395,8 @@ async def serve_home():
 _WEBSITE_PAGES = [
     "login.html", "signup.html", "dashboard.html",
     "forgot-password.html", "reset-password.html",
-    "auth-callback.html", "success.html",
+    "auth-callback.html", "success.html", "contact.html",
+    "privacy.html", "terms.html", "refund.html",
 ]
 
 for _page in _WEBSITE_PAGES:
@@ -3352,6 +3421,10 @@ _WEBSITE_PAGE_ALIASES = {
     "/reset-password": "reset-password.html",
     "/auth-callback": "auth-callback.html",
     "/success": "success.html",
+    "/contact": "contact.html",
+    "/privacy": "privacy.html",
+    "/terms": "terms.html",
+    "/refund": "refund.html",
 }
 
 for _alias_path, _alias_file in _WEBSITE_PAGE_ALIASES.items():
