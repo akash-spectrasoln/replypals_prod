@@ -47,12 +47,18 @@ try {
     let licenseKey = null, freeCount = 0, bonusRewrites = 0;
     const FREE_LIMIT_BASE = 5;
 
-    safeStorageGet(['toneMemory', 'replypalAutoImprove', 'replypalLicense', 'replypalCount', 'explainExpanded', 'replypalBonusRewrites'], function (s) {
+    safeStorageGet(['toneMemory', 'replypalAutoImprove', 'replypalLicense', 'replypalCount', 'explainExpanded', 'replypalBonusRewrites', 'replypalUsageUsed', 'replypalUsageLimit'], function (s) {
       toneMemory = s.toneMemory || {};
       autoImprove = s.replypalAutoImprove || false;
       licenseKey = s.replypalLicense || null;
       freeCount = s.replypalCount || 0;
       bonusRewrites = s.replypalBonusRewrites || 0;
+      if (typeof s.replypalUsageUsed === 'number') {
+        freeCount = s.replypalUsageUsed;
+      }
+      if (typeof s.replypalUsageLimit === 'number') {
+        bonusRewrites = Math.max(0, s.replypalUsageLimit - FREE_LIMIT_BASE);
+      }
       window.explainExpanded = s.explainExpanded || false;
       var host = window.location.hostname;
       if (toneMemory[host]) selectedTone = toneMemory[host];
@@ -79,6 +85,60 @@ try {
       selectedTone = tone;
       toneMemory[window.location.hostname] = tone;
       safeStorageSet({ toneMemory: toneMemory });
+    }
+
+    function rpHydrateQuotaFromStorage(cb) {
+      safeStorageGet(['replypalLicense', 'replypalUsageUsed', 'replypalUsageLimit', 'replypalCount', 'replypalBonusRewrites'], function (s) {
+        licenseKey = s.replypalLicense || licenseKey || null;
+        if (typeof s.replypalUsageUsed === 'number') {
+          freeCount = s.replypalUsageUsed;
+        } else if (typeof s.replypalCount === 'number') {
+          freeCount = s.replypalCount;
+        }
+        if (typeof s.replypalUsageLimit === 'number') {
+          bonusRewrites = Math.max(0, s.replypalUsageLimit - FREE_LIMIT_BASE);
+        } else if (typeof s.replypalBonusRewrites === 'number') {
+          bonusRewrites = s.replypalBonusRewrites;
+        }
+        if (cb) cb();
+      });
+    }
+
+    function rpApplyQuotaFromApi(data) {
+      if (!data || licenseKey) return;
+      var used = data.rewrites_used;
+      var limit = data.rewrites_limit;
+      if (typeof used === 'number') {
+        freeCount = used;
+        safeStorageSet({ replypalCount: used, replypalUsageUsed: used });
+      }
+      if (typeof limit === 'number') {
+        bonusRewrites = Math.max(0, limit - FREE_LIMIT_BASE);
+        safeStorageSet({ replypalUsageLimit: limit, replypalBonusRewrites: bonusRewrites });
+      }
+    }
+
+    function rpIsLimitReachedError(res) {
+      var msg = String((res && res.error) || '').toLowerCase();
+      return msg.indexOf('limit_reached') >= 0 ||
+             msg.indexOf('limit reached') >= 0 ||
+             msg.indexOf('"error":"limit_reached"') >= 0 ||
+             msg.indexOf('status 429') >= 0 ||
+             msg.indexOf('server error: 429') >= 0;
+    }
+
+    function rpOpenUpgradeForLimit(contextText) {
+      showToast('⚠️ Free limit reached. Upgrade to continue.', 'error');
+      if (licenseKey) return;
+      var anchor = getWriteTarget(_activeEl || _rpMiniActive) || _activeEl || _rpMiniActive;
+      var rect = anchor && anchor.getBoundingClientRect
+        ? anchor.getBoundingClientRect()
+        : { left: Math.max(8, (window.innerWidth - 290) / 2), top: 120, width: 290, height: 40, right: 0, bottom: 0 };
+      var fallbackText = contextText || (anchor ? readText(anchor) : '') || '';
+      var effectiveLimit = FREE_LIMIT_BASE + bonusRewrites;
+      freeCount = Math.max(freeCount, effectiveLimit);
+      safeStorageSet({ replypalCount: freeCount, replypalUsageUsed: freeCount });
+      openPopup(rect, fallbackText, false);
     }
 
     // ── Language ──
@@ -1138,8 +1198,16 @@ try {
             return;
           }
           if (res && res.success && res.data) {
-            if (!licenseKey) { freeCount++; safeStorageSet({ replypalCount: freeCount }); }
+            if (!licenseKey) {
+              rpApplyQuotaFromApi(res.data);
+              if (typeof res.data.rewrites_used !== 'number') {
+                freeCount++;
+                safeStorageSet({ replypalCount: freeCount, replypalUsageUsed: freeCount });
+              }
+            }
             renderResult(res.data, type, payload);
+          } else if (rpIsLimitReachedError(res)) {
+            rpOpenUpgradeForLimit(text);
           } else {
             showToast('⚠️ Something went wrong — try again', 'error');
             renderError(res?.error || 'Failed to connect to server.');
@@ -1773,35 +1841,46 @@ try {
         safeSendMessage({ action: 'openPopup' });
         return;
       }
-      var el = _rpMiniActive;
-      if (!el) return;
-      var txt = readText(el);
-      if (!txt || !txt.trim()) { showToast('Type something first!', 'error'); return; }
+      rpHydrateQuotaFromStorage(function() {
+        var effectiveLimit = FREE_LIMIT_BASE + bonusRewrites;
+        if (!licenseKey && freeCount >= effectiveLimit) {
+          rpOpenUpgradeForLimit();
+          return;
+        }
 
-      var pill = document.getElementById('rp-input-pill');
-      if (pill) pill.classList.add('rp-loading');
+        var el = _rpMiniActive;
+        if (!el) return;
+        var txt = readText(el);
+        if (!txt || !txt.trim()) { showToast('Type something first!', 'error'); return; }
 
-      var mode = (action === 'generate-reply') ? 'reply' : 'rewrite';
+        var pill = document.getElementById('rp-input-pill');
+        if (pill) pill.classList.add('rp-loading');
 
-      safeStorageGet(['replypalTone'], function(s) {
-        var useTone = s.replypalTone || selectedTone || 'Friendly';
-        safeSendMessage(
-          { type: 'selectionAction', payload: { text: txt, mode: mode, tone: useTone } },
-          function(res) {
-            if (pill) pill.classList.remove('rp-loading');
-            if (res && res.success && res.data) {
-              var out = res.data.rewritten || res.data.generated || '';
-              if (mode === 'rewrite') {
-                setText(el, out);
-                rpShowScoreToast(res.data.score);
+        var mode = (action === 'generate-reply') ? 'reply' : 'rewrite';
+
+        safeStorageGet(['replypalTone'], function(s) {
+          var useTone = s.replypalTone || selectedTone || 'Friendly';
+          safeSendMessage(
+            { type: 'selectionAction', payload: { text: txt, mode: mode, tone: useTone } },
+            function(res) {
+              if (pill) pill.classList.remove('rp-loading');
+              if (res && res.success && res.data) {
+                rpApplyQuotaFromApi(res.data);
+                var out = res.data.rewritten || res.data.generated || '';
+                if (mode === 'rewrite') {
+                  setText(el, out);
+                  rpShowScoreToast(res.data.score);
+                } else {
+                  rpShowResultPanel(mode, out, res.data.score);
+                }
+              } else if (rpIsLimitReachedError(res)) {
+                rpOpenUpgradeForLimit(txt);
               } else {
-                rpShowResultPanel(mode, out, res.data.score);
+                rpShowErrorToast((res && res.error) || 'Failed');
               }
-            } else {
-              rpShowErrorToast((res && res.error) || 'Failed');
             }
-          }
-        );
+          );
+        });
       });
     }
 
@@ -2194,21 +2273,32 @@ try {
         rpShowErrorToast('No selected text found');
         return;
       }
-      rpShowLoadingPanel(mode);
-      safeStorageGet(['replypalLanguage'], function(st) {
-        var selectedLang = (st && st.replypalLanguage) ? String(st.replypalLanguage) : 'auto';
-        safeSendMessage(
-          { type: 'selectionAction', payload: { text: text, mode: mode, tone: tone || null, language: selectedLang } },
-          function(res) {
-            if (res && res.success && res.data) {
-              var out = res.data.rewritten || res.data.generated || res.data.text || '';
-              if (!out || !String(out).trim()) out = '⚠️ No output returned from AI';
-              rpShowResultPanel(mode, out, res.data.score);
-            } else {
-              rpShowErrorToast((res && res.error) || 'Action failed');
+      rpHydrateQuotaFromStorage(function() {
+        var effectiveLimit = FREE_LIMIT_BASE + bonusRewrites;
+        if (!licenseKey && freeCount >= effectiveLimit) {
+          rpOpenUpgradeForLimit(text);
+          return;
+        }
+
+        rpShowLoadingPanel(mode);
+        safeStorageGet(['replypalLanguage'], function(st) {
+          var selectedLang = (st && st.replypalLanguage) ? String(st.replypalLanguage) : 'auto';
+          safeSendMessage(
+            { type: 'selectionAction', payload: { text: text, mode: mode, tone: tone || null, language: selectedLang } },
+            function(res) {
+              if (res && res.success && res.data) {
+                rpApplyQuotaFromApi(res.data);
+                var out = res.data.rewritten || res.data.generated || res.data.text || '';
+                if (!out || !String(out).trim()) out = '⚠️ No output returned from AI';
+                rpShowResultPanel(mode, out, res.data.score);
+              } else if (rpIsLimitReachedError(res)) {
+                rpOpenUpgradeForLimit(text);
+              } else {
+                rpShowErrorToast((res && res.error) || 'Action failed');
+              }
             }
-          }
-        );
+          );
+        });
       });
     }
 
