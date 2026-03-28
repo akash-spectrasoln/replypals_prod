@@ -124,6 +124,7 @@ async function syncFreeUsageSnapshot(emailHint = null, anonHint = null) {
         replypalUsageUsed: mergedUsed,
         replypalUsageLimit: limit,
         replypalUsageLeft: Math.max(0, limit - mergedUsed),
+        replypalRewritesLimit: limit,
       });
     }
   } catch (_) { }

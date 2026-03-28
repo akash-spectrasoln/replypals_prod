@@ -91,6 +91,20 @@
   let anonId = null;
   let serverRewriteCount = null;
   let usagePollTimer = null;
+  /** Same semantics as content script: finite limit + zero left ⇒ block all actions. */
+  let replypalUsageLeft = null;
+  let replypalRewritesLimit = null;
+
+  function isPopupQuotaBlockedSync() {
+    if (typeof replypalRewritesLimit === 'number' && replypalRewritesLimit > 0) {
+      if (typeof replypalUsageLeft === 'number' && replypalUsageLeft <= 0) return true;
+    }
+    if (!licenseKey) {
+      const eff = FREE_LIMIT_BASE + bonusRewrites;
+      return useCount >= eff;
+    }
+    return false;
+  }
 
   async function refreshFreeUsageFromServer() {
     if (licenseKey) return;
@@ -155,7 +169,9 @@
       'replypalBonusRewrites',
       'replypalRefCode',
       'replypalUsageUsed',
-      'replypalUsageLimit'
+      'replypalUsageLimit',
+      'replypalUsageLeft',
+      'replypalRewritesLimit'
     ]);
 
     useCount = stored.replypalCount || 0;
@@ -168,6 +184,8 @@
       bonusRewrites = Math.max(0, Number(stored.replypalUsageLimit) - FREE_LIMIT_BASE);
       serverRewriteCount = useCount;
     }
+    if (typeof stored.replypalUsageLeft === 'number') replypalUsageLeft = stored.replypalUsageLeft;
+    if (typeof stored.replypalRewritesLimit === 'number') replypalRewritesLimit = stored.replypalRewritesLimit;
     anonId = stored.replypalAnonId || null;
     if (!anonId) {
       const idResp = await safeSendMessage({ type: 'getAnonId' });
@@ -230,6 +248,23 @@
         if (usageResp && usageResp.success !== false && usageResp.plan) {
           currentPlan = usageResp.plan;
           isTeamAdmin = usageResp.is_admin || false;
+          const lim = usageResp.limit;
+          const usedMo = Number(usageResp.rewrites_this_month || 0);
+          if (typeof lim === 'number' && lim > 0) {
+            replypalRewritesLimit = lim;
+            replypalUsageLeft = Math.max(0, lim - usedMo);
+            await chrome.storage.local.set({
+              replypalRewritesLimit: lim,
+              replypalUsageLeft: replypalUsageLeft
+            });
+          } else if (typeof lim === 'number' && lim < 0) {
+            replypalRewritesLimit = lim;
+            replypalUsageLeft = null;
+            await chrome.storage.local.set({
+              replypalRewritesLimit: lim,
+              replypalUsageLeft: null
+            });
+          }
         }
       } catch (e) { }
     } else {
@@ -247,10 +282,8 @@
       chrome.storage.session.remove('replypalSelection');
     }
 
-    // Show upgrade overlay immediately if limit reached and no license
-    const effectiveLimit = FREE_LIMIT_BASE + bonusRewrites;
-    if (useCount >= effectiveLimit && !licenseKey) {
-      showUpgradeOverlay();
+    if (isPopupQuotaBlockedSync()) {
+      showUpgradeOverlay(true);
     }
 
     // Mark default plan as selected
@@ -427,10 +460,8 @@
   async function handleRewrite(shouldCount = true) {
     if (isLoading) return;
 
-    // Check limit
-    const effectiveLimit = FREE_LIMIT_BASE + bonusRewrites;
-    if (shouldCount && !licenseKey && useCount >= effectiveLimit) {
-      showUpgradeOverlay();
+    if (shouldCount && isPopupQuotaBlockedSync()) {
+      showUpgradeOverlay(true);
       sendTrack('upgrade_shown', { trigger: 'limit_reached' }); // no personal data
       return;
     }
@@ -523,6 +554,21 @@
               await refreshFreeUsageFromServer();
               updateUsageDisplay();
             }, 5000);
+          } else if (licenseKey) {
+            const apiLeft = response.data?.rewrites_left;
+            const apiLim = response.data?.rewrites_limit;
+            if (typeof apiLeft === 'number' && typeof apiLim === 'number') {
+              replypalUsageLeft = apiLeft;
+              replypalRewritesLimit = apiLim;
+              await chrome.storage.local.set({
+                replypalUsageLeft: apiLeft,
+                replypalRewritesLimit: apiLim
+              });
+              updateUsageDisplay();
+              if (isPopupQuotaBlockedSync()) {
+                showUpgradeOverlay(true);
+              }
+            }
           }
           try {
             const s = await chrome.storage.local.get(['replypalScores', 'replypalCache']);
@@ -1114,6 +1160,10 @@
 
     // ── Generate ────────────────────────────────────────────────────
     templateFormOverlay.querySelector('#templateFormGenerate').addEventListener('click', async () => {
+      if (isPopupQuotaBlockedSync()) {
+        showUpgradeOverlay(true);
+        return;
+      }
       const fieldValues = {};
       templateFormOverlay.querySelectorAll('.template-form-input').forEach(inp => {
         fieldValues[inp.dataset.field] = inp.value.trim() || inp.placeholder;
@@ -1323,9 +1373,25 @@
     selectPlan('pro');
   }
 
-  async function showUpgradeOverlay() {
+  async function showUpgradeOverlay(blocking) {
     upgradeOverlay.classList.add('visible');
-    sendTrack('upgrade_shown', { trigger: 'limit' });
+    sendTrack('upgrade_shown', { trigger: blocking ? 'limit_blocked' : 'limit' });
+
+    if (blocking) {
+      upgradeOverlay.dataset.blocking = '1';
+      closeOverlay.style.display = 'none';
+      const sub = upgradeOverlay.querySelector('.upgrade-header p');
+      if (sub) {
+        sub.textContent = 'You\'ve reached your plan limit — subscribe or upgrade to continue.';
+      }
+    } else {
+      delete upgradeOverlay.dataset.blocking;
+      closeOverlay.style.display = '';
+      const sub = upgradeOverlay.querySelector('.upgrade-header p');
+      if (sub) {
+        sub.textContent = 'You\'ve used all your free rewrites';
+      }
+    }
 
     const loader = document.getElementById('pricingLoader');
 
@@ -1344,11 +1410,14 @@
     renderPlanCards(pricing);
   }
 
-  function hideUpgradeOverlay() {
+  function hideUpgradeOverlay(force) {
+    if (force !== true && upgradeOverlay.dataset.blocking === '1') return;
     upgradeOverlay.classList.remove('visible');
+    delete upgradeOverlay.dataset.blocking;
+    closeOverlay.style.display = '';
   }
 
-  closeOverlay.addEventListener('click', hideUpgradeOverlay);
+  closeOverlay.addEventListener('click', () => hideUpgradeOverlay());
 
   // ─── Plan Selection ───
   function selectPlan(plan) {
@@ -1425,8 +1494,33 @@
         currentPlan = response.plan || 'pro';
         isTeamAdmin = response.is_admin || false;
         await chrome.storage.local.set({ replypalLicense: key });
+        try {
+          const usageResp = await safeSendMessage({
+            type: 'checkUsage',
+            payload: { license_key: key }
+          });
+          if (usageResp && usageResp.success !== false && typeof usageResp.limit === 'number') {
+            const lim = usageResp.limit;
+            const usedMo = Number(usageResp.rewrites_this_month || 0);
+            if (lim > 0) {
+              replypalRewritesLimit = lim;
+              replypalUsageLeft = Math.max(0, lim - usedMo);
+              await chrome.storage.local.set({
+                replypalRewritesLimit: lim,
+                replypalUsageLeft: replypalUsageLeft
+              });
+            } else {
+              replypalRewritesLimit = lim;
+              replypalUsageLeft = null;
+              await chrome.storage.local.set({
+                replypalRewritesLimit: lim,
+                replypalUsageLeft: null
+              });
+            }
+          }
+        } catch (_) { }
         updateUsageDisplay();
-        hideUpgradeOverlay();
+        hideUpgradeOverlay(true);
         showToast('✅ License activated!', 'success');
 
         if (currentPlan === 'team' && isTeamAdmin) {
@@ -1449,7 +1543,7 @@
       inputText.value = changes.replypalSelection.newValue;
       updateCharCount();
     }
-    if (area === 'local' && (changes.replypalUsageUsed || changes.replypalUsageLimit)) {
+    if (area === 'local' && (changes.replypalUsageUsed || changes.replypalUsageLimit || changes.replypalUsageLeft || changes.replypalRewritesLimit || changes.replypalLicense)) {
       const used = changes.replypalUsageUsed?.newValue;
       const limit = changes.replypalUsageLimit?.newValue;
       if (typeof used === 'number') {
@@ -1458,6 +1552,16 @@
       }
       if (typeof limit === 'number') {
         bonusRewrites = Math.max(0, limit - FREE_LIMIT_BASE);
+      }
+      if (changes.replypalUsageLeft && typeof changes.replypalUsageLeft.newValue === 'number') {
+        replypalUsageLeft = changes.replypalUsageLeft.newValue;
+      }
+      if (changes.replypalRewritesLimit && typeof changes.replypalRewritesLimit.newValue === 'number') {
+        replypalRewritesLimit = changes.replypalRewritesLimit.newValue;
+      }
+      if (changes.replypalLicense?.newValue) {
+        licenseKey = changes.replypalLicense.newValue;
+        hideUpgradeOverlay(true);
       }
       updateUsageDisplay();
     }

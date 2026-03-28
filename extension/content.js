@@ -45,9 +45,12 @@ try {
     const TONES = typeof RP_TONES !== 'undefined' ? RP_TONES : DEFAULT_TONES;
     let toneMemory = {}, selectedTone = 'Confident', autoImprove = false;
     let licenseKey = null, freeCount = 0, bonusRewrites = 0;
+    /** Synced with API: when limit > 0 and left === 0, all actions are blocked (free + capped plans). */
+    let replypalUsageLeft = null;
+    let replypalRewritesLimit = null;
     const FREE_LIMIT_BASE = 5;
 
-    safeStorageGet(['toneMemory', 'replypalAutoImprove', 'replypalLicense', 'replypalCount', 'explainExpanded', 'replypalBonusRewrites', 'replypalUsageUsed', 'replypalUsageLimit'], function (s) {
+    safeStorageGet(['toneMemory', 'replypalAutoImprove', 'replypalLicense', 'replypalCount', 'explainExpanded', 'replypalBonusRewrites', 'replypalUsageUsed', 'replypalUsageLimit', 'replypalUsageLeft', 'replypalRewritesLimit'], function (s) {
       toneMemory = s.toneMemory || {};
       autoImprove = s.replypalAutoImprove || false;
       licenseKey = s.replypalLicense || null;
@@ -59,6 +62,8 @@ try {
       if (typeof s.replypalUsageLimit === 'number') {
         bonusRewrites = Math.max(0, s.replypalUsageLimit - FREE_LIMIT_BASE);
       }
+      if (typeof s.replypalUsageLeft === 'number') replypalUsageLeft = s.replypalUsageLeft;
+      if (typeof s.replypalRewritesLimit === 'number') replypalRewritesLimit = s.replypalRewritesLimit;
       window.explainExpanded = s.explainExpanded || false;
       var host = window.location.hostname;
       if (toneMemory[host]) selectedTone = toneMemory[host];
@@ -88,7 +93,7 @@ try {
     }
 
     function rpHydrateQuotaFromStorage(cb) {
-      safeStorageGet(['replypalLicense', 'replypalUsageUsed', 'replypalUsageLimit', 'replypalCount', 'replypalBonusRewrites'], function (s) {
+      safeStorageGet(['replypalLicense', 'replypalUsageUsed', 'replypalUsageLimit', 'replypalCount', 'replypalBonusRewrites', 'replypalUsageLeft', 'replypalRewritesLimit'], function (s) {
         licenseKey = s.replypalLicense || licenseKey || null;
         if (typeof s.replypalUsageUsed === 'number') {
           freeCount = s.replypalUsageUsed;
@@ -100,23 +105,63 @@ try {
         } else if (typeof s.replypalBonusRewrites === 'number') {
           bonusRewrites = s.replypalBonusRewrites;
         }
+        if (typeof s.replypalUsageLeft === 'number') replypalUsageLeft = s.replypalUsageLeft;
+        if (typeof s.replypalRewritesLimit === 'number') replypalRewritesLimit = s.replypalRewritesLimit;
         if (cb) cb();
       });
     }
 
-    function rpApplyQuotaFromApi(data) {
-      if (!data || licenseKey) return;
-      var used = data.rewrites_used;
-      var limit = data.rewrites_limit;
-      if (typeof used === 'number') {
-        freeCount = used;
-        safeStorageSet({ replypalCount: used, replypalUsageUsed: used });
+    function rpIsQuotaBlocked() {
+      if (typeof replypalRewritesLimit === 'number' && replypalRewritesLimit > 0) {
+        if (typeof replypalUsageLeft === 'number' && replypalUsageLeft <= 0) return true;
       }
-      if (typeof limit === 'number') {
-        bonusRewrites = Math.max(0, limit - FREE_LIMIT_BASE);
-        safeStorageSet({ replypalUsageLimit: limit, replypalBonusRewrites: bonusRewrites });
+      if (!licenseKey) {
+        var eff = FREE_LIMIT_BASE + bonusRewrites;
+        return freeCount >= eff;
+      }
+      return false;
+    }
+
+    function rpApplyQuotaFromApi(data) {
+      if (!data) return;
+      if (typeof data.rewrites_left === 'number') {
+        replypalUsageLeft = data.rewrites_left;
+        safeStorageSet({ replypalUsageLeft: data.rewrites_left });
+      }
+      if (typeof data.rewrites_limit === 'number') {
+        replypalRewritesLimit = data.rewrites_limit;
+        safeStorageSet({ replypalRewritesLimit: data.rewrites_limit });
+        if (!licenseKey) {
+          bonusRewrites = Math.max(0, data.rewrites_limit - FREE_LIMIT_BASE);
+          safeStorageSet({ replypalUsageLimit: data.rewrites_limit, replypalBonusRewrites: bonusRewrites });
+        }
+      }
+      if (typeof data.rewrites_used === 'number' && !licenseKey) {
+        freeCount = data.rewrites_used;
+        safeStorageSet({ replypalCount: data.rewrites_used, replypalUsageUsed: data.rewrites_used });
       }
     }
+
+    function rpUnlockPopupChromeIfNeeded() {
+      var pop = document.getElementById('rp-popup');
+      if (!pop || pop.dataset.rpSubLock !== '1') return;
+      delete pop.dataset.rpSubLock;
+      var c = pop.querySelector('.rp-close');
+      if (c) {
+        c.style.display = '';
+        c.onclick = function () { pop.remove(); _popup = null; clearInterval(_tipTimer); };
+      }
+    }
+
+    try {
+      chrome.storage.onChanged.addListener(function (changes, area) {
+        if (area !== 'local') return;
+        if (changes.replypalUsageLeft) replypalUsageLeft = changes.replypalUsageLeft.newValue;
+        if (changes.replypalRewritesLimit) replypalRewritesLimit = changes.replypalRewritesLimit.newValue;
+        if (changes.replypalLicense) licenseKey = changes.replypalLicense.newValue || null;
+        if (changes.replypalUsageUsed) freeCount = changes.replypalUsageUsed.newValue;
+      });
+    } catch (_) {}
 
     function rpIsLimitReachedError(res) {
       var msg = String((res && res.error) || '').toLowerCase();
@@ -128,17 +173,18 @@ try {
     }
 
     function rpOpenUpgradeForLimit(contextText) {
-      showToast('⚠️ Free limit reached. Upgrade to continue.', 'error');
-      if (licenseKey) return;
+      showToast('⚠️ You\'ve reached your plan limit. Subscribe or upgrade to continue.', 'error');
       var anchor = getWriteTarget(_activeEl || _rpMiniActive) || _activeEl || _rpMiniActive;
       var rect = anchor && anchor.getBoundingClientRect
         ? anchor.getBoundingClientRect()
         : { left: Math.max(8, (window.innerWidth - 290) / 2), top: 120, width: 290, height: 40, right: 0, bottom: 0 };
       var fallbackText = contextText || (anchor ? readText(anchor) : '') || '';
-      var effectiveLimit = FREE_LIMIT_BASE + bonusRewrites;
-      freeCount = Math.max(freeCount, effectiveLimit);
-      safeStorageSet({ replypalCount: freeCount, replypalUsageUsed: freeCount });
-      openPopup(rect, fallbackText, false);
+      if (!licenseKey) {
+        var effectiveLimit = FREE_LIMIT_BASE + bonusRewrites;
+        freeCount = Math.max(freeCount, effectiveLimit);
+        safeStorageSet({ replypalCount: freeCount, replypalUsageUsed: freeCount });
+      }
+      openPopup(rect, fallbackText, false, { subscriptionOnly: true });
     }
 
     // ── Language ──
@@ -674,7 +720,13 @@ try {
     function doInlineRewrite(el) {
       var target = getWriteTarget(el) || el;
       _activeEl = target;
-      openPopup(target.getBoundingClientRect(), readText(target), false);
+      rpHydrateQuotaFromStorage(function () {
+        if (rpIsQuotaBlocked()) {
+          rpOpenUpgradeForLimit(readText(target));
+          return;
+        }
+        openPopup(target.getBoundingClientRect(), readText(target), false);
+      });
     }
 
     function positionPopup(p, rect) {
@@ -744,7 +796,8 @@ try {
       return TONES.find(t => t.id === id)?.icon || '🔵';
     }
 
-    function openPopup(rect, text, isReplyMode) {
+    function openPopup(rect, text, isReplyMode, opts) {
+      opts = opts || {};
       if (_popup) _popup.remove();
       var p = document.createElement('div');
       p.id = 'rp-popup';
@@ -772,14 +825,21 @@ try {
             <div class="rp-logo-mark">R</div>
             <span class="rp-title">ReplyPals</span>
           </div>
-          <button class="rp-close">&times;</button>
+          <button type="button" class="rp-close" aria-label="Close">&times;</button>
         </div>
         <div class="rp-subtitle">AI writing for everyone</div>
         <svg class="rp-head-blob" width="120" height="80" viewBox="0 0 120 80">
           <path fill="#ffffff" d="M100,20 C110,60 70,80 30,70 C-10,60 0,10 40,0 C80,-10 90,-20 100,20 Z" />
         </svg>
       `;
-      head.querySelector('.rp-close').onclick = function () { p.remove(); _popup = null; };
+      var closeBtn = head.querySelector('.rp-close');
+      var lockUi = !!opts.subscriptionOnly || rpIsQuotaBlocked();
+      if (lockUi) {
+        p.dataset.rpSubLock = '1';
+        closeBtn.style.display = 'none';
+      } else {
+        closeBtn.onclick = function () { p.remove(); _popup = null; clearInterval(_tipTimer); };
+      }
       p.appendChild(head);
 
       var body = document.createElement('div');
@@ -787,8 +847,7 @@ try {
       p.appendChild(body);
 
       function renderHome() {
-        var effectiveLimit = FREE_LIMIT_BASE + bonusRewrites;
-        if (!licenseKey && freeCount >= effectiveLimit) {
+        if (rpIsQuotaBlocked()) {
           renderUpgrade();
           return;
         }
@@ -1359,6 +1418,9 @@ try {
         v.className = 'rp-state-view';
         v.innerHTML = `
            <div class="rp-upg-title">⚡ Unlock ReplyPals Pro</div>
+           <div style="font-size:12px;color:var(--rp-text-grey);text-align:center;margin:-4px 0 12px;line-height:1.45">
+             You've reached your plan limit. Subscribe or activate a license below to continue.
+           </div>
            <div class="rp-upg-feats">
              ✅ Unlimited rewrites<br>
              ✅ Tone Memory & Templates<br>
@@ -1459,7 +1521,11 @@ try {
               if (res && res.valid) {
                 licenseKey = key;
                 safeStorageSet({ replypalLicense: key });
+                replypalUsageLeft = null;
+                replypalRewritesLimit = null;
+                try { chrome.storage.local.remove(['replypalUsageLeft', 'replypalRewritesLimit']); } catch (_) {}
                 showToast('✅ License activated!', 'success');
+                rpUnlockPopupChromeIfNeeded();
                 renderHome();
               } else {
                 showToast('Invalid or expired key.', 'error');
@@ -1487,13 +1553,19 @@ try {
       if (root) renderFixBtn(root);
     });
     document.addEventListener('mousedown', function (e) {
-      if (_popup && !_popup.contains(e.target)) { _popup.remove(); _popup = null; clearInterval(_tipTimer); }
+      if (_popup && !_popup.contains(e.target)) {
+        if (_popup.dataset && _popup.dataset.rpSubLock === '1') return;
+        _popup.remove(); _popup = null; clearInterval(_tipTimer);
+      }
       // Hide mini-toolbar if clicking outside of it
       var tb = document.getElementById('rp-mini-toolbar');
       if (tb && !tb.contains(e.target)) rpMiniHide();
     }, true);
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape' && _popup) { _popup.remove(); _popup = null; clearInterval(_tipTimer); }
+      if (e.key === 'Escape' && _popup) {
+        if (_popup.dataset && _popup.dataset.rpSubLock === '1') return;
+        _popup.remove(); _popup = null; clearInterval(_tipTimer);
+      }
     });
 
     new MutationObserver(function () {
@@ -1700,7 +1772,8 @@ try {
     // SVG ICON CONSTANTS
     // ══════════════════════════════════════════════════════════════════════
     var RP_SVG = {
-      logo: '<svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M12 2C8 2 5 5 5 9c0 2.5 1.2 4.7 3 6.1V20c0 .6.4 1 1 1h6c.6 0 1-.4 1-1v-4.9c1.8-1.4 3-3.6 3-6.1 0-4-3-7-7-7z" opacity="0.9"/><path d="M10 13c0-1.1.9-2 2-2s2 .9 2 2-.9 2-2 2-2-.9-2-2z" fill="rgba(255,255,255,0.6)"/></svg>',
+      /* Letter mark (replaces previous bulb-shaped logo) */
+      logo: '<span style="font-size:11px;font-weight:800;color:#fff;font-family:system-ui,-apple-system,sans-serif;line-height:1;display:block">R</span>',
       rewrite: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
       reply: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/><path d="M13 8l-2 4h4l-2 4" stroke-width="1.8"/></svg>',
       popup: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M14 17.5h7M17.5 14v7" stroke-width="2.2"/></svg>',
@@ -1851,12 +1924,17 @@ try {
 
     function rpHandleInputAction(action) {
       if (action === 'open-popup') {
-        safeSendMessage({ action: 'openPopup' });
+        rpHydrateQuotaFromStorage(function () {
+          if (rpIsQuotaBlocked()) {
+            rpOpenUpgradeForLimit();
+            return;
+          }
+          safeSendMessage({ action: 'openPopup' });
+        });
         return;
       }
-      rpHydrateQuotaFromStorage(function() {
-        var effectiveLimit = FREE_LIMIT_BASE + bonusRewrites;
-        if (!licenseKey && freeCount >= effectiveLimit) {
+      rpHydrateQuotaFromStorage(function () {
+        if (rpIsQuotaBlocked()) {
           rpOpenUpgradeForLimit();
           return;
         }
@@ -1871,11 +1949,11 @@ try {
 
         var mode = (action === 'generate-reply') ? 'reply' : 'rewrite';
 
-        safeStorageGet(['replypalTone'], function(s) {
+        safeStorageGet(['replypalTone'], function (s) {
           var useTone = s.replypalTone || selectedTone || 'Friendly';
           safeSendMessage(
             { type: 'selectionAction', payload: { text: txt, mode: mode, tone: useTone } },
-            function(res) {
+            function (res) {
               if (pill) pill.classList.remove('rp-loading');
               if (res && res.success && res.data) {
                 rpApplyQuotaFromApi(res.data);
@@ -2287,8 +2365,7 @@ try {
         return;
       }
       rpHydrateQuotaFromStorage(function() {
-        var effectiveLimit = FREE_LIMIT_BASE + bonusRewrites;
-        if (!licenseKey && freeCount >= effectiveLimit) {
+        if (rpIsQuotaBlocked()) {
           rpOpenUpgradeForLimit(text);
           return;
         }
@@ -2506,8 +2583,7 @@ try {
         }).join(' ').trim() || 'English';
       }
       rpHydrateQuotaFromStorage(function() {
-        var effectiveLimit = FREE_LIMIT_BASE + bonusRewrites;
-        if (!licenseKey && freeCount >= effectiveLimit) {
+        if (rpIsQuotaBlocked()) {
           rpOpenUpgradeForLimit(text);
           return;
         }
