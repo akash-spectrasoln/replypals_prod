@@ -128,6 +128,54 @@ def _free_monthly_cap_from_db() -> int:
         return int(m)
     except Exception:
         return int(DEFAULT_PLAN_LIMITS["free"]["monthly"] or 10)
+
+
+async def _free_monthly_used_llm_logs(user_id: Optional[str], identity_email: str) -> int:
+    """
+    Rolling 30-day successful rewrites from llm_call_logs, deduped by row id across
+    user_id and email (same semantics as admin user list + /free-usage enforcement).
+    """
+    if not supabase:
+        return 0
+    from dateutil.relativedelta import relativedelta
+
+    window_start = (datetime.now(timezone.utc) - relativedelta(months=1)).isoformat()
+    seen_ids = set()
+    try:
+        if user_id:
+            r_uid = await _sb_execute(
+                supabase.table("llm_call_logs")
+                .select("id")
+                .eq("status", "success")
+                .eq("user_id", user_id)
+                .gte("created_at", window_start)
+                .limit(5000),
+                timeout_sec=4.0,
+            )
+            for row in (r_uid.data or []):
+                rid = row.get("id")
+                if rid is not None:
+                    seen_ids.add(rid)
+        em = (identity_email or "").strip().lower()
+        if em:
+            r_em = await _sb_execute(
+                supabase.table("llm_call_logs")
+                .select("id")
+                .eq("status", "success")
+                .eq("email", em)
+                .gte("created_at", window_start)
+                .limit(5000),
+                timeout_sec=4.0,
+            )
+            for row in (r_em.data or []):
+                rid = row.get("id")
+                if rid is not None:
+                    seen_ids.add(rid)
+    except Exception:
+        return 0
+    return len(seen_ids)
+
+
 # Legacy alias — live caps come from Supabase app_settings.plan_limits + DEFAULT_PLAN_LIMITS
 PLAN_POLICY = {
     "free": {"window": "rolling_30d", "base_limit": FREE_BASE_LIMIT},
@@ -1051,6 +1099,8 @@ class RewriteResponse(BaseModel):
     rewrites_used: Optional[int] = None
     rewrites_limit: Optional[int] = None
     rewrites_left: Optional[int] = None
+    bonus_rewrites: Optional[int] = None
+    monthly_base_limit: Optional[int] = None
     usage: Optional[dict] = None
 
 
@@ -1071,6 +1121,8 @@ class GenerateResponse(BaseModel):
     rewrites_used: Optional[int] = None
     rewrites_limit: Optional[int] = None
     rewrites_left: Optional[int] = None
+    bonus_rewrites: Optional[int] = None
+    monthly_base_limit: Optional[int] = None
     usage: Optional[dict] = None
 
 
@@ -1853,6 +1905,10 @@ async def rewrite(
         result["rewrites_used"] = used_after
         result["rewrites_limit"] = limit_i
         result["rewrites_left"] = max(0, limit_i - used_after)
+        if rate.get("plan") == "free":
+            base_cap = _free_monthly_cap_from_db()
+            result["monthly_base_limit"] = base_cap
+            result["bonus_rewrites"] = max(0, limit_i - base_cap)
     result["usage"] = rate.get("usage_meta")
     return RewriteResponse(**result)
 
@@ -1970,6 +2026,10 @@ async def generate(
         result["rewrites_used"] = used_after
         result["rewrites_limit"] = limit_i
         result["rewrites_left"] = max(0, limit_i - used_after)
+        if rate.get("plan") == "free":
+            base_cap = _free_monthly_cap_from_db()
+            result["monthly_base_limit"] = base_cap
+            result["bonus_rewrites"] = max(0, limit_i - base_cap)
 
     # Update user_profiles stats for generate calls too
     if rate.get("user_id"):
@@ -3150,12 +3210,14 @@ async def account_status(authorization: str = Header(None)):
             "rewrites_limit": int(DEFAULT_PLAN_LIMITS["free"]["monthly"] or 10),
             "mode": "memory_only",
         }
+    email_lower = (email or "").strip().lower()
+
     try:
         # Check if user has a license
         license_result = await _sb_execute(
             supabase.table("licenses")
             .select("*")
-            .or_(f"user_id.eq.{user_id},email.eq.{email}")
+            .or_(f"user_id.eq.{user_id},email.eq.{email_lower}")
             .eq("active", True)
             .order("created_at", desc=True)
             .limit(1),
@@ -3175,27 +3237,30 @@ async def account_status(authorization: str = Header(None)):
                 "reset_date": lic.get("reset_date")
             }
 
-        # Check free_users
+        # Free tier: usage from llm_call_logs (same source as admin + /free-usage), not free_users.rewrites_used
         free_result = await _sb_execute(
             supabase.table("free_users")
-            .select("rewrites_used,bonus_rewrites")
-            .or_(f"user_id.eq.{user_id},email.eq.{email}")
+            .select("bonus_rewrites")
+            .or_(f"user_id.eq.{user_id},email.eq.{email_lower}")
             .limit(1),
             timeout_sec=3.0,
         )
 
-        rewrites_used = 0
         bonus = 0
         if free_result.data:
-            rewrites_used = free_result.data[0].get("rewrites_used", 0)
-            bonus = free_result.data[0].get("bonus_rewrites", 0)
+            bonus = int(free_result.data[0].get("bonus_rewrites") or 0)
+
+        rewrites_used = await _free_monthly_used_llm_logs(user_id, email_lower)
+        base_cap = _free_monthly_cap_from_db()
         _dash_dbg("account_status free", rewrites_used=rewrites_used, bonus=bonus)
 
         return {
-            "plan":          "free",
-            "active":        False,
-            "rewrites_used": rewrites_used,
-            "rewrites_limit": _free_monthly_cap_from_db() + bonus,
+            "plan":               "free",
+            "active":             False,
+            "rewrites_used":      rewrites_used,
+            "rewrites_limit":     base_cap + bonus,
+            "monthly_base_limit": base_cap,
+            "bonus_rewrites":     bonus,
         }
     except Exception as e:
         _mark_supabase_down(e)
@@ -3496,6 +3561,8 @@ async def free_usage_status(body: FreeUsageRequest):
             "rewrites_limit": cap,
             "rewrites_left": cap,
             "source": "none",
+            "bonus_rewrites": 0,
+            "monthly_base_limit": cap,
         }
 
     if not supabase:
@@ -3508,6 +3575,8 @@ async def free_usage_status(body: FreeUsageRequest):
             "rewrites_limit": base,
             "rewrites_left": base,
             "source": "memory_only",
+            "bonus_rewrites": 0,
+            "monthly_base_limit": base,
         }
 
     bonus = 0
@@ -3540,7 +3609,8 @@ async def free_usage_status(body: FreeUsageRequest):
     except Exception:
         used = 0
 
-    limit = _free_monthly_cap_from_db() + bonus
+    base_cap = _free_monthly_cap_from_db()
+    limit = base_cap + bonus
     _usage_dbg(
         "free_usage_fetch",
         path="db",
@@ -3557,6 +3627,8 @@ async def free_usage_status(body: FreeUsageRequest):
         "rewrites_limit": limit,
         "rewrites_left": max(0, limit - used),
         "source": "email" if email else "anon_id",
+        "bonus_rewrites": bonus,
+        "monthly_base_limit": base_cap,
     }
 
 

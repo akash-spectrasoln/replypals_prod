@@ -51,7 +51,20 @@ try {
     /** Fallback until API response; align with server default free monthly cap */
     const FREE_LIMIT_BASE = 10;
 
-    safeStorageGet(['toneMemory', 'replypalAutoImprove', 'replypalLicense', 'replypalCount', 'explainExpanded', 'replypalBonusRewrites', 'replypalUsageUsed', 'replypalUsageLimit', 'replypalUsageLeft', 'replypalRewritesLimit'], function (s) {
+    function applyFreeTierBonusFromApiPayload(data) {
+      if (!data || licenseKey) return;
+      const lim = Number(data.rewrites_limit != null ? data.rewrites_limit : FREE_LIMIT_BASE);
+      if (typeof data.bonus_rewrites === 'number') {
+        bonusRewrites = Math.max(0, data.bonus_rewrites);
+      } else {
+        const base = typeof data.monthly_base_limit === 'number' && data.monthly_base_limit >= 0
+          ? data.monthly_base_limit
+          : FREE_LIMIT_BASE;
+        bonusRewrites = Math.max(0, lim - base);
+      }
+    }
+
+    safeStorageGet(['toneMemory', 'replypalAutoImprove', 'replypalLicense', 'replypalCount', 'explainExpanded', 'replypalBonusRewrites', 'replypalUsageUsed', 'replypalUsageLimit', 'replypalUsageLeft', 'replypalRewritesLimit', 'replypalMonthlyBaseLimit'], function (s) {
       toneMemory = s.toneMemory || {};
       autoImprove = s.replypalAutoImprove || false;
       licenseKey = s.replypalLicense || null;
@@ -61,7 +74,11 @@ try {
         freeCount = s.replypalUsageUsed;
       }
       if (typeof s.replypalUsageLimit === 'number') {
-        bonusRewrites = Math.max(0, s.replypalUsageLimit - FREE_LIMIT_BASE);
+        applyFreeTierBonusFromApiPayload({
+          rewrites_limit: s.replypalUsageLimit,
+          bonus_rewrites: typeof s.replypalBonusRewrites === 'number' ? s.replypalBonusRewrites : undefined,
+          monthly_base_limit: typeof s.replypalMonthlyBaseLimit === 'number' ? s.replypalMonthlyBaseLimit : undefined
+        });
       }
       if (typeof s.replypalUsageLeft === 'number') replypalUsageLeft = s.replypalUsageLeft;
       if (typeof s.replypalRewritesLimit === 'number') replypalRewritesLimit = s.replypalRewritesLimit;
@@ -94,7 +111,7 @@ try {
     }
 
     function rpHydrateQuotaFromStorage(cb) {
-      safeStorageGet(['replypalLicense', 'replypalUsageUsed', 'replypalUsageLimit', 'replypalCount', 'replypalBonusRewrites', 'replypalUsageLeft', 'replypalRewritesLimit'], function (s) {
+      safeStorageGet(['replypalLicense', 'replypalUsageUsed', 'replypalUsageLimit', 'replypalCount', 'replypalBonusRewrites', 'replypalUsageLeft', 'replypalRewritesLimit', 'replypalMonthlyBaseLimit'], function (s) {
         licenseKey = s.replypalLicense || licenseKey || null;
         if (typeof s.replypalUsageUsed === 'number') {
           freeCount = s.replypalUsageUsed;
@@ -102,7 +119,11 @@ try {
           freeCount = s.replypalCount;
         }
         if (typeof s.replypalUsageLimit === 'number') {
-          bonusRewrites = Math.max(0, s.replypalUsageLimit - FREE_LIMIT_BASE);
+          applyFreeTierBonusFromApiPayload({
+            rewrites_limit: s.replypalUsageLimit,
+            bonus_rewrites: typeof s.replypalBonusRewrites === 'number' ? s.replypalBonusRewrites : undefined,
+            monthly_base_limit: typeof s.replypalMonthlyBaseLimit === 'number' ? s.replypalMonthlyBaseLimit : undefined
+          });
         } else if (typeof s.replypalBonusRewrites === 'number') {
           bonusRewrites = s.replypalBonusRewrites;
         }
@@ -117,7 +138,9 @@ try {
         if (typeof replypalUsageLeft === 'number' && replypalUsageLeft <= 0) return true;
       }
       if (!licenseKey) {
-        var eff = FREE_LIMIT_BASE + bonusRewrites;
+        var eff = (typeof replypalRewritesLimit === 'number' && replypalRewritesLimit > 0)
+          ? replypalRewritesLimit
+          : (FREE_LIMIT_BASE + bonusRewrites);
         return freeCount >= eff;
       }
       return false;
@@ -133,8 +156,12 @@ try {
         replypalRewritesLimit = data.rewrites_limit;
         safeStorageSet({ replypalRewritesLimit: data.rewrites_limit });
         if (!licenseKey) {
-          bonusRewrites = Math.max(0, data.rewrites_limit - FREE_LIMIT_BASE);
-          safeStorageSet({ replypalUsageLimit: data.rewrites_limit, replypalBonusRewrites: bonusRewrites });
+          applyFreeTierBonusFromApiPayload(data);
+          safeStorageSet({
+            replypalUsageLimit: data.rewrites_limit,
+            replypalBonusRewrites: bonusRewrites,
+            replypalMonthlyBaseLimit: typeof data.monthly_base_limit === 'number' ? data.monthly_base_limit : undefined
+          });
         }
       }
       if (typeof data.rewrites_used === 'number' && !licenseKey) {
@@ -171,7 +198,9 @@ try {
         : { left: Math.max(8, (window.innerWidth - 290) / 2), top: 120, width: 290, height: 40, right: 0, bottom: 0 };
       var fallbackText = contextText || (anchor ? readText(anchor) : '') || '';
       if (!licenseKey) {
-        var effectiveLimit = FREE_LIMIT_BASE + bonusRewrites;
+        var effectiveLimit = (typeof replypalRewritesLimit === 'number' && replypalRewritesLimit > 0)
+          ? replypalRewritesLimit
+          : (FREE_LIMIT_BASE + bonusRewrites);
         freeCount = Math.max(freeCount, effectiveLimit);
         safeStorageSet({ replypalCount: freeCount, replypalUsageUsed: freeCount });
       }
@@ -716,7 +745,13 @@ try {
         if (changes.replypalLicense) licenseKey = changes.replypalLicense.newValue || null;
         if (changes.replypalUsageUsed) freeCount = changes.replypalUsageUsed.newValue;
         if (changes.replypalUsageLimit && typeof changes.replypalUsageLimit.newValue === 'number') {
-          bonusRewrites = Math.max(0, changes.replypalUsageLimit.newValue - FREE_LIMIT_BASE);
+          applyFreeTierBonusFromApiPayload({
+            rewrites_limit: changes.replypalUsageLimit.newValue,
+            bonus_rewrites: changes.replypalBonusRewrites && typeof changes.replypalBonusRewrites.newValue === 'number'
+              ? changes.replypalBonusRewrites.newValue : undefined,
+            monthly_base_limit: changes.replypalMonthlyBaseLimit && typeof changes.replypalMonthlyBaseLimit.newValue === 'number'
+              ? changes.replypalMonthlyBaseLimit.newValue : undefined
+          });
         }
         try {
           if (_popup && rpIsQuotaBlocked() && !_popup.querySelector('.rp-upg-title')) {

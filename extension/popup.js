@@ -96,12 +96,28 @@
   let replypalUsageLeft = null;
   let replypalRewritesLimit = null;
 
+  /** Derive bonus from API fields so it stays correct when monthly base cap is not 10. */
+  function applyFreeTierBonusFromApiPayload(payload) {
+    if (!payload || licenseKey) return;
+    const lim = Number(payload.rewrites_limit != null ? payload.rewrites_limit : FREE_LIMIT_BASE);
+    if (typeof payload.bonus_rewrites === 'number') {
+      bonusRewrites = Math.max(0, payload.bonus_rewrites);
+    } else {
+      const base = typeof payload.monthly_base_limit === 'number' && payload.monthly_base_limit >= 0
+        ? payload.monthly_base_limit
+        : FREE_LIMIT_BASE;
+      bonusRewrites = Math.max(0, lim - base);
+    }
+  }
+
   function isPopupQuotaBlockedSync() {
     if (typeof replypalRewritesLimit === 'number' && replypalRewritesLimit > 0) {
       if (typeof replypalUsageLeft === 'number' && replypalUsageLeft <= 0) return true;
     }
     if (!licenseKey) {
-      const eff = FREE_LIMIT_BASE + bonusRewrites;
+      const eff = (typeof replypalRewritesLimit === 'number' && replypalRewritesLimit > 0)
+        ? replypalRewritesLimit
+        : (FREE_LIMIT_BASE + bonusRewrites);
       return useCount >= eff;
     }
     return false;
@@ -125,11 +141,15 @@
         // Prevent stale async snapshots from rolling UI backward (e.g. 4 -> 5 left).
         useCount = Math.max(useCount, serverUsed);
         const serverLimit = Number(freeResp.rewrites_limit || FREE_LIMIT_BASE);
-        bonusRewrites = Math.max(0, serverLimit - FREE_LIMIT_BASE);
+        applyFreeTierBonusFromApiPayload(freeResp);
+        replypalRewritesLimit = serverLimit;
         serverRewriteCount = useCount;
         await chrome.storage.local.set({
           replypalCount: useCount,
-          replypalBonusRewrites: bonusRewrites
+          replypalBonusRewrites: bonusRewrites,
+          replypalUsageLimit: serverLimit,
+          replypalRewritesLimit: serverLimit,
+          replypalMonthlyBaseLimit: typeof freeResp.monthly_base_limit === 'number' ? freeResp.monthly_base_limit : undefined
         });
       }
       return true;
@@ -172,7 +192,8 @@
       'replypalUsageUsed',
       'replypalUsageLimit',
       'replypalUsageLeft',
-      'replypalRewritesLimit'
+      'replypalRewritesLimit',
+      'replypalMonthlyBaseLimit'
     ]);
 
     useCount = stored.replypalCount || 0;
@@ -182,7 +203,11 @@
     bonusRewrites = stored.replypalBonusRewrites || 0;
     if (typeof stored.replypalUsageUsed === 'number' && typeof stored.replypalUsageLimit === 'number') {
       useCount = Number(stored.replypalUsageUsed);
-      bonusRewrites = Math.max(0, Number(stored.replypalUsageLimit) - FREE_LIMIT_BASE);
+      applyFreeTierBonusFromApiPayload({
+        rewrites_limit: Number(stored.replypalUsageLimit),
+        bonus_rewrites: typeof stored.replypalBonusRewrites === 'number' ? stored.replypalBonusRewrites : undefined,
+        monthly_base_limit: typeof stored.replypalMonthlyBaseLimit === 'number' ? stored.replypalMonthlyBaseLimit : undefined
+      });
       serverRewriteCount = useCount;
     }
     if (typeof stored.replypalUsageLeft === 'number') replypalUsageLeft = stored.replypalUsageLeft;
@@ -357,7 +382,9 @@
       usageText.textContent = 'PRO';
       usageBadge.classList.add('pro');
     } else {
-      const effectiveLimit = FREE_LIMIT_BASE + bonusRewrites;
+      const effectiveLimit = (typeof replypalRewritesLimit === 'number' && replypalRewritesLimit > 0)
+        ? replypalRewritesLimit
+        : (FREE_LIMIT_BASE + bonusRewrites);
       const remaining = Math.max(0, effectiveLimit - useCount);
       usageText.textContent = `${remaining} free left`;
       usageBadge.classList.remove('pro');
@@ -534,16 +561,25 @@
             const apiLimit = response.data?.rewrites_limit;
             if (typeof apiUsed === 'number' && typeof apiLimit === 'number') {
               useCount = apiUsed;
-              bonusRewrites = Math.max(0, apiLimit - FREE_LIMIT_BASE);
+              applyFreeTierBonusFromApiPayload({
+                rewrites_limit: apiLimit,
+                monthly_base_limit: response.data?.monthly_base_limit,
+                bonus_rewrites: response.data?.bonus_rewrites
+              });
+              replypalRewritesLimit = apiLimit;
               serverRewriteCount = useCount;
+              await chrome.storage.local.set({
+                replypalCount: useCount,
+                replypalBonusRewrites: bonusRewrites,
+                replypalUsageLimit: apiLimit,
+                replypalRewritesLimit: apiLimit,
+                replypalMonthlyBaseLimit: response.data?.monthly_base_limit
+              });
             } else {
               useCount++;
               serverRewriteCount = useCount;
+              await chrome.storage.local.set({ replypalCount: useCount });
             }
-            await chrome.storage.local.set({
-              replypalCount: useCount,
-              replypalBonusRewrites: bonusRewrites,
-            });
             updateUsageDisplay();
 
             // Only sync from server AFTER log write has had time to settle (~2s).
@@ -1544,7 +1580,7 @@
       inputText.value = changes.replypalSelection.newValue;
       updateCharCount();
     }
-    if (area === 'local' && (changes.replypalUsageUsed || changes.replypalUsageLimit || changes.replypalUsageLeft || changes.replypalRewritesLimit || changes.replypalLicense)) {
+    if (area === 'local' && (changes.replypalUsageUsed || changes.replypalUsageLimit || changes.replypalUsageLeft || changes.replypalRewritesLimit || changes.replypalLicense || changes.replypalBonusRewrites || changes.replypalMonthlyBaseLimit)) {
       const used = changes.replypalUsageUsed?.newValue;
       const limit = changes.replypalUsageLimit?.newValue;
       if (typeof used === 'number') {
@@ -1552,7 +1588,11 @@
         serverRewriteCount = used;
       }
       if (typeof limit === 'number') {
-        bonusRewrites = Math.max(0, limit - FREE_LIMIT_BASE);
+        applyFreeTierBonusFromApiPayload({
+          rewrites_limit: limit,
+          bonus_rewrites: changes.replypalBonusRewrites?.newValue,
+          monthly_base_limit: changes.replypalMonthlyBaseLimit?.newValue
+        });
       }
       if (changes.replypalUsageLeft && typeof changes.replypalUsageLeft.newValue === 'number') {
         replypalUsageLeft = changes.replypalUsageLeft.newValue;

@@ -120,11 +120,20 @@ async function syncFreeUsageSnapshot(emailHint = null, anonHint = null) {
       const serverUsed = Number(snap.rewrites_used || 0);
       const mergedUsed = Math.max(currentUsed, serverUsed);
       const limit = Number(snap.rewrites_limit || replypalUsageLimit || 10);
+      let bonus = 0;
+      if (typeof snap.bonus_rewrites === 'number') {
+        bonus = Math.max(0, snap.bonus_rewrites);
+      } else {
+        const base = typeof snap.monthly_base_limit === 'number' ? snap.monthly_base_limit : 10;
+        bonus = Math.max(0, limit - base);
+      }
       await chrome.storage.local.set({
         replypalUsageUsed: mergedUsed,
         replypalUsageLimit: limit,
         replypalUsageLeft: Math.max(0, limit - mergedUsed),
         replypalRewritesLimit: limit,
+        replypalBonusRewrites: bonus,
+        replypalMonthlyBaseLimit: typeof snap.monthly_base_limit === 'number' ? snap.monthly_base_limit : undefined,
       });
     }
   } catch (_) { }

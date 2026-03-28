@@ -241,25 +241,38 @@ async def dashboard_stats(request: Request, admin=Depends(require_admin)):
             if (row.get("created_at") or "") >= today.isoformat()
         )
 
-        fr = supabase.table("free_users").select("email,user_id,created_at").limit(20000).execute()
-        free_rows = fr.data or []
-        anon_total = 0
-        anon_today = 0
-        lead_total = 0
-        lead_today = 0
-        for row in free_rows:
-            email = (row.get("email") or "").strip().lower()
-            created_at = row.get("created_at") or ""
-            has_user_id = bool(row.get("user_id"))
-            is_anon = email.startswith("anon_") and email.endswith("@replypal.internal")
-            if is_anon:
-                anon_total += 1
-                if created_at >= today.isoformat():
-                    anon_today += 1
-            elif not has_user_id:
-                lead_total += 1
-                if created_at >= today.isoformat():
-                    lead_today += 1
+        # Use exact count queries so we are not capped by PostgREST default max rows (~1000)
+        # when scanning free_users for anon/lead badges.
+        try:
+            ar = supabase.table("free_users").select("id", count="exact").like(
+                "email", "anon_%@replypal.internal"
+            ).execute()
+            anon_total = int(ar.count or 0)
+        except Exception:
+            anon_total = 0
+        try:
+            ar2 = supabase.table("free_users").select("id", count="exact").like(
+                "email", "anon_%@replypal.internal"
+            ).gte("created_at", today.isoformat()).execute()
+            anon_today = int(ar2.count or 0)
+        except Exception:
+            anon_today = 0
+        try:
+            lr = supabase.table("free_users").select("id", count="exact").is_(
+                "user_id", "null"
+            ).not_.like("email", "anon_%@replypal.internal").execute()
+            lead_total = int(lr.count or 0)
+        except Exception:
+            lead_total = 0
+        try:
+            lr2 = supabase.table("free_users").select("id", count="exact").is_(
+                "user_id", "null"
+            ).not_.like("email", "anon_%@replypal.internal").gte(
+                "created_at", today.isoformat()
+            ).execute()
+            lead_today = int(lr2.count or 0)
+        except Exception:
+            lead_today = 0
 
         stats["anonymous_users_total"] = anon_total
         stats["anonymous_users_today"] = anon_today
@@ -337,12 +350,14 @@ async def list_users(
     filter: str = "all",
     admin=Depends(require_admin)
 ):
-    from main import supabase
+    from main import supabase, _free_monthly_cap_from_db
     if not supabase:
         return {
             "users": [], "total": 0, "page": page, "limit": limit,
             "db_connected": False, "db_error": "Supabase client not configured"
         }
+
+    free_cap = _free_monthly_cap_from_db()
 
     try:
         # 1. Fetch all user_profiles
@@ -392,9 +407,9 @@ async def list_users(
             rewrites_limit = lic.get("rewrites_limit", -1)
             reset_date = lic.get("reset_date")
         else:
-            rewrites_used = free.get("total_rewrites", free.get("rewrites_used", 0))  # total_rewrites is updated by call_ai_model
+            rewrites_used = free.get("total_rewrites", free.get("rewrites_used", 0))  # overwritten below from llm_call_logs
             bonus = free.get("bonus_rewrites", 0)
-            rewrites_limit = 5 + bonus
+            rewrites_limit = free_cap + bonus
             reset_date = None
             
         merged_users.append({
@@ -429,7 +444,7 @@ async def list_users(
             else:
                 rewrites_used = f.get("total_rewrites", f.get("rewrites_used", 0))
                 bonus = f.get("bonus_rewrites", 0)
-                rewrites_limit = 5 + bonus
+                rewrites_limit = free_cap + bonus
                 reset_date = None
                 
             merged_users.append({
@@ -546,6 +561,13 @@ async def list_users(
                     if rid is not None:
                         seen_ids.add(rid)
             u["rewrites_used"] = len(seen_ids)
+            fu_row = None
+            if uid:
+                fu_row = free_by_uid.get(uid)
+            if not fu_row and em:
+                fu_row = free_by_email.get(em)
+            bsum = int((fu_row or {}).get("bonus_rewrites") or 0)
+            u["rewrites_limit"] = free_cap + bsum
     except Exception:
         # Keep page available even if live recount fails.
         pass
@@ -557,7 +579,7 @@ async def list_users(
 
 @router.get("/users/{user_id}")
 async def get_user_detail(user_id: str, request: Request, admin=Depends(require_admin)):
-    from main import supabase
+    from main import supabase, _free_monthly_cap_from_db, _free_monthly_used_llm_logs
     if not supabase:
         raise HTTPException(500, "DB not configured")
         
@@ -626,7 +648,7 @@ async def get_user_detail(user_id: str, request: Request, admin=Depends(require_
 
     # Source-of-truth usage for detail view
     rewrites_used = 0
-    rewrites_limit = 5
+    rewrites_limit = 0
     try:
         from datetime import datetime, timezone
         plan = (lic_data.get("plan") or "free").lower() if lic_data else "free"
@@ -643,17 +665,11 @@ async def get_user_detail(user_id: str, request: Request, admin=Depends(require_
                     .execute()
                 rewrites_used = c.count or 0
         else:
-            from dateutil.relativedelta import relativedelta
-            window_start = (datetime.now(timezone.utc) - relativedelta(months=1)).isoformat()
-            if profile.get("id"):
-                c = supabase.table("llm_call_logs").select("id", count="exact") \
-                    .eq("status", "success").eq("user_id", profile["id"]).gte("created_at", window_start).execute()
-                rewrites_used = c.count or 0
-            elif email:
-                c = supabase.table("llm_call_logs").select("id", count="exact") \
-                    .eq("status", "success").eq("email", email).gte("created_at", window_start).execute()
-                rewrites_used = c.count or 0
-            rewrites_limit = 5 + int((free_data.get("bonus_rewrites") or 0) if free_data else 0)
+            em_low = (email or "").strip().lower()
+            rewrites_used = await _free_monthly_used_llm_logs(profile.get("id"), em_low)
+            rewrites_limit = _free_monthly_cap_from_db() + int(
+                (free_data.get("bonus_rewrites") or 0) if free_data else 0
+            )
     except Exception:
         pass
         
