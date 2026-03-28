@@ -153,16 +153,6 @@ try {
       }
     }
 
-    try {
-      chrome.storage.onChanged.addListener(function (changes, area) {
-        if (area !== 'local') return;
-        if (changes.replypalUsageLeft) replypalUsageLeft = changes.replypalUsageLeft.newValue;
-        if (changes.replypalRewritesLimit) replypalRewritesLimit = changes.replypalRewritesLimit.newValue;
-        if (changes.replypalLicense) licenseKey = changes.replypalLicense.newValue || null;
-        if (changes.replypalUsageUsed) freeCount = changes.replypalUsageUsed.newValue;
-      });
-    } catch (_) {}
-
     function rpIsLimitReachedError(res) {
       var msg = String((res && res.error) || '').toLowerCase();
       return msg.indexOf('limit_reached') >= 0 ||
@@ -717,6 +707,24 @@ try {
     // ── Popup Logic ──
     var _popup = null, _activeEl = null, _tipTimer = null;
 
+    try {
+      chrome.storage.onChanged.addListener(function (changes, area) {
+        if (area !== 'local') return;
+        if (changes.replypalUsageLeft) replypalUsageLeft = changes.replypalUsageLeft.newValue;
+        if (changes.replypalRewritesLimit) replypalRewritesLimit = changes.replypalRewritesLimit.newValue;
+        if (changes.replypalLicense) licenseKey = changes.replypalLicense.newValue || null;
+        if (changes.replypalUsageUsed) freeCount = changes.replypalUsageUsed.newValue;
+        if (changes.replypalUsageLimit && typeof changes.replypalUsageLimit.newValue === 'number') {
+          bonusRewrites = Math.max(0, changes.replypalUsageLimit.newValue - FREE_LIMIT_BASE);
+        }
+        try {
+          if (_popup && rpIsQuotaBlocked() && !_popup.querySelector('.rp-upg-title')) {
+            rpOpenUpgradeForLimit('');
+          }
+        } catch (_) {}
+      });
+    } catch (_) {}
+
     function doInlineRewrite(el) {
       var target = getWriteTarget(el) || el;
       _activeEl = target;
@@ -1194,13 +1202,11 @@ try {
         // Voice action buttons
         document.getElementById('rp-va-rewrite')?.addEventListener('click', () => {
           actionsBox.style.display = 'none';
-          renderLoading();
           executeAction('rewrite', { text: voiceTranscript, tone: selectedTone, language: detectLanguage(voiceTranscript), license_key: licenseKey });
         });
 
         document.getElementById('rp-va-reply')?.addEventListener('click', () => {
           actionsBox.style.display = 'none';
-          renderLoading();
           executeAction('generate', { text: voiceTranscript, prompt: "Write a reply to the following: " + voiceTranscript, tone: selectedTone, mode: 'reply', license_key: licenseKey });
         });
 
@@ -1256,34 +1262,39 @@ try {
       }
 
       function executeAction(type, payload) {
-        renderLoading();
-        safeSendMessage({ type: type, payload: payload }, function (res) {
-          clearInterval(_tipTimer);
-          if (res && res.error === 'offline') {
-            showToast('🔴 ReplyPals offline — check your connection', 'error');
-            renderHome();
+        rpHydrateQuotaFromStorage(function () {
+          if (rpIsQuotaBlocked()) {
+            var ctx = (payload && (payload.text || payload.prompt)) || text || '';
+            rpOpenUpgradeForLimit(ctx);
             return;
           }
-          if (res && res.error === 'timeout') {
-            showToast('⏱ Request timed out — please try again', 'error');
-            renderHome();
-            return;
-          }
-          if (res && res.success && res.data) {
-            if (!licenseKey) {
+          renderLoading();
+          safeSendMessage({ type: type, payload: payload }, function (res) {
+            clearInterval(_tipTimer);
+            if (res && res.error === 'offline') {
+              showToast('🔴 ReplyPals offline — check your connection', 'error');
+              renderHome();
+              return;
+            }
+            if (res && res.error === 'timeout') {
+              showToast('⏱ Request timed out — please try again', 'error');
+              renderHome();
+              return;
+            }
+            if (res && res.success && res.data) {
               rpApplyQuotaFromApi(res.data);
-              if (typeof res.data.rewrites_used !== 'number') {
+              if (!licenseKey && typeof res.data.rewrites_used !== 'number') {
                 freeCount++;
                 safeStorageSet({ replypalCount: freeCount, replypalUsageUsed: freeCount });
               }
+              renderResult(res.data, type, payload);
+            } else if (rpIsLimitReachedError(res)) {
+              rpOpenUpgradeForLimit(text);
+            } else {
+              showToast('⚠️ Something went wrong — try again', 'error');
+              renderError(res?.error || 'Failed to connect to server.');
             }
-            renderResult(res.data, type, payload);
-          } else if (rpIsLimitReachedError(res)) {
-            rpOpenUpgradeForLimit(text);
-          } else {
-            showToast('⚠️ Something went wrong — try again', 'error');
-            renderError(res?.error || 'Failed to connect to server.');
-          }
+          });
         });
       }
 
