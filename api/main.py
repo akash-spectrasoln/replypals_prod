@@ -1009,6 +1009,7 @@ class RewriteRequest(BaseModel):
     test_model_override: Optional[dict] = Field(default=None, alias="_test_model_override")
     event_id: Optional[str] = None
     anon_id: Optional[str] = None
+    instruction: Optional[str] = Field(default=None, max_length=2000)
 
 
 class RewriteResponse(BaseModel):
@@ -1160,9 +1161,47 @@ LANGUAGE_NAMES = {
 }
 
 
-def build_user_prompt(text: str, tone: str, language: str, mode: str = "rewrite") -> str:
+def build_user_prompt(
+    text: str,
+    tone: str,
+    language: str,
+    mode: str = "rewrite",
+    instruction: Optional[str] = None,
+) -> str:
     """Build the user prompt dynamically based on inputs."""
     parts = []
+
+    ins = (instruction or "").strip()
+    if ins:
+        src = (text or "").strip()
+        parts.append(
+            "You are ReplyPals. The user provides SOURCE TEXT (below) and a CUSTOM INSTRUCTION."
+        )
+        parts.append(
+            "Produce ONE output that follows the instruction, using the source text as material when relevant."
+        )
+        parts.append(
+            "The output may be any format they ask for: blog post, social post, outline, reusable AI prompt, "
+            "email, DM, message, product copy, etc. Do NOT assume email unless the instruction asks for email."
+        )
+        parts.append(f"Preferred tone when it applies: {tone}.")
+        parts.append("Rules:")
+        parts.append("- Follow the instruction literally.")
+        parts.append("- Do NOT add placeholders like [Your Name] or [Company].")
+        parts.append('- No preamble like "Here is your text:" — output only the requested content.')
+        parts.append(f"\nCUSTOM INSTRUCTION:\n{ins}")
+        parts.append(f'\nSOURCE TEXT:\n"{src}"')
+        if language not in ("en-rewrite", "auto"):
+            lang_name = LANGUAGE_NAMES.get(language)
+            if lang_name:
+                parts.append(
+                    f"If the source text is in {lang_name}, write the output in natural English unless the "
+                    "instruction specifies another language."
+                )
+        parts.append(
+            '\nRespond ONLY with valid JSON: {"rewritten":"your output here","score":null,"tip":null}'
+        )
+        return "\n".join(parts)
 
     if mode == "summary":
         parts.append("Summarize the following text in 1-2 clear, concise sentences.")
@@ -1251,9 +1290,10 @@ async def call_ai(
     rate_ctx:      Optional[dict] = None,
     source:        str           = "extension",
     event_id:      Optional[str] = None,
+    instruction: Optional[str] = None,
 ) -> dict:
     """Call the configured AI provider, log via call_ai_model, and parse JSON response."""
-    user_prompt = build_user_prompt(text, tone, language, mode)
+    user_prompt = build_user_prompt(text, tone, language, mode, instruction=instruction)
 
     system = SYSTEM_PROMPT
     if brand_voice:
@@ -1267,6 +1307,8 @@ async def call_ai(
     else:
         provider, model_id = get_active_model()
 
+    _ins = (instruction or "").strip()
+    _log_action = "custom_instruction" if _ins else (mode or "rewrite")
     try:
         raw_response = await asyncio.wait_for(
             call_ai_model(
@@ -1274,8 +1316,8 @@ async def call_ai(
                 provider    = provider,
                 model_id    = model_id,
                 rate_ctx    = rate_ctx,
-                action      = mode or "rewrite",
-                text_length = len(text or ""),
+                action      = _log_action,
+                text_length = len(text or "") + len(_ins),
                 tone        = tone or "",
                 language    = language or "",
                 source      = source,
@@ -1305,6 +1347,8 @@ async def call_ai(
             fallback_out = "Thank you for your message. I will review this and get back to you shortly."
         elif mode == "write":
             fallback_out = "Hello,\n\nThank you for reaching out. I will get back to you with an update shortly.\n\nBest regards"
+        elif _ins:
+            fallback_out = f"{_ins}\n\n{fallback_text}".strip()
         else:
             fallback_out = f"I am writing to ask for your help with this request. {fallback_text}".strip()
         return {"rewritten": fallback_out, "score": 60, "tip": "AI service temporarily unavailable; fallback output applied."}
@@ -1314,7 +1358,7 @@ async def call_ai(
     if rate_ctx:
         await _update_user_profile_stats(
             rate_ctx = rate_ctx,
-            action   = mode or "rewrite",
+            action   = _log_action,
             tone     = tone or "",
             score    = result.get("score", 0) or 0,
             source   = source,
@@ -1966,8 +2010,16 @@ async def rewrite(
     )
 
     if not supabase:
-        result = await call_ai(body.text, body.tone, body.language, body.mode,
-                               None, test_override, event_id=body.event_id)
+        result = await call_ai(
+            body.text,
+            body.tone,
+            body.language,
+            body.mode,
+            None,
+            test_override,
+            event_id=body.event_id,
+            instruction=body.instruction,
+        )
         return RewriteResponse(**result)
 
     # Ensure log/count identity is stable for anonymous users.
@@ -1988,6 +2040,7 @@ async def rewrite(
         rate_ctx      = rate,
         source        = body.source or "extension",
         event_id      = body.event_id,
+        instruction   = body.instruction,
     )
     if rate.get("degraded") and (rate.get("plan") == "free"):
         _degraded_free_record_hit(rate.get("user_id"), rate.get("email") or "")
@@ -2011,28 +2064,28 @@ async def rewrite(
 # ═══════════════════════════════════════════
 # GENERATE ENDPOINT
 # ═══════════════════════════════════════════
-GENERATE_SYSTEM_PROMPT = """You are ReplyPals, an expert English email and message writer.
-The user wants you to WRITE a new email or message from scratch based on their instruction. Write it as if you are the user writing to someone else.
+GENERATE_SYSTEM_PROMPT = """You are ReplyPals, an expert English writer for professionals and learners.
+The user wants NEW original text from scratch based on their instruction. It may be an email, DM, social post, blog section, outline, product blurb, or any other format — follow what they ask for; do not default to email.
 
 Rules:
-1. Write naturally — no stiff or overly formal templates
+1. Write naturally — no stiff templates unless they asked for a formal letter
 2. Match the requested tone exactly
-3. Keep it concise — no unnecessary padding
-4. Do NOT include subject lines unless the user asks for one
-5. Do NOT add [Your Name] or [Recipient Name] placeholders — use generic natural closings like 'Thanks' or 'Best regards'
+3. Keep it concise unless they asked for long-form content
+4. Include a subject line only when the output is clearly an email and a subject helps, or when they asked for one; otherwise subject is null
+5. Do NOT add [Your Name] or [Recipient Name] placeholders
 6. If dates, names or details are in brackets in the prompt, use them exactly as given
 
 Return ONLY valid JSON:
 {
-  "generated": "The written email/message here",
-  "subject": "Suggested subject line if this is clearly an email, else null",
+  "generated": "The full written content here",
+  "subject": "Suggested subject line only when the piece is an email (or they asked for one), else null",
   "score": 90
 }"""
 
 async def call_generate_ai(prompt: str, tone: str,
                            rate_ctx: Optional[dict] = None,
                            event_id: Optional[str] = None) -> dict:
-    user_prompt     = f"Write the following in a {tone} tone: {prompt}"
+    user_prompt     = f"User instruction — produce new text in a {tone} tone:\n{prompt}"
     combined_prompt = f"{GENERATE_SYSTEM_PROMPT}\n\n---\n\n{user_prompt}"
 
     provider, model_id = get_active_model()
@@ -2059,7 +2112,10 @@ async def call_generate_ai(prompt: str, tone: str,
             except Exception:
                 pass
         return {
-            "generated": "Hello,\n\nThank you for your message. I will get back to you soon with the details.\n\nBest regards",
+            "generated": (
+                "Here is a concise draft based on your request. Thank you for your message — "
+                "I will follow up with more detail shortly."
+            ),
             "subject": None,
             "score": 60,
         }

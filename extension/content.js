@@ -870,7 +870,7 @@ try {
           <div class="rp-divider"></div>
           
           <div class="rp-custom">
-            <input type="text" id="rp-cust-in" placeholder="Tell ReplyPals to..." />
+            <input type="text" id="rp-cust-in" placeholder="Ask anything about the text above… (e.g. turn this into a blog intro)" />
             <button class="rp-go" id="rp-cust-go">→</button>
           </div>
         `;
@@ -937,7 +937,18 @@ try {
         function sendCustom() {
           var ins = cIn.value.trim();
           if (!ins) return;
-          executeAction('rewrite', { text: text, tone: selectedTone, language: lang, license_key: licenseKey, instruction: ins });
+          var src = (text || '').trim();
+          if (!src) {
+            executeAction('generate', { prompt: ins, tone: selectedTone, license_key: licenseKey, language: lang });
+            return;
+          }
+          executeAction('rewrite', {
+            text: src,
+            tone: selectedTone,
+            language: lang,
+            license_key: licenseKey,
+            instruction: ins
+          });
         }
         cGo.onclick = sendCustom;
         cIn.onkeydown = function (e) { if (e.key === 'Enter') sendCustom(); };
@@ -1152,20 +1163,22 @@ try {
         v.className = 'rp-state-view';
         v.innerHTML = `
           <div class="rp-back" id="rp-scr-back">← Back</div>
-          <span class="rp-label" style="color:var(--rp-text-main); font-size:14px; margin-bottom:10px;">What do you need?</span>
-          <textarea class="rp-textarea" id="rp-scr-area" rows="3" placeholder="e.g. Leave request for 26th and 7th..."></textarea>
+          <span class="rp-label" style="color:var(--rp-text-main); font-size:14px; margin-bottom:10px;">Write something new</span>
+          <textarea class="rp-textarea" id="rp-scr-area" rows="3" placeholder="Describe what you want: e.g. LinkedIn post about AI trends, short blog intro, product blurb, or a polite leave request…"></textarea>
           
           <span class="rp-label">Quick picks:</span>
           <div class="rp-chips">
-            <button class="rp-chip" data-txt="Leave request email for [dates] to my manager">📅 Leave</button>
-            <button class="rp-chip" data-txt="Apology email to my manager for [reason]">🙏 Sorry</button>
-            <button class="rp-chip" data-txt="Follow-up email about [topic]">💼 Follow up</button>
-            <button class="rp-chip" data-txt="Thank you email to [name] for [reason]">🎉 Thanks</button>
+            <button class="rp-chip" data-txt="Short LinkedIn post about [topic] for a professional audience">📣 LinkedIn</button>
+            <button class="rp-chip" data-txt="Blog intro paragraph about [topic], engaging and clear">✍️ Blog</button>
+            <button class="rp-chip" data-txt="Twitter/X thread outline (3–5 tweets) about [topic]">🧵 Thread</button>
+            <button class="rp-chip" data-txt="Product description for [product] highlighting benefits in 2–3 sentences">📦 Product</button>
+            <button class="rp-chip" data-txt="Leave request message for [dates] to my manager">📅 Leave</button>
+            <button class="rp-chip" data-txt="Follow-up message about [topic]">💼 Follow up</button>
+            <button class="rp-chip" data-txt="Thank-you note to [name] for [reason]">🎉 Thanks</button>
             <button class="rp-chip" data-txt="Politely decline [offer/meeting]">❌ Decline</button>
-            <button class="rp-chip" data-txt="Introduction email to [person/team]">🤝 Intro</button>
           </div>
           
-          <button class="rp-btn-full" id="rp-scr-go">⚡ Generate Email</button>
+          <button class="rp-btn-full" id="rp-scr-go">✨ Write it</button>
         `;
         body.appendChild(v);
 

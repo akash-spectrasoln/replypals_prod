@@ -18,6 +18,9 @@ build/
 node_modules/
 .npm/
 
+# Extension release packages (build with scripts/build-extension.ps1 or scripts/build.sh)
+replypal-extension*.zip
+
 # Dev artifacts
 extension/temp.txt
 extension/build2.js
