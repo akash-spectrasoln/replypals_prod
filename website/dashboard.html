@@ -742,7 +742,7 @@
             <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;color:#0F2544;margin-bottom:4px;">Starter</div>
             <div class="price">$2<small>/mo</small></div>
             <div class="plan-features">
-              ✅ 50 rewrites/month<br>
+              <span id="dashPlanRewriteStarter">✅ 50 rewrites/month</span><br>
               ✅ All tones & modes<br>
               ✅ Gmail, WhatsApp, LinkedIn<br>
               ❌ Voice input<br>
@@ -756,7 +756,7 @@
             <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;color:#0F2544;margin-bottom:4px;">Pro</div>
             <div class="price">$9<small>/mo</small></div>
             <div class="plan-features">
-              ✅ <strong>Unlimited</strong> rewrites<br>
+              <span id="dashPlanRewritePro">✅ <strong>Unlimited</strong> rewrites</span><br>
               ✅ Voice in 8 languages<br>
               ✅ Tone Memory<br>
               ✅ 25+ Email Templates<br>
@@ -889,6 +889,21 @@
       console.log('[dashboard-debug]', ...args);
     }
 
+    function applyDashboardPlanLabels(cfg) {
+      const labels = cfg && cfg.plan_limit_labels;
+      if (!labels) return;
+      const st = document.getElementById('dashPlanRewriteStarter');
+      const pr = document.getElementById('dashPlanRewritePro');
+      if (st && labels.starter) st.textContent = '✅ ' + labels.starter;
+      if (pr && labels.pro) {
+        if (/^unlimited$/i.test(String(labels.pro).trim())) {
+          pr.innerHTML = '✅ <strong>Unlimited</strong> rewrites';
+        } else {
+          pr.textContent = '✅ ' + labels.pro;
+        }
+      }
+    }
+
     async function initSupabaseClient() {
       if (sb) return sb;
       let url = FALLBACK_SUPABASE_URL;
@@ -899,6 +914,7 @@
           const cfg = await r.json();
           url = cfg.supabase_url || url;
           anon = cfg.supabase_anon_key || '';
+          applyDashboardPlanLabels(cfg);
         }
       } catch (_) {}
       if (!url || !anon) return null;

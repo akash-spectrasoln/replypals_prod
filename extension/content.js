@@ -1464,7 +1464,7 @@ try {
              You've reached your plan limit. Subscribe or activate a license below to continue.
            </div>
            <div class="rp-upg-feats">
-             ✅ Unlimited rewrites<br>
+             ✅ Plan limits shown on each card above<br>
              ✅ Tone Memory & Templates<br>
              ✅ Smart Reply generator<br>
              ✅ All 6 tones + slash commands
@@ -1505,10 +1505,14 @@ try {
           }
 
           if (cardsContainer) {
+            var L = (pricing && pricing.plan_limit_labels) || {};
+            var st = L.starter || '25 rewrites/mo';
+            var pr = L.pro || '300/mo · 20/day';
+            var tm = L.team ? ('5 seats · ' + L.team) : '5 seats · 150/mo · 15/day';
             cardsContainer.innerHTML = `
-              <div class="rp-upg-card" data-p="starter">Starter<br><strong style="font-size:14px">${plans.starter.display}${plans.starter.per}</strong><br><span style="font-size:10px;color:var(--rp-text-grey)">50/mo</span></div>
-              <div class="rp-upg-card active" data-p="pro">Pro ⭐<br><strong style="font-size:14px">${plans.pro.display}${plans.pro.per}</strong><br><span style="font-size:10px;color:var(--rp-text-grey)">Unlimited</span></div>
-              <div class="rp-upg-card" data-p="team">Team<br><strong style="font-size:14px">${plans.team.display}${plans.team.per}</strong><br><span style="font-size:10px;color:var(--rp-text-grey)">5 seats</span></div>
+              <div class="rp-upg-card" data-p="starter">Starter<br><strong style="font-size:14px">${plans.starter.display}${plans.starter.per}</strong><br><span style="font-size:10px;color:var(--rp-text-grey)">${st}</span></div>
+              <div class="rp-upg-card active" data-p="pro">Pro ⭐<br><strong style="font-size:14px">${plans.pro.display}${plans.pro.per}</strong><br><span style="font-size:10px;color:var(--rp-text-grey)">${pr}</span></div>
+              <div class="rp-upg-card" data-p="team">Team<br><strong style="font-size:14px">${plans.team.display}${plans.team.per}</strong><br><span style="font-size:10px;color:var(--rp-text-grey)">${tm}</span></div>
             `;
 
             var cards = cardsContainer.querySelectorAll('.rp-upg-card');

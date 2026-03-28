@@ -87,6 +87,35 @@ def invalidate_plan_limits_cache() -> None:
     _PLAN_LIMITS_CACHE["ts"] = 0.0
 
 
+def serialize_plan_limits_for_public(
+    merged: dict[str, dict[str, Optional[int]]],
+) -> dict[str, Any]:
+    """
+    Raw caps + short marketing labels (website paywall, extension, /pricing).
+    Must stay aligned with enforcement in check_rate_limit.
+    """
+    raw: dict[str, dict[str, Optional[int]]] = {
+        k: {"monthly": v.get("monthly"), "daily": v.get("daily")}
+        for k, v in merged.items()
+    }
+
+    def _label(plan_key: str) -> str:
+        caps = merged.get(plan_key) or {}
+        m, d = caps.get("monthly"), caps.get("daily")
+        if plan_key == "enterprise":
+            return "Custom"
+        if m is None and d is None:
+            return "Unlimited"
+        if m is not None and d is None:
+            return f"{m} rewrites/mo"
+        if m is None and d is not None:
+            return f"{d}/day cap"
+        return f"{m}/mo · {d}/day"
+
+    labels = {k: _label(k) for k in merged.keys()}
+    return {"raw": raw, "labels": labels}
+
+
 async def get_plan_limits(supabase: Any, sb_execute: Callable) -> dict[str, dict[str, Optional[int]]]:
     """Cached effective limits for rate limiting (60s TTL)."""
     now = time.time()

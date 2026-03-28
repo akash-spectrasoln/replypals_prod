@@ -741,7 +741,7 @@
         <div class="text-[13px] text-gray-400 mb-8 pb-8 border-b border-brand-border">Billed monthly</div>
         
         <ul class="space-y-4 mb-8 text-[15px] text-brand-text">
-          <li class="flex items-start gap-3"><span class="text-green-500 mt-0.5">✅</span> <span><strong>50 rewrites</strong> per month</span></li>
+          <li class="flex items-start gap-3"><span class="text-green-500 mt-0.5">✅</span> <span data-rp-plan-line="starter"><strong>50 rewrites</strong> per month</span></li>
           <li class="flex items-start gap-3"><span class="text-green-500 mt-0.5">✅</span> All 6 tones</li>
           <li class="flex items-start gap-3"><span class="text-green-500 mt-0.5">✅</span> Works everywhere</li>
           <li class="flex items-start gap-3"><span class="text-green-500 mt-0.5">✅</span> Native Sound Score</li>
@@ -766,7 +766,7 @@
         <div class="text-[13px] text-brand-orange font-medium mb-8 pb-8 border-b border-brand-border">Billed monthly · Save 20% annually</div>
         
         <ul class="space-y-4 mb-8 text-[15px] text-brand-text">
-          <li class="flex items-start gap-3"><span class="text-brand-orange mt-0.5">✅</span> <span><strong>Unlimited</strong> rewrites</span></li>
+          <li class="flex items-start gap-3"><span class="text-brand-orange mt-0.5">✅</span> <span data-rp-plan-line="pro"><strong>Unlimited</strong> rewrites</span></li>
           <li class="flex items-start gap-3"><span class="text-brand-orange mt-0.5">✅</span> All 6 tones</li>
           <li class="flex items-start gap-3"><span class="text-brand-orange mt-0.5">✅</span> Native Sound Score</li>
           <li class="flex items-start gap-3"><span class="text-brand-orange mt-0.5">✅</span> <strong>Tone Memory</strong></li>
@@ -791,8 +791,8 @@
         <div class="text-[13px] text-gray-500 mb-8 pb-8 border-b border-brand-border">Up to 5 team members</div>
         
         <ul class="space-y-4 mb-8 text-[15px] text-brand-text">
+          <li class="flex items-start gap-3"><span class="text-brand-navy mt-0.5">✅</span> <span data-rp-plan-line="team"><strong>5 seats</strong> · 150/mo · 15/day</span></li>
           <li class="flex items-start gap-3"><span class="text-brand-navy mt-0.5">✅</span> Everything in Pro</li>
-          <li class="flex items-start gap-3"><span class="text-brand-navy mt-0.5">✅</span> <strong>5 team seats</strong></li>
           <li class="flex items-start gap-3"><span class="text-brand-navy mt-0.5">✅</span> Brand Voice Training</li>
           <li class="flex items-start gap-3"><span class="text-brand-navy mt-0.5">✅</span> Team Admin Dashboard</li>
           <li class="flex items-start gap-3"><span class="text-brand-navy mt-0.5">✅</span> Priority support</li>
@@ -1299,6 +1299,33 @@
     }
   }
 
+  function rpEscapeHtml(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  /** Fill [data-rp-plan-line] from API (same caps as enforcement / admin). */
+  function applyPlanLimitLabels(labels) {
+    if (!labels || typeof labels !== 'object') return;
+    document.querySelectorAll('[data-rp-plan-line]').forEach((el) => {
+      const k = el.getAttribute('data-rp-plan-line');
+      const t = labels[k];
+      if (t == null || t === '') return;
+      if (k === 'team') {
+        el.innerHTML = '<strong>5 seats</strong> · ' + rpEscapeHtml(t);
+        return;
+      }
+      if (k === 'pro' && /^unlimited$/i.test(String(t).trim())) {
+        el.innerHTML = '<strong>Unlimited</strong> rewrites';
+        return;
+      }
+      el.innerHTML = '<strong>' + rpEscapeHtml(t) + '</strong>';
+    });
+  }
+
   function applyPricingData(data) {
     if (!data.plans) return;
     
@@ -1309,6 +1336,10 @@
     
     // Update per/mo
     document.querySelectorAll('.price-per').forEach(el => el.innerText = data.plans.starter.per);
+
+    if (data.plan_limit_labels) {
+      applyPlanLimitLabels(data.plan_limit_labels);
+    }
 
     // Update country detect
     const label = document.getElementById('pricing-country-text');
@@ -1339,6 +1370,9 @@
       document.querySelectorAll('[data-rp-free-monthly]').forEach((el) => {
         el.textContent = String(n);
       });
+      if (data.plan_limit_labels) {
+        applyPlanLimitLabels(data.plan_limit_labels);
+      }
     } catch (err) {
       console.log('public-config fetch failed, using fallback', err);
       document.querySelectorAll('[data-rp-free-monthly]').forEach((el) => {

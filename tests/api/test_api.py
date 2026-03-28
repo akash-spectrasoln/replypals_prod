@@ -277,6 +277,11 @@ class TestPricing:
         assert get("/pricing").json()["tier"] in ("tier1","tier2","tier3","tier4","tier5","tier6")
     def test_country_present(self):  assert "country" in get("/pricing").json()
     def test_currency_present(self): assert "currency" in get("/pricing").json()
+    def test_plan_limit_labels_present(self):
+        j = get("/pricing").json()
+        assert "plan_limit_labels" in j and isinstance(j["plan_limit_labels"], dict)
+        for k in ("starter", "pro", "team"):
+            assert k in j["plan_limit_labels"], f"missing label for {k}"
     def test_fast(self):
         t = time.time(); get("/pricing"); assert (time.time()-t)*1000 < 3000
 

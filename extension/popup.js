@@ -1360,35 +1360,44 @@
       }
     } catch (e) { }
 
-    // Fallback: tier1 USD pricing
+    // Fallback: tier1 USD pricing + code defaults (until API returns DB-backed labels)
     return {
       tier: 'tier1', currency: 'usd', note: null,
       plans: {
         starter: { display: '$2', per: '/mo' },
         pro: { display: '$9', per: '/mo' },
         team: { display: '$25', per: '/mo' },
-      }
+      },
+      plan_limit_labels: {
+        starter: '25 rewrites/mo',
+        pro: '300/mo · 20/day',
+        team: '150/mo · 15/day',
+      },
     };
   }
 
   function renderPlanCards(pricing) {
     const plans = pricing.plans;
+    const L = pricing.plan_limit_labels || {};
+    const st = L.starter || '25 rewrites/mo';
+    const pr = L.pro || '300/mo · 20/day';
+    const tm = L.team ? ('5 seats · ' + L.team) : '5 seats · 150/mo · 15/day';
     plansGrid.innerHTML = `
       <div class="plan-card" data-plan="starter">
         <div class="plan-name">Starter</div>
         <div class="plan-price">${plans.starter.display}<span>${plans.starter.per}</span></div>
-        <div class="plan-detail">50 rewrites/mo</div>
+        <div class="plan-detail">${st}</div>
       </div>
       <div class="plan-card featured" data-plan="pro">
         <div class="plan-badge">BEST VALUE</div>
         <div class="plan-name">Pro ⭐</div>
         <div class="plan-price">${plans.pro.display}<span>${plans.pro.per}</span></div>
-        <div class="plan-detail">Unlimited</div>
+        <div class="plan-detail">${pr}</div>
       </div>
       <div class="plan-card" data-plan="team">
         <div class="plan-name">Team</div>
         <div class="plan-price">${plans.team.display}<span>${plans.team.per}</span></div>
-        <div class="plan-detail">5 seats · Unlimited</div>
+        <div class="plan-detail">${tm}</div>
       </div>
     `;
 

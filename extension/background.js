@@ -629,7 +629,12 @@ async function handleFetchPricing() {
       starter: { display: '$2', per: '/mo', currency: 'usd' },
       pro: { display: '$9', per: '/mo', currency: 'usd' },
       team: { display: '$25', per: '/mo', currency: 'usd' },
-    }
+    },
+    plan_limit_labels: {
+      starter: '25 rewrites/mo',
+      pro: '300/mo · 20/day',
+      team: '150/mo · 15/day',
+    },
   };
   try {
     const controller = new AbortController();

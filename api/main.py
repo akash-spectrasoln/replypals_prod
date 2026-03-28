@@ -101,6 +101,7 @@ def _dash_dbg(msg: str, **fields) -> None:
 from billing_usage import (
     DEFAULT_PLAN_LIMITS,
     load_plan_limits_merged,
+    serialize_plan_limits_for_public,
     COST_GUARDRAIL_USD,
     check_rate_limit_impl,
     record_rewrite_usage,
@@ -114,6 +115,13 @@ from billing_usage import (
 )
 
 FREE_BASE_LIMIT = DEFAULT_PLAN_LIMITS["free"]["monthly"] or 10
+
+
+def _public_plan_limits_payload() -> dict:
+    """Merged DB plan caps + human labels for marketing and extension."""
+    merged = load_plan_limits_merged(supabase)
+    pl = serialize_plan_limits_for_public(merged)
+    return {"plan_limits": pl["raw"], "plan_limit_labels": pl["labels"]}
 
 
 def _free_monthly_cap_from_db() -> int:
@@ -1779,6 +1787,7 @@ async def public_config():
         "supabase_anon_key": SUPABASE_ANON_KEY or "",
         "app_base_url": os.getenv("APP_BASE_URL", "").strip(),
         "free_monthly_rewrites": _free_monthly_cap_from_db(),
+        **_public_plan_limits_payload(),
     }
 
 
@@ -2091,6 +2100,8 @@ async def get_pricing(request: Request):
 
     note = None if tier_name == 'tier1' else 'Pricing adjusted for your region'
 
+    pl = serialize_plan_limits_for_public(load_plan_limits_merged(supabase))
+
     return {
         'country': country,
         'tier': tier_name,
@@ -2098,6 +2109,8 @@ async def get_pricing(request: Request):
         'plans': plans,
         'note': note,
         'vpn_detected': vpn_detected,
+        'plan_limits': pl['raw'],
+        'plan_limit_labels': pl['labels'],
     }
 
 
