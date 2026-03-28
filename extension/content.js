@@ -728,13 +728,7 @@ try {
     function doInlineRewrite(el) {
       var target = getWriteTarget(el) || el;
       _activeEl = target;
-      rpHydrateQuotaFromStorage(function () {
-        if (rpIsQuotaBlocked()) {
-          rpOpenUpgradeForLimit(readText(target));
-          return;
-        }
-        openPopup(target.getBoundingClientRect(), readText(target), false);
-      });
+      openPopup(target.getBoundingClientRect(), readText(target), false);
     }
 
     function positionPopup(p, rect) {
@@ -806,6 +800,7 @@ try {
 
     function openPopup(rect, text, isReplyMode, opts) {
       opts = opts || {};
+      rpHydrateQuotaFromStorage(function () {
       if (_popup) _popup.remove();
       var p = document.createElement('div');
       p.id = 'rp-popup';
@@ -855,7 +850,7 @@ try {
       p.appendChild(body);
 
       function renderHome() {
-        if (rpIsQuotaBlocked()) {
+        if (opts.subscriptionOnly || rpIsQuotaBlocked()) {
           renderUpgrade();
           return;
         }
@@ -1549,6 +1544,7 @@ try {
       }
 
       renderHome();
+      });
     }
 
     // ── Global Document Listeners ──
