@@ -20,7 +20,8 @@
       }
     });
   }
-  const FREE_LIMIT_BASE = 5;
+  /** Fallback only until /free-usage returns; keep aligned with API default free monthly cap */
+  const FREE_LIMIT_BASE = 10;
 
   // ─── DOM Elements ───
   const inputText = document.getElementById('inputText');

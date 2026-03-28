@@ -119,7 +119,7 @@ async function syncFreeUsageSnapshot(emailHint = null, anonHint = null) {
       const currentUsed = Number(replypalUsageUsed || 0);
       const serverUsed = Number(snap.rewrites_used || 0);
       const mergedUsed = Math.max(currentUsed, serverUsed);
-      const limit = Number(snap.rewrites_limit || replypalUsageLimit || 5);
+      const limit = Number(snap.rewrites_limit || replypalUsageLimit || 10);
       await chrome.storage.local.set({
         replypalUsageUsed: mergedUsed,
         replypalUsageLimit: limit,

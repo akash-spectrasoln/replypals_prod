@@ -98,10 +98,40 @@ def _dash_dbg(msg: str, **fields) -> None:
     kv = " ".join([f"{k}={fields[k]!r}" for k in fields])
     print(f"[dashboard-debug] {msg} {kv}".strip())
 
-FREE_BASE_LIMIT = 5
+from billing_usage import (
+    DEFAULT_PLAN_LIMITS,
+    load_plan_limits_merged,
+    COST_GUARDRAIL_USD,
+    check_rate_limit_impl,
+    record_rewrite_usage,
+    ensure_user_profile_row,
+    today_total_cost_usd,
+    apply_cost_pause,
+    CostGuardrailBody,
+    UsageMetadata,
+    EnterpriseUsageResponse,
+    EnterpriseSeatsRequest,
+)
+
+FREE_BASE_LIMIT = DEFAULT_PLAN_LIMITS["free"]["monthly"] or 10
+
+
+def _free_monthly_cap_from_db() -> int:
+    """Free-tier monthly cap from ``app_settings.plan_limits`` (same source as /rewrite enforcement)."""
+    if not supabase:
+        return int(DEFAULT_PLAN_LIMITS["free"]["monthly"] or 10)
+    try:
+        limits = load_plan_limits_merged(supabase)
+        m = limits.get("free", {}).get("monthly")
+        if m is None:
+            return int(DEFAULT_PLAN_LIMITS["free"]["monthly"] or 10)
+        return int(m)
+    except Exception:
+        return int(DEFAULT_PLAN_LIMITS["free"]["monthly"] or 10)
+# Legacy alias — live caps come from Supabase app_settings.plan_limits + DEFAULT_PLAN_LIMITS
 PLAN_POLICY = {
     "free": {"window": "rolling_30d", "base_limit": FREE_BASE_LIMIT},
-    "starter": {"window": "billing_cycle", "default_limit": 50},
+    "starter": {"window": "billing_cycle", "default_limit": DEFAULT_PLAN_LIMITS["starter"]["monthly"] or 25},
     "pro": {"window": "none", "default_limit": -1},
     "team": {"window": "none", "default_limit": -1},
 }
@@ -269,6 +299,8 @@ async def call_ai_model(
         latency_ms   = int(time.time() * 1000) - start_ms
         total_tokens = prompt_tokens + completion_tokens
         cost_usd     = calculate_cost(provider, model_id, prompt_tokens, completion_tokens)
+        if rate_ctx is not None:
+            rate_ctx["_last_cost_usd"] = cost_usd
 
         # ── INSERT into llm_call_logs — fire-and-forget in thread pool ──
         # Using asyncio.get_event_loop().run_in_executor so the DB write doesn't
@@ -528,7 +560,7 @@ def _degraded_free_usage_snapshot(user_id: Optional[str], req_email: str) -> tup
     Returns (used_in_window, limit).
     """
     ident = _degraded_identity_key(user_id, req_email)
-    limit = int(PLAN_POLICY["free"]["base_limit"])
+    limit = int(DEFAULT_PLAN_LIMITS["free"]["monthly"] or 10)
     if not ident:
         return (0, limit)
 
@@ -1019,6 +1051,7 @@ class RewriteResponse(BaseModel):
     rewrites_used: Optional[int] = None
     rewrites_limit: Optional[int] = None
     rewrites_left: Optional[int] = None
+    usage: Optional[dict] = None
 
 
 class GenerateRequest(BaseModel):
@@ -1038,6 +1071,7 @@ class GenerateResponse(BaseModel):
     rewrites_used: Optional[int] = None
     rewrites_limit: Optional[int] = None
     rewrites_left: Optional[int] = None
+    usage: Optional[dict] = None
 
 
 class CheckoutRequest(BaseModel):
@@ -1491,47 +1525,29 @@ async def check_rate_limit(
     authorization: str = Header(None),
 ) -> dict:
     """
-    FastAPI Depends() — enforces per-user/per-license rate limits.
-
-    DESIGN:
-    - Source of truth: llm_call_logs (one row per AI call, written by call_ai_model)
-    - Paid users (starter 50/mo): COUNT rows in billing window by license_key
-    - Pro/Team users (limit=-1): skip COUNT entirely — always allow
-    - Free users: COUNT rows in last 30 days by user_id (or email fallback)
-    - All email lookups use lowercase .eq() — ilike causes full table scans
-
-    EFFICIENCY:
-    - Single DB roundtrip for license lookup (by key > user_id > email, in order)
-    - Brand voice read directly from license_row (no extra _get_license_info call)
-    - Free COUNT is windowed to 30 days (prevents permanent blocking)
-    - All indexes assumed: licenses(license_key), licenses(user_id), licenses(email),
-      llm_call_logs(license_key, status, created_at), llm_call_logs(user_id, status, created_at)
-      → see supabase_core_tables.sql for CREATE INDEX statements
+    FastAPI Depends() — plan-aware limits via usage_logs + user_profiles (see billing_usage.py).
+    When Supabase is in backoff, falls back to in-process free-tier counting.
     """
     if not supabase:
         return {"user_id": None, "email": "", "license_key": "",
-                "plan": "free", "limit": -1, "has_license": False}
+                "plan": "free", "limit": -1, "has_license": False,
+                "allowed": True, "usage_meta": UsageMetadata().model_dump(),
+                "resolved_user_id": None}
 
     user       = get_user_from_token(authorization)
     user_id    = user.get("sub")   if user else None
     user_email = user.get("email") if user else None
 
     try:
-        # request.body() is idempotent in Starlette — safe to call multiple times.
-        # We import json here to avoid namespace collision with the module-level import.
         import json as _json
         body_bytes = await request.body()
         body_raw   = _json.loads(body_bytes) if body_bytes else {}
-        # Always store emails lowercase — never use ilike for lookups
         req_email = (user_email or body_raw.get("email", "")).strip().lower()
         req_anon  = (body_raw.get("anon_id") or "").strip()
-        req_key   = (body_raw.get("license_key") or "").strip()
         if not req_email and req_anon:
             req_email = _synthetic_email_from_anon_id(req_anon) or ""
     except Exception:
         req_email = (user_email or "").strip().lower()
-        req_anon  = ""
-        req_key   = ""
 
     if _supabase_in_backoff():
         used_d, limit_d = _degraded_free_usage_snapshot(user_id, req_email)
@@ -1548,9 +1564,10 @@ async def check_rate_limit(
         ctx = _rate_ctx_degraded(user_id, req_email)
         ctx["used"] = used_d
         ctx["limit"] = limit_d
+        ctx.setdefault("usage_meta", UsageMetadata().model_dump())
+        ctx.setdefault("resolved_user_id", None)
         return ctx
 
-    # Quick probe before expensive request-path queries.
     try:
         await _sb_execute(supabase.table("licenses").select("id").limit(1), timeout_sec=2.0)
     except Exception as e:
@@ -1569,241 +1586,17 @@ async def check_rate_limit(
         ctx = _rate_ctx_degraded(user_id, req_email)
         ctx["used"] = used_d
         ctx["limit"] = limit_d
+        ctx.setdefault("usage_meta", UsageMetadata().model_dump())
+        ctx.setdefault("resolved_user_id", None)
         return ctx
 
-    # ── 1. Look up active license (3 fallbacks, most specific first) ──
-    license_row  = None
-    brand_voice  = None
-    team_row     = None
-
-    if req_key:
-        r = await _sb_execute(supabase.table("licenses").select("*") \
-            .eq("license_key", req_key).eq("active", True) \
-            .maybe_single())
-        license_row = getattr(r, "data", None) if r is not None else None
-
-    if not license_row and user_id:
-        r = await _sb_execute(supabase.table("licenses").select("*") \
-            .eq("user_id", user_id).eq("active", True) \
-            .maybe_single())
-        license_row = getattr(r, "data", None) if r is not None else None
-
-    if not license_row and req_email:
-        # Use eq() on lowercase email — never ilike (no index benefit)
-        r = await _sb_execute(supabase.table("licenses").select("*") \
-            .eq("email", req_email).eq("active", True) \
-            .maybe_single())
-        license_row = getattr(r, "data", None) if r is not None else None
-        # Backfill user_id so future lookups hit the faster path
-        if license_row and user_id and not license_row.get("user_id"):
-            try:
-                await _sb_execute(supabase.table("licenses") \
-                    .update({"user_id": user_id}) \
-                    .eq("id", license_row["id"]))
-            except Exception:
-                pass
-
-    # ── 2. If team plan: fetch brand_voice directly (no extra _get_license_info) ──
-    if license_row and license_row.get("plan") == "team":
-        try:
-            key = license_row.get("license_key") or req_key
-            tr = await _sb_execute(supabase.table("teams").select("brand_voice") \
-                .eq("license_key", key).eq("active", True) \
-                .maybe_single())
-            if tr.data:
-                brand_voice = tr.data.get("brand_voice")
-            else:
-                # Could be a member key — look up via team_members
-                mr = await _sb_execute(supabase.table("team_members") \
-                    .select("teams(brand_voice)") \
-                    .eq("member_key", key) \
-                    .maybe_single())
-                if mr.data and mr.data.get("teams"):
-                    brand_voice = mr.data["teams"].get("brand_voice")
-        except Exception:
-            pass
-
-    # ── 3. Paid path ──────────────────────────────────────────────────
-    if license_row:
-        plan        = license_row.get("plan", "starter")
-        raw_limit   = license_row.get("rewrites_limit")
-        if raw_limit is None:
-            limit = PLAN_POLICY.get(plan, {}).get("default_limit", -1)
-        else:
-            limit = raw_limit
-        license_key = license_row.get("license_key", "")
-
-        # Reset date: prefer explicit column, fall back to calendar month start
-        reset_date = license_row.get("reset_date", "")
-        if reset_date:
-            window_start = reset_date if isinstance(reset_date, str) \
-                else reset_date.isoformat()
-        else:
-            now = datetime.now(timezone.utc)
-            window_start = now.replace(day=1, hour=0, minute=0,
-                                       second=0, microsecond=0).isoformat()
-
-        # Pro/Team = unlimited — never COUNT
-        if limit == -1:
-            return {
-                "user_id":     user_id,
-                "email":       req_email,
-                "license_key": license_key,
-                "plan":        plan,
-                "limit":       -1,
-                "used":        0,
-                "has_license": True,
-                "brand_voice": brand_voice,
-                "window_start": window_start,
-                "degraded": False,
-                "persistence": "strong",
-            }
-
-        # Starter = COUNT successful calls in billing window by license_key
-        # Requires index: llm_call_logs(license_key, status, created_at)
-        try:
-            cnt = await _sb_execute(supabase.table("llm_call_logs") \
-                .select("id", count="exact") \
-                .eq("license_key", license_key) \
-                .eq("status", "success") \
-                .gte("created_at", window_start) \
-                )
-            current_count = cnt.count or 0
-        except Exception as _e:
-            print(f"[rate_limit/paid_count] non-fatal: {_e}")
-            current_count = 0
-
-        if current_count >= limit:
-            raise HTTPException(429, detail={
-                "error":      "limit_reached",
-                "plan":       plan,
-                "used":       current_count,
-                "limit":      limit,
-                "reset_date": reset_date or window_start,
-            })
-        _usage_dbg(
-            "rate_limit_paid_count",
-            plan=plan,
-            identity=("user_id" if user_id else "email"),
-            user_id=user_id,
-            email=req_email,
-            license_key=license_key,
-            used=current_count,
-            limit=limit,
-        )
-
-        return {
-            "user_id":      user_id,
-            "email":        req_email,
-            "license_key":  license_key,
-            "plan":         plan,
-            "limit":        limit,
-            "used":         current_count,
-            "has_license":  True,
-            "brand_voice":  brand_voice,
-            "window_start": window_start,
-            "degraded": False,
-            "persistence": "strong",
-        }
-
-    # ── 4. Free path ─────────────────────────────────────────────────
-    bonus = 0
-    fu_row = None
-
-    if user_id:
-        r = await _sb_execute(supabase.table("free_users") \
-            .select("id,bonus_rewrites,user_id") \
-            .eq("user_id", user_id).maybe_single())
-        fu_row = getattr(r, "data", None) if r is not None else None
-
-    if not fu_row and req_email:
-        # eq() on lowercase email — no ilike
-        r = await _sb_execute(supabase.table("free_users") \
-            .select("id,bonus_rewrites,user_id") \
-            .eq("email", req_email).maybe_single())
-        fu_row = getattr(r, "data", None) if r is not None else None
-        if fu_row and user_id and not fu_row.get("user_id"):
-            try:
-                await _sb_execute(supabase.table("free_users") \
-                    .update({"user_id": user_id}) \
-                    .eq("id", fu_row["id"]))
-            except Exception:
-                pass
-
-    if fu_row:
-        bonus = fu_row.get("bonus_rewrites") or 0
-    elif req_email or user_id:
-        # First-time user — create free_users row
-        try:
-            await _sb_execute(supabase.table("free_users").insert({
-                "user_id":        user_id or None,
-                "email":          req_email or None,
-                "bonus_rewrites": 0,
-            }))
-        except Exception:
-            pass
-
-    limit = int(PLAN_POLICY["free"]["base_limit"]) + bonus
-
-    # COUNT successful calls in rolling 30-day window — prevents permanent blocking.
-    # FIX: original code had no .gte() here — users were blocked forever after 5 uses.
-    # Requires index: llm_call_logs(user_id, status, created_at)
-    from dateutil.relativedelta import relativedelta
-    free_window_start = (datetime.now(timezone.utc) - relativedelta(months=1)).isoformat()
-
-    current_count = 0
-    try:
-        if user_id:
-            cnt = await _sb_execute(supabase.table("llm_call_logs") \
-                .select("id", count="exact") \
-                .eq("user_id", user_id) \
-                .eq("status", "success") \
-                .gte("created_at", free_window_start) \
-                )
-            current_count = cnt.count or 0
-        elif req_email:
-            # Fallback for users not yet authenticated: use lowercase eq()
-            cnt = await _sb_execute(supabase.table("llm_call_logs") \
-                .select("id", count="exact") \
-                .eq("email", req_email) \
-                .eq("status", "success") \
-                .gte("created_at", free_window_start) \
-                )
-            current_count = cnt.count or 0
-    except Exception as _e:
-        print(f"[rate_limit/free_count] non-fatal: {_e}")
-
-    if current_count >= limit:
-        raise HTTPException(429, detail={
-            "error":       "limit_reached",
-            "plan":        "free",
-            "used":        current_count,
-            "limit":       limit,
-            "upgrade_url": "https://replypals.in/#pricing",
-            "resets_in":   "30 days rolling",
-        })
-    _usage_dbg(
-        "rate_limit_free_count",
-        identity=("user_id" if user_id else "email"),
-        user_id=user_id,
-        email=req_email,
-        used=current_count,
-        limit=limit,
-        source=("llm_call_logs.user_id" if user_id else "llm_call_logs.email"),
+    return await check_rate_limit_impl(
+        supabase=supabase,
+        sb_execute=_sb_execute,
+        get_user_from_token=get_user_from_token,
+        request=request,
+        authorization=authorization,
     )
-
-    return {
-        "user_id":     user_id,
-        "email":       req_email,
-        "license_key": "",
-        "plan":        "free",
-        "limit":       limit,
-        "used":        current_count,
-        "has_license": False,
-        "brand_voice": None,
-        "degraded": False,
-        "persistence": "strong",
-    }
 
 
 # (log_api_call removed — logging now happens inside call_ai_model() directly)
@@ -1928,11 +1721,12 @@ async def track_event(request: Request, body: TrackRequest):
 
 @app.get("/public-config")
 async def public_config():
-    """Public frontend config (safe values only)."""
+    """Public frontend config (safe values only). Includes live free-tier monthly cap from DB."""
     return {
         "supabase_url": SUPABASE_URL or "",
         "supabase_anon_key": SUPABASE_ANON_KEY or "",
         "app_base_url": os.getenv("APP_BASE_URL", "").strip(),
+        "free_monthly_rewrites": _free_monthly_cap_from_db(),
     }
 
 
@@ -1996,7 +1790,7 @@ async def contact_us(body: ContactSupportRequest):
 
 
 @app.post("/rewrite", response_model=RewriteResponse)
-@limiter.limit("30/minute")
+@limiter.limit("100/minute")
 async def rewrite(
     request: Request,
     body:    RewriteRequest,
@@ -2029,6 +1823,9 @@ async def rewrite(
         if syn:
             rate["email"] = syn
 
+    if not rate.get("user_id") and rate.get("resolved_user_id"):
+        rate["user_id"] = rate["resolved_user_id"]
+
     brand_voice = rate.get("brand_voice")
     result = await call_ai(
         text          = body.text,
@@ -2042,6 +1839,7 @@ async def rewrite(
         event_id      = body.event_id,
         instruction   = body.instruction,
     )
+    await _after_llm_usage(rate)
     if rate.get("degraded") and (rate.get("plan") == "free"):
         _degraded_free_record_hit(rate.get("user_id"), rate.get("email") or "")
     used_before = int(rate.get("used") or 0)
@@ -2055,6 +1853,7 @@ async def rewrite(
         result["rewrites_used"] = used_after
         result["rewrites_limit"] = limit_i
         result["rewrites_left"] = max(0, limit_i - used_after)
+    result["usage"] = rate.get("usage_meta")
     return RewriteResponse(**result)
 
 
@@ -2138,7 +1937,7 @@ async def call_generate_ai(prompt: str, tone: str,
         raise
 
 @app.post("/generate", response_model=GenerateResponse)
-@limiter.limit("30/minute")
+@limiter.limit("100/minute")
 async def generate(
     request: Request,
     body:    GenerateRequest,
@@ -2152,7 +1951,11 @@ async def generate(
         syn = _synthetic_email_from_anon_id(body.anon_id)
         if syn:
             rate["email"] = syn
+    if not rate.get("user_id") and rate.get("resolved_user_id"):
+        rate["user_id"] = rate["resolved_user_id"]
     result = await call_generate_ai(body.prompt, body.tone, rate_ctx=rate, event_id=body.event_id)
+    if supabase:
+        await _after_llm_usage(rate)
     if rate.get("degraded") and (rate.get("plan") == "free"):
         _degraded_free_record_hit(rate.get("user_id"), rate.get("email") or "")
 
@@ -2177,6 +1980,7 @@ async def generate(
             score    = result.get("score", 0) or 0,
             source   = body.source or "popup",
         )
+    result["usage"] = rate.get("usage_meta")
     return GenerateResponse(**result)
 
 
@@ -2271,10 +2075,56 @@ async def create_checkout(body: CheckoutRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@app.post("/stripe-webhook")
-async def stripe_webhook(request: Request):
-    """Handle Stripe webhook events (subscription created, etc.)."""
+def _plan_from_stripe_price_id(price_id: Optional[str]) -> str:
+    if not price_id:
+        return "starter"
+    for _tier, prices in STRIPE_PRICE_MAP.items():
+        for pname, pid in (prices or {}).items():
+            if pid and pid == price_id:
+                return pname
+    return "starter"
 
+
+def _normalize_plan_str(p: str) -> str:
+    x = (p or "free").strip().lower()
+    if x not in ("free", "starter", "pro", "team", "enterprise"):
+        return "starter"
+    return x
+
+
+def _find_user_id_for_stripe_customer(customer_id: str) -> tuple[Optional[str], Optional[str]]:
+    """Returns (user_id, email) from user_profiles or licenses."""
+    if not supabase or not customer_id:
+        return None, None
+    try:
+        r = supabase.table("user_profiles").select("id,email").eq("stripe_customer_id", customer_id).limit(1).execute()
+        if r.data:
+            row = r.data[0]
+            return str(row.get("id")), (row.get("email") or "").strip() or None
+    except Exception:
+        pass
+    try:
+        r2 = supabase.table("licenses").select("user_id,email").eq("stripe_customer_id", customer_id).execute()
+        if r2.data:
+            for row in r2.data:
+                uid = row.get("user_id")
+                if uid:
+                    return str(uid), (row.get("email") or "").strip() or None
+        if r2.data:
+            row = r2.data[0]
+            return None, (row.get("email") or "").strip() or None
+    except Exception:
+        pass
+    return None, None
+
+
+@app.post("/stripe-webhook")
+@app.post("/stripe/webhook")
+async def stripe_webhook(request: Request):
+    """Stripe webhooks — checkout, subscription lifecycle, failed payments."""
+
+    if not stripe:
+        raise HTTPException(status_code=500, detail="Stripe not configured")
     if not STRIPE_WEBHOOK_SECRET:
         raise HTTPException(status_code=500, detail="Webhook secret not configured")
 
@@ -2286,17 +2136,18 @@ async def stripe_webhook(request: Request):
     except (ValueError, stripe.error.SignatureVerificationError):
         raise HTTPException(status_code=400, detail="Invalid webhook signature")
 
-    if event["type"] == "checkout.session.completed":
+    et = event["type"]
+
+    if et == "checkout.session.completed":
         session = event["data"]["object"]
-        email = session.get("customer_email", "")
-        plan = session.get("metadata", {}).get("plan", "pro")
-        user_id = session.get("client_reference_id")  # links to Supabase auth user
-        customer_id = session.get("customer", "")  # Stripe customer ID
+        email = (session.get("customer_email") or session.get("customer_details", {}).get("email") or "").strip()
+        plan = (session.get("metadata") or {}).get("plan", "pro")
+        user_id = session.get("client_reference_id")
+        customer_id = session.get("customer") or ""
 
-        # Generate license key
         license_key = f"RP-{uuid.uuid4().hex[:8].upper()}-{uuid.uuid4().hex[:8].upper()}"
+        now_iso = datetime.now(timezone.utc).isoformat()
 
-        # Store in Supabase
         if supabase:
             try:
                 row = {
@@ -2311,13 +2162,185 @@ async def stripe_webhook(request: Request):
                 if customer_id:
                     row["stripe_customer_id"] = customer_id
                 supabase.table("licenses").insert(row).execute()
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"[stripe webhook] licenses insert: {e}")
 
-        # Send license key via email
-        _send_license_email(email, license_key, plan)
+            if user_id and customer_id:
+                try:
+                    supabase.table("user_profiles").upsert(
+                        {
+                            "id": user_id,
+                            "email": email or None,
+                            "plan": _normalize_plan_str(plan),
+                            "stripe_customer_id": customer_id,
+                            "billing_cycle_start": now_iso,
+                        },
+                        on_conflict="id",
+                    ).execute()
+                except Exception as e:
+                    print(f"[stripe webhook] user_profiles upsert: {e}")
+
+        if email:
+            _send_license_email(email, license_key, plan)
+
+    elif et == "customer.subscription.deleted":
+        sub = event["data"]["object"]
+        customer_id = sub.get("customer") or ""
+        uid, em = _find_user_id_for_stripe_customer(customer_id)
+        if supabase and uid:
+            try:
+                supabase.table("user_profiles").update({"plan": "free"}).eq("id", uid).execute()
+            except Exception as e:
+                print(f"[stripe webhook] downgrade user_profiles: {e}")
+        if supabase and customer_id:
+            try:
+                supabase.table("licenses").update({"active": False}).eq("stripe_customer_id", customer_id).execute()
+            except Exception as e:
+                print(f"[stripe webhook] deactivate licenses: {e}")
+
+    elif et == "invoice.payment_failed":
+        inv = event["data"]["object"]
+        customer_id = inv.get("customer") or ""
+        email = (inv.get("customer_email") or "").strip()
+        uid, em = _find_user_id_for_stripe_customer(customer_id)
+        if supabase and uid:
+            try:
+                supabase.table("user_profiles").update({"plan": "free"}).eq("id", uid).execute()
+            except Exception as e:
+                print(f"[stripe webhook] payment_failed profile: {e}")
+        if supabase and customer_id:
+            try:
+                supabase.table("licenses").update({"active": False}).eq("stripe_customer_id", customer_id).execute()
+            except Exception as e:
+                print(f"[stripe webhook] payment_failed licenses: {e}")
+        to = em or email
+        if to:
+            try:
+                _send_email(
+                    to,
+                    "ReplyPals — payment issue on your subscription",
+                    "We could not process your latest payment. Your plan has been set to Free until billing is updated. "
+                    "Update your card in the billing portal or contact support.",
+                    "invoice_failed",
+                )
+            except Exception as e:
+                print(f"[stripe webhook] payment_failed email: {e}")
+
+    elif et == "customer.subscription.updated":
+        sub = event["data"]["object"]
+        customer_id = sub.get("customer") or ""
+        items = (sub.get("items") or {}).get("data") or []
+        price_id = items[0].get("price", {}).get("id") if items else None
+        plan = _plan_from_stripe_price_id(price_id)
+        uid, _ = _find_user_id_for_stripe_customer(customer_id)
+        if supabase and uid:
+            try:
+                supabase.table("user_profiles").update({"plan": _normalize_plan_str(plan)}).eq("id", uid).execute()
+            except Exception as e:
+                print(f"[stripe webhook] subscription.updated: {e}")
+        if supabase and customer_id:
+            try:
+                supabase.table("licenses").update({"plan": plan}).eq("stripe_customer_id", customer_id).execute()
+            except Exception as e:
+                print(f"[stripe webhook] licenses plan sync: {e}")
 
     return {"status": "ok"}
+
+
+async def _require_enterprise_user(authorization: str = Header(None)):
+    user = get_user_from_token(authorization)
+    if not user:
+        raise HTTPException(401, detail="Unauthorized")
+    if not supabase:
+        raise HTTPException(503, detail="Database not configured")
+    uid = user.get("sub")
+    pr = await _sb_execute(
+        supabase.table("user_profiles").select("plan").eq("id", uid).maybe_single(),
+        timeout_sec=3.0,
+    )
+    plan = ((pr.data or {}).get("plan") or "").strip().lower()
+    if plan != "enterprise":
+        raise HTTPException(403, detail="Enterprise plan required")
+    return user
+
+
+@app.get("/enterprise/usage", response_model=EnterpriseUsageResponse)
+async def enterprise_usage(user=Depends(_require_enterprise_user)):
+    uid = user.get("sub")
+    tr = await _sb_execute(
+        supabase.table("teams").select("id").eq("owner_id", uid).maybe_single(),
+        timeout_sec=5.0,
+    )
+    if not tr or not tr.data:
+        raise HTTPException(404, detail="No enterprise team for this account")
+    team_id = tr.data["id"]
+    mr = await _sb_execute(
+        supabase.table("team_members").select("user_id").eq("team_id", team_id),
+        timeout_sec=5.0,
+    )
+    mrows = mr.data or []
+    uids = [str(x["user_id"]) for x in mrows if x.get("user_id")]
+    now = datetime.now(timezone.utc)
+    month = f"{now.year:04d}-{now.month:02d}"
+    per_seat: list = []
+    total_r = 0
+    total_c = 0.0
+    for ouid in uids:
+        ur = await _sb_execute(
+            supabase.table("usage_logs")
+            .select("rewrite_count,estimated_cost_usd")
+            .eq("user_id", ouid)
+            .eq("month", month),
+            timeout_sec=5.0,
+        )
+        sub = ur.data or []
+        rw = sum(int(x.get("rewrite_count") or 0) for x in sub)
+        co = sum(float(x.get("estimated_cost_usd") or 0) for x in sub)
+        total_r += rw
+        total_c += co
+        per_seat.append({"user_id": ouid, "rewrites": rw, "cost": round(co, 6)})
+    return EnterpriseUsageResponse(
+        total_rewrites=total_r,
+        per_seat=per_seat,
+        cost_estimate_usd=round(total_c, 6),
+    )
+
+
+@app.post("/enterprise/seats")
+async def enterprise_seats(body: EnterpriseSeatsRequest, user=Depends(_require_enterprise_user)):
+    uid = user.get("sub")
+    tr = await _sb_execute(
+        supabase.table("teams").select("id,seat_limit").eq("owner_id", uid).maybe_single(),
+        timeout_sec=5.0,
+    )
+    if not tr or not tr.data:
+        raise HTTPException(404, detail="No enterprise team for this account")
+    team_id = tr.data["id"]
+    seat_limit = int(tr.data.get("seat_limit") or 10)
+    if body.action == "add":
+        for ouid in body.user_ids:
+            mk = f"EM-{uuid.uuid4().hex[:20].upper()}"
+            try:
+                await _sb_execute(
+                    supabase.table("team_members").insert(
+                        {
+                            "team_id": team_id,
+                            "user_id": ouid,
+                            "member_key": mk,
+                            "joined_at": datetime.now(timezone.utc).isoformat(),
+                        }
+                    ),
+                    timeout_sec=5.0,
+                )
+            except Exception as e:
+                print(f"[enterprise/seats] add {ouid}: {e}")
+    else:
+        for ouid in body.user_ids:
+            await _sb_execute(
+                supabase.table("team_members").delete().eq("team_id", team_id).eq("user_id", ouid),
+                timeout_sec=5.0,
+            )
+    return {"ok": True, "team_id": team_id, "seat_limit": seat_limit}
 
 
 # ═══════════════════════════════════════════
@@ -2885,6 +2908,51 @@ def _send_email(to_email: str, subject: str, body_plain: str, email_type: str = 
             pass
 
 
+def _send_cost_guardrail_alert(user_email: str, user_id: str, total_usd: float) -> None:
+    to_addr = os.getenv("SUPPORT_EMAIL", GMAIL_ADDRESS or "support@replypals.in")
+    sub = f"[ReplyPals] Cost guardrail — user {user_id[:8]}…"
+    body = (
+        f"Estimated daily LLM cost for user {user_id} ({user_email or 'no email'}) "
+        f"exceeded ${COST_GUARDRAIL_USD} (now ${total_usd:.4f}). Account paused 24h."
+    )
+    _send_email(to_addr, sub, body, "cost_guardrail")
+
+
+async def _after_llm_usage(rate: dict) -> None:
+    """usage_logs + cost guardrail ($0.50/day estimated → 24h pause + alert)."""
+    if not supabase or rate.get("degraded"):
+        return
+    ruid = rate.get("resolved_user_id")
+    if not ruid:
+        return
+    if not rate.get("user_id"):
+        rate["user_id"] = ruid
+    cost = float(rate.get("_last_cost_usd") or 0)
+    await ensure_user_profile_row(
+        supabase, _sb_execute, resolved_uid=ruid, email=rate.get("email")
+    )
+    await record_rewrite_usage(
+        supabase,
+        _sb_execute,
+        user_id=ruid,
+        team_id=rate.get("team_id"),
+        cost_usd=cost,
+    )
+    total = await today_total_cost_usd(supabase, _sb_execute, ruid)
+    if total > COST_GUARDRAIL_USD:
+        await apply_cost_pause(supabase, _sb_execute, ruid)
+        try:
+            await asyncio.to_thread(
+                _send_cost_guardrail_alert,
+                rate.get("email") or "",
+                ruid,
+                total,
+            )
+        except Exception as e:
+            print(f"[cost_guardrail alert] {e}")
+        raise HTTPException(status_code=429, detail=CostGuardrailBody().model_dump())
+
+
 # ═══════════════════════════════════════════
 # USER ACCOUNT SYSTEM (Supabase Auth)
 # ═══════════════════════════════════════════
@@ -3079,7 +3147,7 @@ async def account_status(authorization: str = Header(None)):
             "plan": "free",
             "active": False,
             "rewrites_used": 0,
-            "rewrites_limit": 5,
+            "rewrites_limit": int(DEFAULT_PLAN_LIMITS["free"]["monthly"] or 10),
             "mode": "memory_only",
         }
     try:
@@ -3127,7 +3195,7 @@ async def account_status(authorization: str = Header(None)):
             "plan":          "free",
             "active":        False,
             "rewrites_used": rewrites_used,
-            "rewrites_limit": 5 + bonus,
+            "rewrites_limit": _free_monthly_cap_from_db() + bonus,
         }
     except Exception as e:
         _mark_supabase_down(e)
@@ -3136,7 +3204,7 @@ async def account_status(authorization: str = Header(None)):
             "plan": "free",
             "active": False,
             "rewrites_used": 0,
-            "rewrites_limit": 5,
+            "rewrites_limit": int(DEFAULT_PLAN_LIMITS["free"]["monthly"] or 10),
             "degraded": True,
         }
 
@@ -3369,7 +3437,7 @@ async def track_rewrite_anonymous(request: Request):
             "id,total_rewrites,bonus_rewrites,avg_score,tips_log"
         ).eq("email", synthetic_email).limit(1).execute()
 
-        FREE_LIMIT = int(PLAN_POLICY["free"]["base_limit"])
+        FREE_LIMIT = _free_monthly_cap_from_db()
 
         if res.data:
             row       = res.data[0]
@@ -3419,18 +3487,19 @@ async def free_usage_status(body: FreeUsageRequest):
     identity_email = email or anon_email or ""
 
     if not identity_email:
-        _usage_dbg("free_usage_fetch", path="no_identity", used=0, limit=int(PLAN_POLICY["free"]["base_limit"]))
+        cap = _free_monthly_cap_from_db()
+        _usage_dbg("free_usage_fetch", path="no_identity", used=0, limit=cap)
         return {
             "ok": True,
             "plan": "free",
             "rewrites_used": 0,
-            "rewrites_limit": int(PLAN_POLICY["free"]["base_limit"]),
-            "rewrites_left": int(PLAN_POLICY["free"]["base_limit"]),
+            "rewrites_limit": cap,
+            "rewrites_left": cap,
             "source": "none",
         }
 
     if not supabase:
-        base = int(PLAN_POLICY["free"]["base_limit"])
+        base = int(DEFAULT_PLAN_LIMITS["free"]["monthly"] or 10)
         _usage_dbg("free_usage_fetch", path="memory_only", identity_email=identity_email, used=0, limit=base)
         return {
             "ok": True,
@@ -3471,7 +3540,7 @@ async def free_usage_status(body: FreeUsageRequest):
     except Exception:
         used = 0
 
-    limit = int(PLAN_POLICY["free"]["base_limit"]) + bonus
+    limit = _free_monthly_cap_from_db() + bonus
     _usage_dbg(
         "free_usage_fetch",
         path="db",

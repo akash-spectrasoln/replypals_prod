@@ -821,7 +821,7 @@
       </div>
       <div>
         <h4 class="font-bold text-brand-navy mb-2">What if I don't like it?</h4>
-        <p class="text-brand-textmuted text-sm leading-relaxed">You get 5 free rewrites before paying anything. No credit card needed to start.</p>
+        <p class="text-brand-textmuted text-sm leading-relaxed">You get <strong><span data-rp-free-monthly class="tabular-nums">10</span></strong> free rewrites per month (free plan) before paying anything. No credit card needed to start.</p>
       </div>
     </div>
 
@@ -951,7 +951,7 @@
         </div>
         <div class="faq-answer px-6 bg-white">
           <p class="text-[15px] text-brand-textmuted pb-6 leading-relaxed">
-            You get 5 free rewrites to try ReplyPals. After that, you can upgrade to Starter or Pro. Pricing is automatically adjusted for your country.
+            On the free plan you get <strong><span data-rp-free-monthly class="tabular-nums">10</span></strong> rewrites per month. After that, you can upgrade to Starter or Pro. Pricing is automatically adjusted for your country.
           </p>
         </div>
       </div>
@@ -973,7 +973,7 @@
   <div class="max-w-4xl mx-auto px-4 relative z-10 text-center animate-on-scroll">
     <h2 class="font-syne text-white font-extrabold text-4xl sm:text-5xl lg:text-[48px] leading-tight mb-6">Start writing like a native today.</h2>
     <p class="text-white/80 text-lg sm:text-xl font-sans max-w-xl mx-auto mb-10 leading-relaxed">
-      5 free rewrites. No credit card. No signup.<br class="hidden sm:block"> Just install and start writing better English.
+      <strong><span data-rp-free-monthly class="tabular-nums text-white">10</span></strong> free rewrites/month on the free plan. No credit card. No signup.<br class="hidden sm:block"> Just install and start writing better English.
     </p>
     
     <!-- TODO: Replace with your Chrome Web Store extension ID -->
@@ -1323,6 +1323,30 @@
 
   // Run immediately on page load
   fetchPricingData();
+
+  async function fetchPublicConfig() {
+    const fallback = 10;
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2500);
+      const res = await fetch(`${API_BASE}/public-config`, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (!res.ok) throw new Error('public-config failed');
+      const data = await res.json();
+      const n = typeof data.free_monthly_rewrites === 'number' && data.free_monthly_rewrites >= 0
+        ? data.free_monthly_rewrites
+        : fallback;
+      document.querySelectorAll('[data-rp-free-monthly]').forEach((el) => {
+        el.textContent = String(n);
+      });
+    } catch (err) {
+      console.log('public-config fetch failed, using fallback', err);
+      document.querySelectorAll('[data-rp-free-monthly]').forEach((el) => {
+        el.textContent = String(fallback);
+      });
+    }
+  }
+  fetchPublicConfig();
 
   // 6. Basic CTA Tracking
   function trackCTAClick(locationId) {

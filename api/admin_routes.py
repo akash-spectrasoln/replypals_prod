@@ -133,6 +133,13 @@ class ChangePasswordReq(BaseModel):
 class UpdateSettingsReq(BaseModel):
     settings: dict
 
+
+class PlanLimitsPutReq(BaseModel):
+    """Body for PUT /admin/plan-limits — full plan → {monthly, daily} map."""
+
+    limits: Dict[str, Any]
+
+
 class UpdateEnvKeyReq(BaseModel):
     key: str
     value: str
@@ -1001,6 +1008,55 @@ async def update_settings(body: UpdateSettingsReq, request: Request, admin=Depen
         supabase.table("app_settings").upsert({"key": key, "value": str(value), "updated_at": datetime.now(timezone.utc).isoformat()}).execute()
     _audit("settings_updated", {"keys": list(body.settings.keys())}, request.client.host, supabase)
     return {"updated": True}
+
+
+@router.get("/plan-limits")
+async def admin_get_plan_limits(admin=Depends(require_admin)):
+    """Effective rewrite limits (defaults merged with ``app_settings.plan_limits`` JSON)."""
+    from main import supabase
+    from billing_usage import DEFAULT_PLAN_LIMITS, load_plan_limits_merged
+
+    if not supabase:
+        raise HTTPException(503, detail="Database not configured")
+    merged = load_plan_limits_merged(supabase)
+    return {"limits": merged, "defaults": DEFAULT_PLAN_LIMITS}
+
+
+@router.put("/plan-limits")
+async def admin_put_plan_limits(
+    body: PlanLimitsPutReq,
+    request: Request,
+    admin=Depends(require_admin),
+):
+    """Persist plan limits to ``app_settings`` and invalidate the in-process cache."""
+    import json as _json
+
+    from main import supabase
+    from billing_usage import (
+        APP_SETTINGS_PLAN_LIMITS_KEY,
+        DEFAULT_PLAN_LIMITS,
+        merge_plan_limits_from_raw,
+        invalidate_plan_limits_cache,
+    )
+
+    if not supabase:
+        raise HTTPException(503, detail="Database not configured")
+    base = {k: {"monthly": v["monthly"], "daily": v["daily"]} for k, v in DEFAULT_PLAN_LIMITS.items()}
+    merged = merge_plan_limits_from_raw(base, body.limits or {})
+    try:
+        supabase.table("app_settings").upsert(
+            {
+                "key": APP_SETTINGS_PLAN_LIMITS_KEY,
+                "value": _json.dumps(merged),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            },
+            on_conflict="key",
+        ).execute()
+    except Exception as e:
+        raise HTTPException(500, detail=f"Failed to save plan limits: {e}") from e
+    invalidate_plan_limits_cache()
+    _audit("plan_limits_updated", {"plans": list(merged.keys())}, request.client.host, supabase)
+    return {"ok": True, "limits": merged}
 
 
 @router.patch("/env-key")

@@ -48,7 +48,8 @@ try {
     /** Synced with API: when limit > 0 and left === 0, all actions are blocked (free + capped plans). */
     let replypalUsageLeft = null;
     let replypalRewritesLimit = null;
-    const FREE_LIMIT_BASE = 5;
+    /** Fallback until API response; align with server default free monthly cap */
+    const FREE_LIMIT_BASE = 10;
 
     safeStorageGet(['toneMemory', 'replypalAutoImprove', 'replypalLicense', 'replypalCount', 'explainExpanded', 'replypalBonusRewrites', 'replypalUsageUsed', 'replypalUsageLimit', 'replypalUsageLeft', 'replypalRewritesLimit'], function (s) {
       toneMemory = s.toneMemory || {};

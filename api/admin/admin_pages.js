@@ -167,6 +167,19 @@ async function renderSettings() {
       <div id="model-save-msg" style="margin-top:10px;font-size:13px;display:none"></div>
       <div id="model-test-result" style="margin-top:12px;background:#f9fafb;border-radius:8px;padding:12px;font-size:12px;display:none;border:1px solid #e5e7eb;font-family:monospace;white-space:pre-wrap"></div>
     </div>
+
+    <div class="bg-white rounded-xl shadow-sm p-5" id="planLimitsCard">
+      <h3 class="font-semibold text-sm mb-2 text-navy">📊 Rewrite limits (by plan)</h3>
+      <p class="text-xs text-gray-500 mb-3">Saved to Supabase <code class="bg-gray-100 px-1 rounded text-[11px]">app_settings.plan_limits</code>. Both monthly and daily empty ⇒ unlimited. Daily empty ⇒ no daily cap.</p>
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs">
+          <thead><tr class="text-left border-b text-gray-400"><th class="p-2">Plan</th><th class="p-2">Monthly rewrites</th><th class="p-2">Daily cap</th></tr></thead>
+          <tbody id="planLimitsBody"></tbody>
+        </table>
+      </div>
+      <button type="button" onclick="savePlanLimits()" class="px-4 py-2 bg-rp text-white rounded-lg text-sm mt-3">💾 Save plan limits</button>
+      <span id="planLimitsSaveMsg" class="text-sm ml-2 text-gray-600"></span>
+    </div>
     
     <div class="bg-white rounded-xl shadow-sm p-5">
       <h3 class="font-semibold text-navy mb-4">🔑 AI API Keys</h3>
@@ -248,6 +261,7 @@ async function renderSettings() {
     // Load active model selector options
     updateModelOptions();
     loadCurrentModel();
+    fillPlanLimitsTable();
   } catch (e) { el.innerHTML = `<div class="text-center py-12 text-red-500">${escHtml(e.message)}</div>`; }
 }
 async function testAiKey(provider, inputId, btn) {
@@ -282,6 +296,48 @@ async function saveAppSettings() {
     await api('/admin/settings', { method: 'PATCH', body: JSON.stringify({ settings: { free_limit: document.getElementById('sFreeLimit').value, starter_limit: document.getElementById('sStarterLimit').value, rate_limit: document.getElementById('sRateLimit').value, maintenance_mode: document.getElementById('sMaintenanceToggle').classList.contains('on') ? 'true' : 'false', weekly_reports_enabled: document.getElementById('sWeeklyToggle').classList.contains('on') ? 'true' : 'false' } }) });
     alert('✅ Settings saved');
   } catch (e) { alert(e.message); }
+}
+
+const PLAN_LIMIT_KEYS = ['free', 'starter', 'pro', 'team', 'enterprise'];
+async function fillPlanLimitsTable() {
+  const tb = document.getElementById('planLimitsBody');
+  if (!tb) return;
+  try {
+    const d = await api('/admin/plan-limits');
+    const L = d.limits || {};
+    tb.innerHTML = PLAN_LIMIT_KEYS.map((p) => {
+      const row = L[p] || {};
+      const m = row.monthly === null || row.monthly === undefined ? '' : row.monthly;
+      const day = row.daily === null || row.daily === undefined ? '' : row.daily;
+      return `<tr class="border-b"><td class="p-2 font-medium capitalize">${p}</td><td class="p-2"><input type="number" min="0" id="pl-${p}-m" class="border rounded px-2 py-1 w-28 text-sm" value="${m}" placeholder="empty = unlimited"/></td><td class="p-2"><input type="number" min="0" id="pl-${p}-d" class="border rounded px-2 py-1 w-28 text-sm" value="${day}" placeholder="empty = none"/></td></tr>`;
+    }).join('');
+  } catch (e) {
+    tb.innerHTML = `<tr><td colspan="3" class="p-2 text-red-500">${escHtml(e.message)}</td></tr>`;
+  }
+}
+async function savePlanLimits() {
+  const msg = document.getElementById('planLimitsSaveMsg');
+  const limits = {};
+  for (const p of PLAN_LIMIT_KEYS) {
+    const mi = document.getElementById(`pl-${p}-m`);
+    const di = document.getElementById(`pl-${p}-d`);
+    const ms = mi && mi.value !== '' ? String(mi.value).trim() : '';
+    const ds = di && di.value !== '' ? String(di.value).trim() : '';
+    limits[p] = {
+      monthly: ms === '' ? null : parseInt(ms, 10),
+      daily: ds === '' ? null : parseInt(ds, 10),
+    };
+    if (ms !== '' && Number.isNaN(limits[p].monthly)) { alert('Invalid monthly for ' + p); return; }
+    if (ds !== '' && Number.isNaN(limits[p].daily)) { alert('Invalid daily for ' + p); return; }
+  }
+  if (msg) msg.textContent = 'Saving…';
+  try {
+    await api('/admin/plan-limits', { method: 'PUT', body: JSON.stringify({ limits }) });
+    if (msg) { msg.textContent = '✓ Saved'; setTimeout(() => { if (msg) msg.textContent = ''; }, 4000); }
+  } catch (e) {
+    if (msg) msg.textContent = '';
+    alert(e.message || String(e));
+  }
 }
 
 // ═══════════════════════════════════════════
