@@ -545,34 +545,44 @@ async function commerceRenderCountries(panel) {
   panel.innerHTML = `<div class="bg-white rounded-xl shadow-sm overflow-hidden">
     <table class="w-full text-xs text-left">
       <thead><tr class="border-b bg-gray-50 text-gray-500">
-        <th class="p-2">Code</th><th class="p-2">Name</th><th class="p-2">× mult</th><th class="p-2">Sym</th><th class="p-2">Active</th><th class="p-2">Coupon id</th><th class="p-2"></th>
+        <th class="p-2">Code</th><th class="p-2">Name</th><th class="p-2">× mult</th><th class="p-2">CCY</th><th class="p-2">Sym</th><th class="p-2">FX / USD</th><th class="p-2">Active</th><th class="p-2">Coupon id</th><th class="p-2"></th>
       </tr></thead>
       <tbody>${rows.sort((a, b) => (a.country_code || '').localeCompare(b.country_code || '')).map((r) => {
     const rawCc = String(r.country_code || '');
     const ccDisp = escHtml(rawCc);
+    const fxVal = r.exchange_rate_per_usd != null && r.exchange_rate_per_usd !== '' ? r.exchange_rate_per_usd : '';
     return `<tr class="border-b">
       <td class="p-2 font-mono font-bold">${ccDisp}</td>
       <td class="p-2"><input id="cc-${rawCc}-nm" class="border rounded px-1 w-32" value="${escHtml(r.country_name || '')}"/></td>
       <td class="p-2"><input id="cc-${rawCc}-mu" type="number" step="0.001" min="0.01" max="2" class="border rounded px-1 w-20" value="${r.price_multiplier != null ? r.price_multiplier : 1}"/></td>
+      <td class="p-2"><input id="cc-${rawCc}-cur" class="border rounded px-1 w-12 uppercase font-mono" maxlength="3" value="${escHtml((r.currency_code || 'USD').toString())}"/></td>
       <td class="p-2"><input id="cc-${rawCc}-sy" class="border rounded px-1 w-10" value="${escHtml(r.currency_symbol || '$')}"/></td>
+      <td class="p-2"><input id="cc-${rawCc}-fx" type="number" step="0.0001" min="0" class="border rounded px-1 w-24" placeholder="e.g. 83" title="Local currency units per 1 USD; empty = PPP-USD display" value="${fxVal}"/></td>
       <td class="p-2"><input id="cc-${rawCc}-ac" type="checkbox" ${r.is_active !== false ? 'checked' : ''}/></td>
       <td class="p-2 font-mono text-[10px] text-gray-500">${escHtml(r.stripe_coupon_id || '—')}</td>
       <td class="p-2"><button type="button" class="px-2 py-1 bg-navy text-white rounded text-[11px]" onclick="commerceSaveCountry(${JSON.stringify(rawCc)})">Save</button></td>
     </tr>`;
   }).join('')}</tbody>
     </table>
-    <p class="text-xs text-gray-500 p-3 border-t">Multiplier applies to list prices; Stripe coupon is regenerated on save when Stripe is available.</p>
+    <p class="text-xs text-gray-500 p-3 border-t">PPP multiplier applies before display. <strong>FX / USD</strong> = local units per 1 USD (e.g. INR 83, GBP 0.79); leave empty to show PPP-adjusted USD with the symbol. Stripe coupon is regenerated on save when Stripe is available.</p>
   </div>`;
 }
 
 async function commerceSaveCountry(code) {
   const cc = code;
+  const fxRaw = document.getElementById(`cc-${cc}-fx`).value.trim();
   const body = {
     country_name: document.getElementById(`cc-${cc}-nm`).value.trim(),
     price_multiplier: parseFloat(document.getElementById(`cc-${cc}-mu`).value) || 1,
+    currency_code: document.getElementById(`cc-${cc}-cur`).value.trim() || 'USD',
     currency_symbol: document.getElementById(`cc-${cc}-sy`).value.trim() || '$',
     is_active: document.getElementById(`cc-${cc}-ac`).checked,
   };
+  if (fxRaw === '') body.exchange_rate_per_usd = null;
+  else {
+    const n = parseFloat(fxRaw);
+    body.exchange_rate_per_usd = Number.isFinite(n) && n > 0 ? n : null;
+  }
   await api(`/admin/config/countries/${encodeURIComponent(cc)}`, { method: 'PUT', body: JSON.stringify(body) });
   alert('Saved ' + cc + ' — refresh list to see updated coupon id');
   await commerceRenderCountries(document.getElementById('commercePanel'));

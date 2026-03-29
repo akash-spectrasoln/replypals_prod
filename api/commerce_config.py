@@ -80,6 +80,8 @@ class CountryPricingRow:
     price_multiplier: float
     is_active: bool
     stripe_coupon_id: Optional[str]
+    # Local units per 1 USD; when set, UI shows (PPP USD) × rate in currency_code.
+    exchange_rate_per_usd: Optional[float] = None
 
 
 @dataclass
@@ -139,6 +141,7 @@ def _row_nudge(r: dict[str, Any]) -> NudgeRow:
 
 
 def _row_country(r: dict[str, Any]) -> CountryPricingRow:
+    fx = _num(r.get("exchange_rate_per_usd"))
     return CountryPricingRow(
         country_code=str(r["country_code"]).strip().upper(),
         country_name=str(r.get("country_name") or r["country_code"]),
@@ -147,6 +150,7 @@ def _row_country(r: dict[str, Any]) -> CountryPricingRow:
         price_multiplier=float(_num(r.get("price_multiplier")) or 1.0),
         is_active=bool(r.get("is_active", True)),
         stripe_coupon_id=(str(r["stripe_coupon_id"]).strip() or None) if r.get("stripe_coupon_id") else None,
+        exchange_rate_per_usd=float(fx) if fx is not None and fx > 0 else None,
     )
 
 
@@ -237,6 +241,65 @@ def format_money(symbol: str, amount: float) -> str:
     return f"{symbol}{amount:.2f}"
 
 
+# ISO 4217 currencies commonly shown with no fractional units in marketing UIs
+_ZERO_DECIMAL = frozenset(
+    {
+        "BIF",
+        "CLP",
+        "DJF",
+        "GNF",
+        "JPY",
+        "KMF",
+        "KRW",
+        "MGA",
+        "PYG",
+        "RWF",
+        "UGX",
+        "VND",
+        "VUV",
+        "XAF",
+        "XOF",
+        "XPF",
+    }
+)
+
+
+def round_for_currency(currency_code: str, amount: float) -> float:
+    """Round a localized amount for display (not tax precision)."""
+    cc = (currency_code or "USD").upper()
+    if cc in _ZERO_DECIMAL:
+        return float(round(amount))
+    if cc in ("INR", "IDR", "PHP", "NGN", "COP", "HUF", "ISK"):
+        return float(round(amount))
+    if amount >= 100:
+        return float(round(amount))
+    if amount == int(amount):
+        return float(int(amount))
+    return round(amount, 2)
+
+
+def format_pricing_display(
+    row: CountryPricingRow,
+    effective_usd: float,
+) -> tuple[str, str, float, float]:
+    """
+    Build user-facing price string and currency metadata.
+    effective_usd = PPP-adjusted list amount in USD (Stripe alignment).
+
+    Returns (display, currency_iso_lower, amount_shown, effective_usd).
+    When exchange_rate_per_usd is set: amount_shown is in local currency.
+    """
+    eff = float(effective_usd)
+    fx = row.exchange_rate_per_usd
+    if fx is not None and float(fx) > 0:
+        local_amt = eff * float(fx)
+        local_amt = round_for_currency(row.currency_code, local_amt)
+        disp = format_money(row.currency_symbol, local_amt)
+        return disp, row.currency_code.lower(), local_amt, eff
+    disp = format_money(row.currency_symbol, eff)
+    return disp, "usd", eff, eff
+
+
 def resolve_country_row(snap: CommerceSnapshot, country_code: str) -> tuple[CountryPricingRow, float]:
     """
     Active country row or synthetic default (full USD price).
@@ -254,6 +317,7 @@ def resolve_country_row(snap: CommerceSnapshot, country_code: str) -> tuple[Coun
         price_multiplier=1.0,
         is_active=True,
         stripe_coupon_id=None,
+        exchange_rate_per_usd=None,
     )
     return default, 1.0
 
@@ -287,5 +351,6 @@ def format_upgrade_price_for_plan(
     tgt = snap.plans.get(upgrade_to_plan)
     if not tgt or tgt.base_price_usd is None:
         return "contact sales"
-    loc = localize_usd_price(float(tgt.base_price_usd), mult)
-    return f"{format_money(row.currency_symbol, loc)}/mo"
+    eff_usd = localize_usd_price(float(tgt.base_price_usd), mult)
+    disp, _, _, _ = format_pricing_display(row, eff_usd)
+    return f"{disp}/mo"

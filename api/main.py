@@ -115,7 +115,7 @@ from billing_usage import (
 )
 from commerce_config import (
     cheapest_active_bundle,
-    format_money,
+    format_pricing_display,
     get_commerce_snapshot,
     load_commerce_snapshot_sync,
     localize_usd_price,
@@ -1574,9 +1574,11 @@ async def check_rate_limit(
     try:
         import json as _json
         body_bytes = await request.body()
-        body_raw   = _json.loads(body_bytes) if body_bytes else {}
+        # Starlette allows reading the body once; check_rate_limit_impl needs the same bytes.
+        request.state._replypals_body_bytes = body_bytes
+        body_raw = _json.loads(body_bytes) if body_bytes else {}
         req_email = (user_email or body_raw.get("email", "")).strip().lower()
-        req_anon  = (body_raw.get("anon_id") or "").strip()
+        req_anon = (body_raw.get("anon_id") or "").strip()
         if not req_email and req_anon:
             req_email = _synthetic_email_from_anon_id(req_anon) or ""
     except Exception:
@@ -2048,14 +2050,16 @@ async def get_pricing(request: Request):
             continue
         if prow.base_price_usd is None:
             continue
-        loc = localize_usd_price(float(prow.base_price_usd), mult)
+        eff_usd = localize_usd_price(float(prow.base_price_usd), mult)
+        disp, ccy, amt_local, _ = format_pricing_display(crow, eff_usd)
         plans_out[pk] = {
             "display_name": prow.display_name,
-            "display": format_money(crow.currency_symbol, loc),
+            "display": disp,
             "per": "/mo",
-            "currency": "usd",
+            "currency": ccy,
+            "amount_local": amt_local,
             "base_price_usd": float(prow.base_price_usd),
-            "localized_usd": loc,
+            "localized_usd": eff_usd,
             "stripe_price_id": prow.stripe_price_id or "",
         }
 
@@ -2063,20 +2067,31 @@ async def get_pricing(request: Request):
     for bk, brow in sorted(snap.bundles.items(), key=lambda x: x[1].sort_order):
         if not brow.is_active:
             continue
-        loc = localize_usd_price(float(brow.base_price_usd), mult)
+        eff_usd = localize_usd_price(float(brow.base_price_usd), mult)
+        disp, ccy, amt_local, _ = format_pricing_display(crow, eff_usd)
         bundles_out[bk] = {
             "display_name": brow.display_name,
             "credits": brow.credits,
-            "display": format_money(crow.currency_symbol, loc),
-            "localized_usd": loc,
+            "display": disp,
+            "currency": ccy,
+            "amount_local": amt_local,
+            "localized_usd": eff_usd,
         }
 
     pl = serialize_plan_limits_from_snapshot(snap)
-    note = None if mult >= 0.999 else "Pricing adjusted for your region (PPP)"
+    if crow.exchange_rate_per_usd:
+        note = (
+            "Prices shown in your local currency (approximate). "
+            "Checkout may still settle in USD with your regional discount applied."
+        )
+    else:
+        note = None if mult >= 0.999 else "Pricing adjusted for your region (PPP)"
 
     return {
         "country": country,
+        "currency_code": crow.currency_code.lower(),
         "currency_symbol": crow.currency_symbol,
+        "exchange_rate_per_usd": crow.exchange_rate_per_usd,
         "price_multiplier": mult,
         "plans": plans_out,
         "credit_bundles": bundles_out,
@@ -2238,10 +2253,9 @@ async def geo_detect(request: Request, authorization: Optional[str] = Header(Non
     for pk, prow in snap.plans.items():
         if not prow.is_active or prow.base_price_usd is None:
             continue
-        localized_prices[pk] = format_money(
-            crow.currency_symbol,
-            localize_usd_price(float(prow.base_price_usd), mult),
-        )
+        eff_usd = localize_usd_price(float(prow.base_price_usd), mult)
+        disp, _, _, _ = format_pricing_display(crow, eff_usd)
+        localized_prices[pk] = disp
 
     user = get_user_from_token(authorization) if authorization else None
     uid = user.get("sub") if user else None
@@ -2260,7 +2274,9 @@ async def geo_detect(request: Request, authorization: Optional[str] = Header(Non
 
     return {
         "country": country,
+        "currency_code": crow.currency_code.lower(),
         "currency_symbol": crow.currency_symbol,
+        "exchange_rate_per_usd": crow.exchange_rate_per_usd,
         "multiplier": mult,
         "localized_prices": localized_prices,
         "vpn_detected": vpn,

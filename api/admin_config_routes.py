@@ -273,6 +273,8 @@ class CountryCreateBody(BaseModel):
     currency_symbol: str = "$"
     price_multiplier: float = Field(1.0, ge=0.01, le=2.0)
     is_active: bool = True
+    # Local units per 1 USD; omit or null = PPP-USD display only
+    exchange_rate_per_usd: Optional[float] = Field(None, ge=0)
 
 
 class CountryPatchBody(BaseModel):
@@ -281,6 +283,7 @@ class CountryPatchBody(BaseModel):
     currency_symbol: Optional[str] = None
     price_multiplier: Optional[float] = Field(None, ge=0.01, le=2.0)
     is_active: Optional[bool] = None
+    exchange_rate_per_usd: Optional[float] = Field(None, ge=0)
 
 
 @router.get("/countries")
@@ -311,6 +314,12 @@ async def config_put_country(
     old = dict(cur.data)
     patch: dict[str, Any] = {"updated_at": datetime.now(timezone.utc).isoformat()}
     for k, v in body.model_dump(exclude_unset=True).items():
+        if k == "exchange_rate_per_usd":
+            patch["exchange_rate_per_usd"] = None if v is None or v == 0 else float(v)
+            continue
+        if k == "currency_code" and v is not None:
+            patch[k] = str(v).upper()
+            continue
         if v is not None:
             patch[k] = v
     mult = float(patch.get("price_multiplier", old.get("price_multiplier") or 1))
@@ -345,6 +354,8 @@ async def config_create_country(body: CountryCreateBody, request: Request, admin
         "is_active": body.is_active,
         "stripe_coupon_id": cid,
     }
+    if body.exchange_rate_per_usd is not None and body.exchange_rate_per_usd > 0:
+        row["exchange_rate_per_usd"] = float(body.exchange_rate_per_usd)
     supabase.table("country_pricing").insert(row).execute()
     invalidate_commerce_cache()
     _cfg_audit(supabase, request, "create_country_ppp", "country_pricing", cc, None, row)

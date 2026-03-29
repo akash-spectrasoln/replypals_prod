@@ -1255,7 +1255,7 @@ async def pricing_preview(request: Request, country: str = "US", admin=Depends(r
     """Preview PPP-adjusted display amounts from ``plan_config`` + ``country_pricing``."""
     from main import supabase
     from commerce_config import (
-        format_money,
+        format_pricing_display,
         load_commerce_snapshot_sync,
         localize_usd_price,
         resolve_country_row,
@@ -1269,18 +1269,28 @@ async def pricing_preview(request: Request, country: str = "US", admin=Depends(r
     for pk, prow in sorted(snap.plans.items(), key=lambda x: x[1].sort_order):
         if not prow.is_active or pk in ("free", "enterprise") or prow.base_price_usd is None:
             continue
-        loc = localize_usd_price(float(prow.base_price_usd), mult)
+        eff_usd = localize_usd_price(float(prow.base_price_usd), mult)
+        disp, ccy, amt_local, _ = format_pricing_display(crow, eff_usd)
         plans[pk] = {
-            "display": format_money(crow.currency_symbol, loc),
+            "display": disp,
             "per": "/mo",
-            "currency": "usd",
+            "currency": ccy,
+            "amount_local": amt_local,
+            "localized_usd": eff_usd,
             "stripe_price_id": prow.stripe_price_id or "",
         }
-    note = None if mult >= 0.999 else "PPP multiplier applied"
+    note_parts = []
+    if mult < 0.999:
+        note_parts.append("PPP multiplier applied")
+    if crow.exchange_rate_per_usd:
+        note_parts.append("Local currency display (FX from country_pricing)")
+    note = " · ".join(note_parts) if note_parts else None
     return {
         "country": country.upper(),
         "multiplier": mult,
+        "currency_code": crow.currency_code.lower(),
         "currency_symbol": crow.currency_symbol,
+        "exchange_rate_per_usd": crow.exchange_rate_per_usd,
         "plans": plans,
         "note": note,
     }

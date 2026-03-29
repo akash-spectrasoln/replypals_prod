@@ -805,7 +805,9 @@ async def check_rate_limit_impl(
     user_email = user.get("email") if user else None
 
     try:
-        body_bytes = await request.body()
+        body_bytes = getattr(request.state, "_replypals_body_bytes", None)
+        if body_bytes is None:
+            body_bytes = await request.body()
         body_raw = json.loads(body_bytes) if body_bytes else {}
         req_email = (user_email or body_raw.get("email", "")).strip().lower()
         req_anon = (body_raw.get("anon_id") or "").strip()
