@@ -1360,53 +1360,68 @@
       }
     } catch (e) { }
 
-    // Fallback: tier1 USD pricing + code defaults (until API returns DB-backed labels)
     return {
+      country: 'US',
       tier: 'tier1', currency: 'usd', note: null,
       plans: {
         starter: { display: '$2', per: '/mo' },
         pro: { display: '$9', per: '/mo' },
+        growth: { display: '$15', per: '/mo' },
         team: { display: '$25', per: '/mo' },
       },
       plan_limit_labels: {
         starter: '25 rewrites/mo',
-        pro: '300/mo · 20/day',
+        pro: '300 rewrites/mo',
+        growth: '750 rewrites/mo',
         team: '150/mo · 15/day',
       },
+      credit_bundles: {},
     };
   }
 
-  function renderPlanCards(pricing) {
-    const plans = pricing.plans;
-    const L = pricing.plan_limit_labels || {};
-    const st = L.starter || '25 rewrites/mo';
-    const pr = L.pro || '300/mo · 20/day';
-    const tm = L.team ? ('5 seats · ' + L.team) : '5 seats · 150/mo · 15/day';
-    plansGrid.innerHTML = `
-      <div class="plan-card" data-plan="starter">
-        <div class="plan-name">Starter</div>
-        <div class="plan-price">${plans.starter.display}<span>${plans.starter.per}</span></div>
-        <div class="plan-detail">${st}</div>
-      </div>
-      <div class="plan-card featured" data-plan="pro">
-        <div class="plan-badge">BEST VALUE</div>
-        <div class="plan-name">Pro ⭐</div>
-        <div class="plan-price">${plans.pro.display}<span>${plans.pro.per}</span></div>
-        <div class="plan-detail">${pr}</div>
-      </div>
-      <div class="plan-card" data-plan="team">
-        <div class="plan-name">Team</div>
-        <div class="plan-price">${plans.team.display}<span>${plans.team.per}</span></div>
-        <div class="plan-detail">${tm}</div>
-      </div>
-    `;
+  function renderCreditBundlesRow(pricing) {
+    const row = document.getElementById('creditBundlesRow');
+    const list = document.getElementById('creditBundlesList');
+    if (!row || !list) return;
+    const bundles = pricing.credit_bundles;
+    if (!bundles || typeof bundles !== 'object' || !Object.keys(bundles).length) {
+      row.style.display = 'none';
+      list.innerHTML = '';
+      return;
+    }
+    const keys = Object.keys(bundles).sort(
+      (a, b) => (bundles[a].credits || 0) - (bundles[b].credits || 0)
+    );
+    list.innerHTML = keys.map((k) => {
+      const b = bundles[k];
+      const name = b.display_name || k;
+      const price = b.display || '';
+      return `<div class="credit-bundle-line"><span>${name} · ${b.credits} cr</span><span>${price}</span></div>`;
+    }).join('');
+    row.style.display = 'block';
+  }
 
-    // Re-attach click handlers
-    plansGrid.querySelectorAll('.plan-card').forEach(card => {
+  function renderPlanCards(pricing) {
+    const plans = pricing.plans || {};
+    const L = pricing.plan_limit_labels || {};
+    const order = ['starter', 'pro', 'growth', 'team'].filter((k) => plans[k]);
+    const html = order.map((k) => {
+      const p = plans[k];
+      const per = p.per || '/mo';
+      const sub = k === 'team'
+        ? (L.team ? ('5 seats · ' + L.team) : '5 seats · 150/mo · 15/day')
+        : (L[k] || '');
+      const isFeat = k === 'pro';
+      const badge = isFeat ? '<div class="plan-badge">BEST VALUE</div>' : '';
+      const title = k === 'pro' ? 'Pro ⭐' : (k.charAt(0).toUpperCase() + k.slice(1));
+      return `<div class="plan-card${isFeat ? ' featured' : ''}" data-plan="${k}">${badge}<div class="plan-name">${title}</div><div class="plan-price">${p.display}<span>${per}</span></div><div class="plan-detail">${sub}</div></div>`;
+    }).join('');
+    plansGrid.innerHTML = html;
+
+    plansGrid.querySelectorAll('.plan-card').forEach((card) => {
       card.addEventListener('click', () => selectPlan(card.dataset.plan));
     });
 
-    // Regional note
     const noteEl = document.getElementById('pricingNote');
     if (pricing.note) {
       noteEl.textContent = pricing.note + ' 🌍';
@@ -1415,8 +1430,10 @@
       noteEl.style.display = 'none';
     }
 
-    // Select default
-    selectPlan('pro');
+    renderCreditBundlesRow(pricing);
+
+    const defaultPlan = order.includes('pro') ? 'pro' : (order[0] || 'pro');
+    selectPlan(defaultPlan);
   }
 
   async function showUpgradeOverlay(blocking) {
@@ -1488,14 +1505,14 @@
     checkoutBtn.textContent = 'Opening…';
     checkoutBtn.disabled = true;
 
-    // Get tier from cached pricing
     const pricing = cachedPricing || await fetchPricingData();
     const tier = pricing.tier || 'tier1';
+    const countryCode = (pricing && pricing.country) ? String(pricing.country).slice(0, 2).toUpperCase() : 'US';
 
     try {
       const response = await safeSendMessage({
         type: 'createCheckout',
-        payload: { email, plan: selectedPlan, tier }
+        payload: { email, plan: selectedPlan, tier, country_code: countryCode }
       });
 
       if (response?.error === 'offline') {

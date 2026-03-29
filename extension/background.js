@@ -460,10 +460,17 @@ async function handleCreateCheckout(payload) {
     return { success: false, error: 'offline', message: 'ReplyPals is offline. Check your connection.' };
   }
   try {
+    const body = {
+      email: payload.email,
+      plan: payload.plan,
+      tier: payload.tier || 'tier1',
+      user_id: payload.user_id,
+      country_code: (payload.country_code || payload.country || 'US').toString().trim().slice(0, 2).toUpperCase() || 'US',
+    };
     const res = await fetch(`${API_BASE}/create-checkout`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(body)
     });
     if (!res.ok) {
       const errorData = await res.json().catch(() => ({}));
@@ -628,13 +635,16 @@ async function handleFetchPricing() {
     plans: {
       starter: { display: '$2', per: '/mo', currency: 'usd' },
       pro: { display: '$9', per: '/mo', currency: 'usd' },
+      growth: { display: '$15', per: '/mo', currency: 'usd' },
       team: { display: '$25', per: '/mo', currency: 'usd' },
     },
     plan_limit_labels: {
       starter: '25 rewrites/mo',
-      pro: '300/mo · 20/day',
+      pro: '300 rewrites/mo',
+      growth: '750 rewrites/mo',
       team: '150/mo · 15/day',
     },
+    credit_bundles: {},
   };
   try {
     const controller = new AbortController();

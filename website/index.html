@@ -728,8 +728,8 @@
       </div>
     </div>
 
-    <!-- Pricing Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8 items-center max-w-[1000px] mx-auto mb-24">
+    <!-- Pricing Cards (order matches API: starter → pro → growth → team) -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 lg:gap-8 items-stretch max-w-[1280px] mx-auto mb-12">
       
       <!-- Starter -->
       <div class="bg-white border border-brand-border rounded-3xl p-8 hover:shadow-xl transition-shadow animate-on-scroll relative">
@@ -781,6 +781,25 @@
         </a>
       </div>
 
+      <!-- Growth (between Pro and Team — same DB as API / extension) -->
+      <div class="bg-white border border-brand-border rounded-3xl p-8 hover:shadow-xl transition-shadow animate-on-scroll relative">
+        <h3 class="font-syne font-bold text-xl text-brand-navy mb-2">Growth</h3>
+        <div class="flex items-baseline gap-1 mb-1">
+          <span class="text-3xl font-extrabold text-brand-navy price-growth">$15</span>
+          <span class="text-brand-textmuted font-medium text-sm price-per">/mo</span>
+        </div>
+        <div class="text-[13px] text-gray-500 mb-8 pb-8 border-b border-brand-border">Higher monthly limits · 1 seat</div>
+        <ul class="space-y-4 mb-8 text-[15px] text-brand-text">
+          <li class="flex items-start gap-3"><span class="text-green-500 mt-0.5">✅</span> <span data-rp-plan-line="growth"><strong>750 rewrites</strong> per month</span></li>
+          <li class="flex items-start gap-3"><span class="text-green-500 mt-0.5">✅</span> Everything in Pro</li>
+          <li class="flex items-start gap-3"><span class="text-green-500 mt-0.5">✅</span> Priority throughput</li>
+          <li class="flex items-start gap-3"><span class="text-green-500 mt-0.5">✅</span> Best for power users before Team</li>
+        </ul>
+        <a href="https://chromewebstore.google.com/detail/replypal/EXTENSION_ID_HERE" onclick="trackCTAClick('pricing_growth')" class="block w-full text-center py-3.5 rounded-full border-2 border-brand-navy text-brand-navy hover:bg-brand-navy/5 font-bold transition-colors">
+          Get Growth
+        </a>
+      </div>
+
       <!-- Team -->
       <div class="bg-white border border-brand-border rounded-3xl p-8 hover:shadow-xl transition-shadow animate-on-scroll relative">
         <h3 class="font-syne font-bold text-xl text-brand-navy mb-2">Team</h3>
@@ -803,6 +822,16 @@
         </a>
       </div>
 
+    </div>
+
+    <!-- One-time credit packs (from same API as extension) -->
+    <div id="pricing-credits-wrap" class="max-w-3xl mx-auto mb-20 hidden animate-on-scroll">
+      <div class="rounded-2xl border border-brand-border bg-brand-bgsoft/50 p-6 md:p-8">
+        <h3 class="font-syne font-bold text-xl text-brand-navy mb-2">Extra credits</h3>
+        <p class="text-brand-textmuted text-[15px] mb-4">One-time credit packs — no subscription. Same prices as in the extension (region-adjusted).</p>
+        <ul id="pricing-credits-list" class="divide-y divide-brand-border text-[15px] text-brand-text"></ul>
+        <p class="text-xs text-gray-500 mt-4">Purchase packs from the ReplyPals extension after install (upgrade flow) or from your account dashboard.</p>
+      </div>
     </div>
 
     <!-- Objection busters (Simple list) -->
@@ -1326,29 +1355,48 @@
     });
   }
 
+  function applyCreditBundles(bundles) {
+    const wrap = document.getElementById('pricing-credits-wrap');
+    const list = document.getElementById('pricing-credits-list');
+    if (!wrap || !list) return;
+    if (!bundles || typeof bundles !== 'object' || !Object.keys(bundles).length) {
+      wrap.classList.add('hidden');
+      return;
+    }
+    const keys = Object.keys(bundles).sort(
+      (a, b) => (bundles[a].credits || 0) - (bundles[b].credits || 0) || a.localeCompare(b)
+    );
+    list.innerHTML = keys.map((k) => {
+      const b = bundles[k];
+      const name = b.display_name || k;
+      const credits = b.credits != null ? b.credits : '';
+      const price = b.display || '';
+      return '<li class="flex flex-wrap justify-between gap-2 py-3"><span><strong>' + rpEscapeHtml(name) + '</strong> — ' + rpEscapeHtml(String(credits)) + ' credits</span><span class="font-semibold text-brand-navy">' + rpEscapeHtml(price) + '</span></li>';
+    }).join('');
+    wrap.classList.remove('hidden');
+  }
+
   function applyPricingData(data) {
     if (!data.plans) return;
     
-    // Update prices
     document.querySelector('.price-starter').innerText = data.plans.starter.display;
     document.querySelector('.price-pro').innerText = data.plans.pro.display;
+    const pg = document.querySelector('.price-growth');
+    if (pg && data.plans.growth) pg.innerText = data.plans.growth.display;
     document.querySelector('.price-team').innerText = data.plans.team.display;
     
-    // Update per/mo
     document.querySelectorAll('.price-per').forEach(el => el.innerText = data.plans.starter.per);
 
     if (data.plan_limit_labels) {
       applyPlanLimitLabels(data.plan_limit_labels);
     }
 
-    // Update country detect
+    applyCreditBundles(data.credit_bundles);
+
     const label = document.getElementById('pricing-country-text');
-    if (label) {
-      let cName = new Intl.DisplayNames(['en'], { type: 'region' }).of(data.country) || data.country;
-      label.innerText = `Showing prices for: ${cName}`;
-      if (data.tier === 'tier1') {
-        document.getElementById('pricing-country-label').classList.add('hidden');
-      }
+    if (label && data.country) {
+      const cName = new Intl.DisplayNames(['en'], { type: 'region' }).of(data.country) || data.country;
+      label.innerText = 'Showing prices for: ' + cName;
     }
   }
 

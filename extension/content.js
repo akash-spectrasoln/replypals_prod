@@ -533,8 +533,8 @@ try {
         /* Upgrade Card inline */
         .rp-upg-title { font-weight: 700; font-size: 15px; margin-bottom: 6px; display: flex; align-items: center; gap: 4px;}
         .rp-upg-feats { font-size: 12px; color: var(--rp-text-grey); margin-bottom: 12px; line-height: 1.6; }
-        .rp-upg-cards { display: flex; gap: 8px; margin-bottom: 16px; }
-        .rp-upg-card { flex: 1; border: 1.5px solid var(--rp-border); border-radius: 8px; padding: 8px; text-align: center; cursor: pointer; opacity: 0.6; }
+        .rp-upg-cards { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+        .rp-upg-card { flex: 1 1 calc(50% - 4px); min-width: 72px; box-sizing: border-box; border: 1.5px solid var(--rp-border); border-radius: 8px; padding: 8px 4px; text-align: center; cursor: pointer; opacity: 0.6; font-size: 11px; }
         .rp-upg-card.active { border-color: var(--rp-primary); background: #FFF3ED; opacity: 1; }
         .rp-upg-input { width: 100%; box-sizing: border-box; padding: 8px; border: 1.5px solid var(--rp-border); border-radius: 8px; margin-bottom: 8px; }
 
@@ -1500,20 +1500,25 @@ try {
             plans = {
               starter: { display: '$2', per: '/mo' },
               pro: { display: '$9', per: '/mo' },
+              growth: { display: '$15', per: '/mo' },
               team: { display: '$25', per: '/mo' },
             };
           }
 
           if (cardsContainer) {
             var L = (pricing && pricing.plan_limit_labels) || {};
-            var st = L.starter || '25 rewrites/mo';
-            var pr = L.pro || '300/mo · 20/day';
-            var tm = L.team ? ('5 seats · ' + L.team) : '5 seats · 150/mo · 15/day';
-            cardsContainer.innerHTML = `
-              <div class="rp-upg-card" data-p="starter">Starter<br><strong style="font-size:14px">${plans.starter.display}${plans.starter.per}</strong><br><span style="font-size:10px;color:var(--rp-text-grey)">${st}</span></div>
-              <div class="rp-upg-card active" data-p="pro">Pro ⭐<br><strong style="font-size:14px">${plans.pro.display}${plans.pro.per}</strong><br><span style="font-size:10px;color:var(--rp-text-grey)">${pr}</span></div>
-              <div class="rp-upg-card" data-p="team">Team<br><strong style="font-size:14px">${plans.team.display}${plans.team.per}</strong><br><span style="font-size:10px;color:var(--rp-text-grey)">${tm}</span></div>
-            `;
+            var order = ['starter', 'pro', 'growth', 'team'].filter(function (k) { return plans[k]; });
+            var cardsHtml = order.map(function (k) {
+              var p = plans[k];
+              var per = p.per || '/mo';
+              var sub = k === 'team'
+                ? (L.team ? ('5 seats · ' + L.team) : '5 seats · 150/mo · 15/day')
+                : (L[k] || '');
+              var label = k === 'pro' ? 'Pro ⭐' : (k.charAt(0).toUpperCase() + k.slice(1));
+              var active = k === 'pro' ? ' active' : '';
+              return '<div class="rp-upg-card' + active + '" data-p="' + k + '">' + label + '<br><strong style="font-size:14px">' + p.display + per + '</strong><br><span style="font-size:10px;color:var(--rp-text-grey)">' + sub + '</span></div>';
+            }).join('');
+            cardsContainer.innerHTML = cardsHtml;
 
             var cards = cardsContainer.querySelectorAll('.rp-upg-card');
             cards.forEach(function (c) {
@@ -1543,7 +1548,8 @@ try {
             var email = v.querySelector('#rp-upg-email').value.trim();
             if (!email || !email.includes('@')) { v.querySelector('#rp-upg-email').style.borderColor = '#EF4444'; setTimeout(function () { v.querySelector('#rp-upg-email').style.borderColor = ''; }, 1500); return; }
             checkoutBtn.textContent = 'Opening…';
-            safeSendMessage({ type: 'createCheckout', payload: { email: email, plan: selectedUpgPlan, tier: selectedTier } }, function (res) {
+            var cc = (pricing && pricing.country) ? String(pricing.country).slice(0, 2).toUpperCase() : 'US';
+            safeSendMessage({ type: 'createCheckout', payload: { email: email, plan: selectedUpgPlan, tier: selectedTier, country_code: cc } }, function (res) {
               var label = selectedUpgPlan.charAt(0).toUpperCase() + selectedUpgPlan.slice(1);
               checkoutBtn.textContent = '⚡ Get ' + label + ' Access';
               if (res && res.success && res.url) {

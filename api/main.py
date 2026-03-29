@@ -1111,6 +1111,7 @@ class CheckoutRequest(BaseModel):
     plan: str = Field(default="pro")
     tier: str = Field(default="tier1")
     user_id: Optional[str] = None
+    country_code: str = Field(default="US", min_length=2, max_length=2)
 
 
 class TrackRequest(BaseModel):
@@ -2208,11 +2209,12 @@ async def checkout_credits(body: CreditsCheckoutRequest):
 @app.post("/create-checkout")
 async def create_checkout(body: CheckoutRequest):
     """Legacy: map tier/plan to ``/checkout/subscription`` using DB ``plan_config`` only (tier ignored)."""
+    cc = (body.country_code or "US").strip().upper()
     return await checkout_subscription(
         SubscriptionCheckoutRequest(
             email=body.email,
             plan_key=body.plan,
-            country_code="US",
+            country_code=cc,
             user_id=body.user_id,
         )
     )
