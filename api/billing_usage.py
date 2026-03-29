@@ -13,7 +13,7 @@ import json
 import time
 import uuid
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, Callable, Literal, Optional
+from typing import Any, Callable, Dict, Literal, Optional, Tuple
 
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
@@ -191,6 +191,44 @@ def _synthetic_email_from_anon_id(anon_id: Optional[str]) -> Optional[str]:
     if not v:
         return None
     return f"anon_{v[:16]}@replypal.internal"
+
+
+def extract_request_identity(
+    body_raw: Any,
+    request: Any,
+    user_email: Optional[str],
+) -> Tuple[str, str, str]:
+    """
+    Email, anon_id, license_key for rate limiting — must match what anonymous clients send.
+
+    - JSON: ``anon_id`` or ``anonId``, ``license_key`` or ``licenseKey``, ``email``.
+    - Headers (if body has no anon): ``X-Anon-Id``, ``X-ReplyPals-Anon-Id``.
+    """
+    if not isinstance(body_raw, dict):
+        body_raw = {}
+
+    def pick(d: Dict[str, Any], *keys: str) -> str:
+        for k in keys:
+            v = d.get(k)
+            if v is not None and str(v).strip():
+                return str(v).strip()
+        return ""
+
+    req_anon = pick(body_raw, "anon_id", "anonId")
+    req_key = pick(body_raw, "license_key", "licenseKey")
+    ue = (user_email or "").strip().lower()
+    be = (body_raw.get("email") or "").strip().lower()
+    req_email = ue or be
+
+    hdrs = getattr(request, "headers", None)
+    if hdrs and not req_anon:
+        req_anon = (hdrs.get("x-anon-id") or hdrs.get("x-replypals-anon-id") or "").strip()
+
+    if not req_email and req_anon:
+        syn = _synthetic_email_from_anon_id(req_anon)
+        req_email = (syn or "").strip().lower()
+
+    return req_email, req_anon, req_key
 
 
 def _resolved_uid_from_auth_sub(user_id: Optional[str]) -> Optional[str]:
@@ -828,15 +866,19 @@ async def check_rate_limit_impl(
         if body_bytes is None:
             body_bytes = await request.body()
         body_raw = json.loads(body_bytes) if body_bytes else {}
-        req_email = (user_email or body_raw.get("email", "")).strip().lower()
-        req_anon = (body_raw.get("anon_id") or "").strip()
-        req_key = (body_raw.get("license_key") or "").strip()
-        if not req_email and req_anon:
-            req_email = _synthetic_email_from_anon_id(req_anon) or ""
+        req_email, req_anon, req_key = extract_request_identity(body_raw, request, user_email)
     except Exception:
         req_email = (user_email or "").strip().lower()
         req_anon = ""
         req_key = ""
+        try:
+            hdrs = getattr(request, "headers", None)
+            if hdrs:
+                req_anon = (hdrs.get("x-anon-id") or hdrs.get("x-replypals-anon-id") or "").strip()
+            if not req_email and req_anon:
+                req_email = (_synthetic_email_from_anon_id(req_anon) or "").strip().lower()
+        except Exception:
+            pass
 
     license_row, bv = await fetch_active_license_row(
         supabase, sb_execute, req_key, user_id, req_email

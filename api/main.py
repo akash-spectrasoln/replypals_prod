@@ -35,7 +35,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Request, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -104,6 +104,7 @@ from billing_usage import (
     serialize_plan_limits_from_snapshot,
     COST_GUARDRAIL_USD,
     check_rate_limit_impl,
+    extract_request_identity,
     record_rewrite_usage,
     ensure_user_profile_row,
     today_total_cost_usd,
@@ -1058,16 +1059,24 @@ if _admin_dir.exists():
 # MODELS
 # ═══════════════════════════════════════════
 class RewriteRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     text: str = Field(..., min_length=1, max_length=5000)
     tone: str = Field(default="confident")
     language: str = Field(default="auto")
-    license_key: Optional[str] = None
+    license_key: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("license_key", "licenseKey"),
+    )
     mode: Optional[str] = Field(default="rewrite")
     email: Optional[str] = None
     source: Optional[str] = Field(default="extension")   # popup | extension | content_selection | content_input | voice
     test_model_override: Optional[dict] = Field(default=None, alias="_test_model_override")
     event_id: Optional[str] = None
-    anon_id: Optional[str] = None
+    anon_id: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("anon_id", "anonId"),
+    )
     instruction: Optional[str] = Field(default=None, max_length=2000)
 
 
@@ -1086,13 +1095,21 @@ class RewriteResponse(BaseModel):
 
 
 class GenerateRequest(BaseModel):
-    prompt:      str
-    tone:        str
-    license_key: Optional[str] = None
-    email:       Optional[str] = None
-    source:      Optional[str] = Field(default="popup")
-    event_id:    Optional[str] = None
-    anon_id:     Optional[str] = None
+    model_config = ConfigDict(populate_by_name=True)
+
+    prompt: str
+    tone: str
+    license_key: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("license_key", "licenseKey"),
+    )
+    email: Optional[str] = None
+    source: Optional[str] = Field(default="popup")
+    event_id: Optional[str] = None
+    anon_id: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("anon_id", "anonId"),
+    )
 
 
 class GenerateResponse(BaseModel):
@@ -1597,12 +1614,16 @@ async def check_rate_limit(
         # Starlette allows reading the body once; check_rate_limit_impl needs the same bytes.
         request.state._replypals_body_bytes = body_bytes
         body_raw = _json.loads(body_bytes) if body_bytes else {}
-        req_email = (user_email or body_raw.get("email", "")).strip().lower()
-        req_anon = (body_raw.get("anon_id") or "").strip()
-        if not req_email and req_anon:
-            req_email = _synthetic_email_from_anon_id(req_anon) or ""
+        req_email, _req_anon, _req_key = extract_request_identity(body_raw, request, user_email)
     except Exception:
         req_email = (user_email or "").strip().lower()
+        try:
+            hdrs = request.headers
+            a = (hdrs.get("x-anon-id") or hdrs.get("x-replypals-anon-id") or "").strip()
+            if not req_email and a:
+                req_email = (_synthetic_email_from_anon_id(a) or "").strip().lower()
+        except Exception:
+            pass
 
     if _supabase_in_backoff():
         used_d, limit_d = _degraded_free_usage_snapshot(user_id, req_email)
