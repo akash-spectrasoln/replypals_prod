@@ -6,6 +6,7 @@ In-memory TTL cache; bust via invalidate_commerce_cache() or POST /admin/config/
 from __future__ import annotations
 
 import asyncio
+import os
 import time
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -104,6 +105,70 @@ class CommerceSnapshot:
 
     def maintenance_mode(self) -> bool:
         return str(self.system.get("maintenance_mode") or "").lower() in ("1", "true", "yes")
+
+
+def _env_stripe_price_for_plan(plan_key: str) -> str:
+    """When ``plan_config.stripe_price_id`` is empty: USD Tier-1 keys (PPP uses coupons, not extra Prices)."""
+    pk = (plan_key or "").strip().lower()
+    keys = (
+        ("starter", ("STRIPE_PRICE_STARTER", "STRIPE_PRICE_T1_STARTER")),
+        ("pro", ("STRIPE_PRICE_PRO", "STRIPE_PRICE_T1_PRO")),
+        ("growth", ("STRIPE_PRICE_GROWTH", "STRIPE_PRICE_T1_GROWTH")),
+        ("team", ("STRIPE_PRICE_TEAM", "STRIPE_PRICE_T1_TEAM")),
+    )
+    for name, envnames in keys:
+        if name == pk:
+            for ek in envnames:
+                v = (os.getenv(ek) or "").strip()
+                if v.startswith("price_"):
+                    return v
+            break
+    return ""
+
+
+def resolve_stripe_price_id_for_plan(plan_key: str, prow: Optional[PlanConfigRow]) -> str:
+    if prow and prow.stripe_price_id:
+        s = str(prow.stripe_price_id).strip()
+        if s:
+            return s
+    return _env_stripe_price_for_plan(plan_key)
+
+
+def plan_key_from_stripe_price_id(price_id: Optional[str], snap: CommerceSnapshot) -> Optional[str]:
+    if not price_id:
+        return None
+    pid = str(price_id).strip()
+    for pname, prow in snap.plans.items():
+        if resolve_stripe_price_id_for_plan(pname, prow) == pid:
+            return pname
+    return None
+
+
+def _env_stripe_price_for_bundle(bundle_key: str) -> str:
+    """When ``credit_bundle_config.stripe_price_id`` is empty: one-time USD list Price."""
+    pk = (bundle_key or "").strip().lower()
+    keys = (
+        ("nano", ("STRIPE_PRICE_BUNDLE_NANO",)),
+        ("starter_c", ("STRIPE_PRICE_BUNDLE_STARTER_C", "STRIPE_BUNDLE_STARTER_C")),
+        ("pro_c", ("STRIPE_PRICE_BUNDLE_PRO_C",)),
+        ("power_c", ("STRIPE_PRICE_BUNDLE_POWER_C",)),
+    )
+    for name, envnames in keys:
+        if name == pk:
+            for ek in envnames:
+                v = (os.getenv(ek) or "").strip()
+                if v.startswith("price_"):
+                    return v
+            break
+    return ""
+
+
+def resolve_stripe_price_id_for_bundle(bundle_key: str, brow: Optional[CreditBundleRow]) -> str:
+    if brow and brow.stripe_price_id:
+        s = str(brow.stripe_price_id).strip()
+        if s:
+            return s
+    return _env_stripe_price_for_bundle(bundle_key)
 
 
 def _row_plan(r: dict[str, Any]) -> PlanConfigRow:

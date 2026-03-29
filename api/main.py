@@ -119,7 +119,10 @@ from commerce_config import (
     get_commerce_snapshot,
     load_commerce_snapshot_sync,
     localize_usd_price,
+    plan_key_from_stripe_price_id,
     resolve_country_row,
+    resolve_stripe_price_id_for_bundle,
+    resolve_stripe_price_id_for_plan,
 )
 
 FREE_BASE_LIMIT = 10
@@ -2076,7 +2079,7 @@ async def get_pricing(request: Request):
             "amount_local": amt_local,
             "base_price_usd": float(prow.base_price_usd),
             "localized_usd": eff_usd,
-            "stripe_price_id": prow.stripe_price_id or "",
+            "stripe_price_id": resolve_stripe_price_id_for_plan(pk, prow) or "",
         }
 
     bundles_out: dict = {}
@@ -2092,6 +2095,7 @@ async def get_pricing(request: Request):
             "currency": ccy,
             "amount_local": amt_local,
             "localized_usd": eff_usd,
+            "stripe_price_id": resolve_stripe_price_id_for_bundle(bk, brow) or "",
         }
 
     pl = serialize_plan_limits_from_snapshot(snap)
@@ -2132,11 +2136,17 @@ async def checkout_subscription(body: SubscriptionCheckoutRequest):
     prow = snap.plans.get(pk)
     if not prow or not prow.is_active:
         raise HTTPException(status_code=400, detail="Unknown or inactive plan_key")
-    price_id = (prow.stripe_price_id or "").strip()
+    price_id = resolve_stripe_price_id_for_plan(pk, prow).strip()
     if not price_id:
         raise HTTPException(
             status_code=400,
-            detail="No Stripe price configured for this plan — set stripe_price_id in admin / plan_config.",
+            detail=(
+                f"No Stripe Price ID for plan '{pk}'. "
+                "Create a recurring USD monthly Price in Stripe, then set "
+                "STRIPE_PRICE_T1_{pk.upper()} or STRIPE_PRICE_{pk.upper()} in .env, "
+                "or stripe_price_id in Admin → Commerce → Plans. "
+                "One Price per plan for all countries; PPP uses Stripe coupons."
+            ),
         )
 
     cc = body.country_code.strip().upper()
@@ -2170,7 +2180,7 @@ async def checkout_subscription(body: SubscriptionCheckoutRequest):
 
 @app.post("/checkout/credits")
 async def checkout_credits(body: CreditsCheckoutRequest):
-    """One-time credit purchase — localized USD amount via ``price_data``."""
+    """One-time credits: ``price_data`` (localized) unless ``stripe_price_id`` / env STRIPE_PRICE_BUNDLE_* (USD + PPP coupon)."""
     if not stripe or not STRIPE_SECRET_KEY:
         raise HTTPException(status_code=500, detail="Stripe not configured")
 
@@ -2182,14 +2192,34 @@ async def checkout_credits(body: CreditsCheckoutRequest):
 
     cc = body.country_code.strip().upper()
     crow, mult = resolve_country_row(snap, cc)
-    unit_usd = localize_usd_price(float(brow.base_price_usd), mult)
-    unit_cents = max(50, int(round(unit_usd * 100)))
+    eff_usd = localize_usd_price(float(brow.base_price_usd), mult)
+    unit_cents = max(50, int(round(eff_usd * 100)))
+    price_id = resolve_stripe_price_id_for_bundle(bk, brow).strip()
+    coupon = crow.stripe_coupon_id if crow.is_active and crow.price_multiplier < 0.999 else None
 
     try:
-        checkout_params = {
+        checkout_params: dict = {
             "customer_email": body.email or None,
             "payment_method_types": ["card"],
-            "line_items": [
+            "mode": "payment",
+            "success_url": f"{FRONTEND_SUCCESS_URL}?session_id={{CHECKOUT_SESSION_ID}}",
+            "cancel_url": FRONTEND_CANCEL_URL,
+            "metadata": {
+                "purchase_type": "credits",
+                "bundle_key": bk,
+                "credits": str(brow.credits),
+                "user_id": body.user_id or "",
+                "country_code": cc,
+                "amount_usd": str(round(eff_usd, 2)),
+            },
+            "client_reference_id": body.user_id,
+        }
+        if price_id:
+            checkout_params["line_items"] = [{"price": price_id, "quantity": 1}]
+            if coupon:
+                checkout_params["discounts"] = [{"coupon": coupon}]
+        else:
+            checkout_params["line_items"] = [
                 {
                     "price_data": {
                         "currency": "usd",
@@ -2201,20 +2231,7 @@ async def checkout_credits(body: CreditsCheckoutRequest):
                     },
                     "quantity": 1,
                 }
-            ],
-            "mode": "payment",
-            "success_url": f"{FRONTEND_SUCCESS_URL}?session_id={{CHECKOUT_SESSION_ID}}",
-            "cancel_url": FRONTEND_CANCEL_URL,
-            "metadata": {
-                "purchase_type": "credits",
-                "bundle_key": bk,
-                "credits": str(brow.credits),
-                "user_id": body.user_id,
-                "country_code": cc,
-                "amount_usd": str(round(unit_usd, 2)),
-            },
-            "client_reference_id": body.user_id,
-        }
+            ]
         session = stripe.checkout.Session.create(**checkout_params)
         return {"url": session.url, "checkout_url": session.url}
     except stripe.error.StripeError as e:
@@ -2239,10 +2256,8 @@ def _plan_from_stripe_price_id(price_id: Optional[str]) -> str:
     if not price_id or not supabase:
         return "starter"
     snap = load_commerce_snapshot_sync(supabase)
-    for pname, prow in snap.plans.items():
-        if prow.stripe_price_id and prow.stripe_price_id == price_id:
-            return pname
-    return "starter"
+    mapped = plan_key_from_stripe_price_id(price_id, snap)
+    return mapped if mapped else "starter"
 
 
 def _normalize_plan_str(p: str) -> str:
