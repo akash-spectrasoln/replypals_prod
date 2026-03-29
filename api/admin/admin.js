@@ -87,8 +87,22 @@ function navigate(page) {
     document.querySelectorAll('.sidebar-item').forEach(b => b.classList.toggle('active', b.dataset.page === page));
     Object.values(chartInstances).forEach(c => { try { c.destroy() } catch (e) { } }); chartInstances = {};
     if (_refreshTimer) clearInterval(_refreshTimer);
-    const render = { dashboard: renderDashboard, users: renderUsers, licenses: renderLicenses, teams: renderTeams, analytics: renderAnalytics, emails: renderEmails, logs: renderLogs, settings: renderSettings, commerce: renderCommerce, pricing: renderPricing, security: renderSecurity };
-    (render[page] || renderDashboard)();
+    // Lazy wrappers: page renderers in admin_pages.js must not be referenced until that script runs
+    // (object literal values like `analytics: renderAnalytics` evaluate immediately and throw on reload).
+    const render = {
+        dashboard: () => renderDashboard(),
+        users: () => renderUsers(),
+        licenses: () => renderLicenses(),
+        teams: () => renderTeams(),
+        analytics: () => renderAnalytics(),
+        emails: () => renderEmails(),
+        logs: () => renderLogs(),
+        settings: () => renderSettings(),
+        commerce: () => renderCommerce(),
+        pricing: () => renderPricing(),
+        security: () => renderSecurity(),
+    };
+    (render[page] || render.dashboard)();
 }
 
 // ─── Helpers ───
