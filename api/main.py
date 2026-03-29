@@ -678,6 +678,21 @@ _ip_geo_cache: dict = {}
 
 
 def _client_ip(request: Request) -> str:
+    """
+    Best-effort visitor IP for geo / PPP. Prefer CDN-provided client IPs (Cloudflare, etc.)
+    over raw socket peer (often the load balancer).
+    """
+    for h in (
+        "cf-connecting-ip",
+        "CF-Connecting-IP",
+        "true-client-ip",
+        "True-Client-IP",
+        "x-real-ip",
+        "X-Real-IP",
+    ):
+        v = (request.headers.get(h) or "").strip()
+        if v and v.lower() not in ("unknown", "none"):
+            return v.split(",")[0].strip()
     xff = request.headers.get("x-forwarded-for") or request.headers.get("X-Forwarded-For") or ""
     if xff:
         return xff.split(",")[0].strip()

@@ -651,7 +651,8 @@ async function handleFetchPricing() {
     const timeout = setTimeout(() => controller.abort(), 2000);
     const res = await fetch(`${API_BASE}/pricing`, {
       method: 'GET',
-      signal: controller.signal
+      signal: controller.signal,
+      cache: 'no-store',
     });
     clearTimeout(timeout);
     if (!res.ok) return { success: true, ...FALLBACK };

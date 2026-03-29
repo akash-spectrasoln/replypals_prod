@@ -1302,29 +1302,36 @@
 
   // 5. Fetch Dynamic Pricing
   async function fetchPricingData() {
+    // Network-first: always get region from current request IP (same as extension).
+    // sessionStorage alone caused US prices to stick while the extension showed IN.
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
     try {
-      const cached = sessionStorage.getItem('rp_pricing');
-      if (cached) {
-        applyPricingData(JSON.parse(cached));
-        return;
-      }
-
-      // Timeout wrapper
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2000);
-
-      const res = await fetch(`${API_BASE}/pricing`, { signal: controller.signal });
+      const res = await fetch(`${API_BASE}/pricing`, {
+        signal: controller.signal,
+        cache: 'no-store',
+      });
       clearTimeout(timeoutId);
-      
       if (!res.ok) throw new Error('API failed');
       const data = await res.json();
-      
-      sessionStorage.setItem('rp_pricing', JSON.stringify(data));
+      try {
+        sessionStorage.setItem('rp_pricing', JSON.stringify(data));
+      } catch (_) { /* private mode */ }
       applyPricingData(data);
     } catch (err) {
-      console.log('Pricing fetch failed, showing US defaults', err);
-      // Fallback is already hardcoded in HTML, just remove the detecting text
-      document.getElementById('pricing-country-label').classList.add('hidden');
+      clearTimeout(timeoutId);
+      console.log('Pricing fetch failed, trying cache', err);
+      const cached = sessionStorage.getItem('rp_pricing');
+      if (cached) {
+        try {
+          applyPricingData(JSON.parse(cached));
+        } catch (_) {
+          document.getElementById('pricing-country-label').classList.add('hidden');
+        }
+      } else {
+        document.getElementById('pricing-country-label').classList.add('hidden');
+      }
     }
   }
 
