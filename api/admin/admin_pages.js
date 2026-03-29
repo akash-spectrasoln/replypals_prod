@@ -740,7 +740,11 @@ async function commerceRenderCountries(panel) {
     </tr>`;
   }).join('')}</tbody>
     </table>
-    <p class="text-xs text-gray-500 p-3 border-t">PPP multiplier applies before display. <strong>FX / USD</strong> = local units per 1 USD (e.g. INR 83, GBP 0.79); leave empty to show PPP-adjusted USD with the symbol. Stripe coupon is regenerated on save when Stripe is available.</p>
+    <p class="text-xs text-gray-500 p-3 border-t space-y-1">
+      <span class="block"><strong>Save</strong> one row at a time. After edits, click <strong>Refresh config cache</strong> (top) so the API reloads Supabase data.</span>
+      PPP multiplier applies before display. <strong>FX / USD</strong> = local units per 1 USD (e.g. INR 83, GBP 0.79); leave empty for PPP-USD only.
+      Coupon column stays <strong>—</strong> until <code class="bg-gray-100 px-1 rounded">STRIPE_SECRET_KEY</code> is set on the API (coupons are optional for subscription checkout now).
+    </p>
   </div>`;
 }
 
@@ -766,8 +770,15 @@ async function commerceSaveCountry(code) {
       const n = parseFloat(fxRaw);
       body.exchange_rate_per_usd = Number.isFinite(n) && n > 0 ? n : null;
     }
-    await api(`/admin/config/countries/${encodeURIComponent(cc)}`, { method: 'PUT', body: JSON.stringify(body) });
-    alert('Saved ' + cc + ' — refresh list to see updated coupon id');
+    const out = await api(`/admin/config/countries/${encodeURIComponent(cc)}`, { method: 'PUT', body: JSON.stringify(body) });
+    const c = out.country || {};
+    const coup = c.stripe_coupon_id ? c.stripe_coupon_id : '— (no Stripe coupon; set STRIPE_SECRET_KEY on API or US×1.0 needs no coupon)';
+    alert(
+      `Saved ${cc}.\n` +
+      `× mult=${c.price_multiplier}  FX=${c.exchange_rate_per_usd != null ? c.exchange_rate_per_usd : '(empty)'}\n` +
+      `Coupon: ${coup}\n\n` +
+      `Then click "Refresh config cache" so live /pricing and checkout pick this up (or wait for cache TTL).`
+    );
     await commerceRenderCountries(document.getElementById('commercePanel'));
   } catch (e) {
     alert('Save failed: ' + (e && e.message ? e.message : String(e)));

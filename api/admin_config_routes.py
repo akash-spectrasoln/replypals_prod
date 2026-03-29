@@ -354,7 +354,36 @@ async def config_put_country(
     invalidate_commerce_cache()
     _cfg_audit(supabase, request, "update_country_ppp", "country_pricing", cc, old, patch)
     nr = supabase.table("country_pricing").select("*").eq("country_code", cc).single().execute()
-    return {"country": nr.data}
+    row = nr.data or {}
+    # Detect silent no-op (e.g. anon key + RLS): row must reflect patch for numeric fields we sent
+    def _fclose(a: Any, b: Any) -> bool:
+        try:
+            if a is None and b is None:
+                return True
+            return abs(float(a) - float(b)) < 1e-6
+        except (TypeError, ValueError):
+            return str(a) == str(b)
+
+    if "price_multiplier" in patch and not _fclose(row.get("price_multiplier"), patch["price_multiplier"]):
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Country row did not update in the database. The API must use SUPABASE_SERVICE_KEY "
+                "(service_role secret from Supabase Dashboard → Settings → API), not the anon key. "
+                "With RLS enabled, the anon key cannot write to country_pricing."
+            ),
+        )
+    if "exchange_rate_per_usd" in patch:
+        want = patch["exchange_rate_per_usd"]
+        got = row.get("exchange_rate_per_usd")
+        if want is None and (got is None or got == ""):
+            pass
+        elif want is not None and not _fclose(got, want):
+            raise HTTPException(
+                status_code=500,
+                detail="exchange_rate_per_usd did not persist. Run migration 20260331_country_pricing_fx.sql or verify SUPABASE_SERVICE_KEY.",
+            )
+    return {"country": row, "ok": True}
 
 
 @router.post("/countries")
