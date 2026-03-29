@@ -170,7 +170,7 @@ async function renderSettings() {
 
     <div class="bg-white rounded-xl shadow-sm p-5" id="planLimitsCard">
       <h3 class="font-semibold text-sm mb-2 text-navy">📊 Rewrite limits (by plan)</h3>
-      <p class="text-xs text-gray-500 mb-3">Saved to Supabase <code class="bg-gray-100 px-1 rounded text-[11px]">app_settings.plan_limits</code>. Both monthly and daily empty ⇒ unlimited. Daily empty ⇒ no daily cap.</p>
+      <p class="text-xs text-gray-500 mb-3">Stored in <code class="bg-gray-100 px-1 rounded text-[11px]">plan_config</code> (same source as the API). Monthly empty ⇒ unlimited. Daily caps are not enforced — leave daily blank.</p>
       <div class="overflow-x-auto">
         <table class="w-full text-xs">
           <thead><tr class="text-left border-b text-gray-400"><th class="p-2">Plan</th><th class="p-2">Monthly rewrites</th><th class="p-2">Daily cap</th></tr></thead>
@@ -199,38 +199,23 @@ async function renderSettings() {
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">${Object.entries(s.stripe_prices || {}).map(([p, v]) => `<div class="bg-gray-50 rounded p-2"><span class="text-gray-400">${p}</span><br><span class="font-mono">${v}</span></div>`).join('')}</div>
     </div>
     <div class="bg-white rounded-xl shadow-sm p-5">
-      <h3 class="font-semibold text-navy mb-4">🌍 Regional Pricing
-        <span class="text-xs text-gray-400 font-normal ml-2">Auto-detects user's country and shows localized prices</span>
-      </h3>
-      <div class="overflow-x-auto mb-4">
-        <table class="w-full text-xs">
-          <thead><tr class="text-left text-gray-400 border-b"><th class="p-2">Tier</th><th class="p-2">Countries</th><th class="p-2">Starter</th><th class="p-2">Pro</th><th class="p-2">Team</th><th class="p-2">Currency</th></tr></thead>
-          <tbody>
-            <tr class="border-b"><td class="p-2 font-semibold">Tier 1</td><td class="p-2 text-gray-500">US, GB, AU, CA, NZ, DE, FR…</td><td class="p-2">$2</td><td class="p-2">$9</td><td class="p-2">$25</td><td class="p-2">USD</td></tr>
-            <tr class="border-b bg-gray-50"><td class="p-2 font-semibold">Tier 2</td><td class="p-2 text-gray-500">AE, SA, QA, PL, CZ, TR…</td><td class="p-2">$1.5</td><td class="p-2">$6</td><td class="p-2">$20</td><td class="p-2">USD</td></tr>
-            <tr class="border-b"><td class="p-2 font-semibold">Tier 3</td><td class="p-2 text-gray-500">IN</td><td class="p-2">₹149</td><td class="p-2">₹329</td><td class="p-2">₹1,999</td><td class="p-2">INR</td></tr>
-            <tr class="border-b bg-gray-50"><td class="p-2 font-semibold">Tier 4</td><td class="p-2 text-gray-500">PH, MY, ID, TH, VN, MM</td><td class="p-2">₱99</td><td class="p-2">₱229</td><td class="p-2">₱1,299</td><td class="p-2">PHP</td></tr>
-            <tr class="border-b"><td class="p-2 font-semibold">Tier 5</td><td class="p-2 text-gray-500">BR, MX, CO, AR, CL, PE</td><td class="p-2">R$9</td><td class="p-2">R$19</td><td class="p-2">R$99</td><td class="p-2">BRL</td></tr>
-            <tr class="border-b bg-gray-50"><td class="p-2 font-semibold">Tier 6</td><td class="p-2 text-gray-500">Fallback (all others)</td><td class="p-2">$1</td><td class="p-2">$3</td><td class="p-2">$12</td><td class="p-2">USD</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="flex items-center gap-3 mb-2">
+      <h3 class="font-semibold text-navy mb-2">🌍 PPP pricing preview</h3>
+      <p class="text-xs text-gray-500 mb-3">Multipliers and Stripe coupons are managed under <button type="button" class="text-rp font-semibold underline" onclick="navigate('commerce')">Commerce</button>. Countries not listed in <code class="bg-gray-100 px-1 rounded text-[11px]">country_pricing</code> use full USD (multiplier 1.0).</p>
+      <div class="flex flex-wrap items-center gap-3 mb-2">
         <label class="text-xs text-gray-400">Preview as country:</label>
         <select id="pricingPreviewCountry" class="border rounded-lg px-3 py-1.5 text-sm" onchange="previewPricingForCountry(this.value)">
           <option value="">— Select —</option>
-          <option value="US">🇺🇸 United States (Tier 1)</option>
-          <option value="GB">🇬🇧 United Kingdom (Tier 1)</option>
-          <option value="AE">🇦🇪 UAE (Tier 2)</option>
-          <option value="TR">🇹🇷 Turkey (Tier 2)</option>
-          <option value="IN">🇮🇳 India (Tier 3)</option>
-          <option value="PH">🇵🇭 Philippines (Tier 4)</option>
-          <option value="BR">🇧🇷 Brazil (Tier 5)</option>
-          <option value="NG">🇳🇬 Nigeria (Tier 6)</option>
+          <option value="US">🇺🇸 United States</option>
+          <option value="GB">🇬🇧 United Kingdom</option>
+          <option value="IN">🇮🇳 India</option>
+          <option value="BR">🇧🇷 Brazil</option>
+          <option value="NG">🇳🇬 Nigeria</option>
+          <option value="DE">🇩🇪 Germany</option>
+          <option value="MX">🇲🇽 Mexico</option>
         </select>
-        <div id="pricingPreviewResult" class="text-sm"></div>
+        <div id="pricingPreviewResult" class="text-sm flex-1 min-w-[200px]"></div>
       </div>
-      <div class="text-xs text-gray-400 mt-2">⚠️ VPN/proxy users automatically see Tier 1 pricing. Non-tier1 users see "Pricing adjusted for your region 🌍".</div>
+      <div class="text-xs text-gray-400 mt-2">VPN users are treated as US for pricing on the public API.</div>
     </div>
     <div class="bg-white rounded-xl shadow-sm p-5">
       <h3 class="font-semibold text-navy mb-4">📧 Email (Gmail SMTP)</h3>
@@ -298,7 +283,7 @@ async function saveAppSettings() {
   } catch (e) { alert(e.message); }
 }
 
-const PLAN_LIMIT_KEYS = ['free', 'starter', 'pro', 'team', 'enterprise'];
+const PLAN_LIMIT_KEYS = ['free', 'starter', 'pro', 'growth', 'team', 'enterprise'];
 async function fillPlanLimitsTable() {
   const tb = document.getElementById('planLimitsBody');
   if (!tb) return;
@@ -388,13 +373,270 @@ async function unblockIp(ip) { try { await api(`/admin/blocked-ips/${ip}`, { met
 // ═══════════════════════════════════════════
 async function previewPricingForCountry(cc) {
   const el = document.getElementById('pricingPreviewResult');
+  if (!el) return;
   if (!cc) { el.textContent = ''; return; }
   el.textContent = 'Loading…';
   try {
-    const d = await api(`/admin/pricing-preview?country=${cc}`);
-    const p = d.plans;
-    el.innerHTML = `<span class="badge ${d.tier === 'tier1' ? 'badge-blue' : 'badge-green'}">${d.tier}</span>
-            Starter: <strong>${p.starter.display}</strong> · Pro: <strong>${p.pro.display}</strong> · Team: <strong>${p.team.display}</strong>
-            ${d.note ? `<span class="text-xs text-gray-400 ml-2">${d.note} 🌍</span>` : ''}`;
+    const d = await api(`/admin/pricing-preview?country=${encodeURIComponent(cc)}`);
+    const plans = d.plans || {};
+    const parts = Object.keys(plans).sort().map((k) => `<strong>${escHtml(k)}</strong>: ${escHtml(plans[k].display || '')}`).join(' · ');
+    el.innerHTML = `<span class="badge badge-blue">×${escHtml(String(d.multiplier ?? 1))}</span> ${parts || '—'}
+            ${d.note ? `<span class="text-xs text-gray-400 ml-2">${escHtml(d.note)}</span>` : ''}`;
   } catch (e) { el.textContent = '⚠️ ' + e.message; }
+}
+
+// ═══════════════════════════════════════════
+// COMMERCE & PPP (plan_config, bundles, countries, system, nudges)
+// ═══════════════════════════════════════════
+let commerceTab = 'plans';
+
+async function renderCommerce() {
+  const el = document.getElementById('pageContent');
+  el.innerHTML = `<div class="space-y-4">
+    <div class="bg-gradient-to-r from-navy to-slate-800 text-white rounded-xl p-5 shadow-sm">
+      <h2 class="font-bold text-lg mb-2">Setup checklist</h2>
+      <ol class="text-sm space-y-1.5 list-decimal list-inside opacity-95">
+        <li>Run Supabase migration <code class="bg-white/10 px-1 rounded text-xs">20260330_commerce_config_ppp.sql</code> (plans, bundles, PPP, system keys).</li>
+        <li>In <strong>Plans</strong>, set each paid plan’s <strong>Stripe Price ID</strong> (from Stripe Dashboard) — checkout requires this.</li>
+        <li>Configure <strong>Countries</strong> multipliers; saving creates/updates Stripe PPP coupons when Stripe is configured.</li>
+        <li>Point the site/extension to <code class="bg-white/10 px-1 rounded text-xs">POST /checkout/subscription</code> and <code class="bg-white/10 px-1 rounded text-xs">POST /checkout/credits</code> with <code class="bg-white/10 px-1 rounded text-xs">country_code</code>.</li>
+        <li>Stripe webhook URL: <code class="bg-white/10 px-1 rounded text-xs">/stripe/webhook</code> — must handle subscription + credit checkouts.</li>
+        <li>After edits here, use <strong>Refresh config cache</strong> (or wait up to TTL, default 5 min).</li>
+      </ol>
+      <div class="mt-4 flex flex-wrap gap-2">
+        <button type="button" onclick="commerceRefreshCache()" class="px-4 py-2 bg-rp text-white rounded-lg text-sm font-medium">↻ Refresh config cache</button>
+        <span id="commerceCacheMsg" class="text-xs self-center opacity-80"></span>
+      </div>
+    </div>
+    <div class="flex flex-wrap gap-2 border-b border-gray-200 pb-2">
+      ${['plans', 'bundles', 'countries', 'system', 'nudges'].map((t) =>
+    `<button type="button" data-ctab="${t}" class="commerce-tab px-4 py-2 rounded-lg text-sm font-medium ${commerceTab === t ? 'bg-rp text-white' : 'bg-white border border-gray-200 text-navy hover:bg-gray-50'}">${{ plans: 'Plans', bundles: 'Credit bundles', countries: 'Countries (PPP)', system: 'System', nudges: 'Upgrade nudges' }[t]}</button>`).join('')}
+    </div>
+    <div id="commercePanel" class="min-h-[320px]">Loading…</div>
+  </div>`;
+  el.querySelectorAll('.commerce-tab').forEach((btn) => {
+    btn.addEventListener('click', () => { commerceTab = btn.getAttribute('data-ctab') || 'plans'; renderCommerce(); });
+  });
+  await commerceLoadPanel();
+}
+
+async function commerceRefreshCache() {
+  const msg = document.getElementById('commerceCacheMsg');
+  if (msg) msg.textContent = 'Refreshing…';
+  try {
+    const d = await api('/admin/config/refresh', { method: 'POST' });
+    if (msg) msg.textContent = `OK · ${d.at || ''}`;
+  } catch (e) {
+    if (msg) msg.textContent = 'Error';
+    alert(e.message);
+  }
+}
+
+async function commerceLoadPanel() {
+  const panel = document.getElementById('commercePanel');
+  if (!panel) return;
+  panel.innerHTML = '<div class="text-center py-8 text-gray-400">Loading…</div>';
+  try {
+    if (commerceTab === 'plans') await commerceRenderPlans(panel);
+    else if (commerceTab === 'bundles') await commerceRenderBundles(panel);
+    else if (commerceTab === 'countries') await commerceRenderCountries(panel);
+    else if (commerceTab === 'system') await commerceRenderSystem(panel);
+    else if (commerceTab === 'nudges') await commerceRenderNudges(panel);
+  } catch (e) {
+    panel.innerHTML = `<div class="text-red-600 text-sm p-4">${escHtml(e.message)}</div>`;
+  }
+}
+
+async function commerceRenderPlans(panel) {
+  const d = await api('/admin/config/plans');
+  const rows = d.plans || [];
+  panel.innerHTML = `<div class="bg-white rounded-xl shadow-sm overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="w-full text-xs text-left">
+        <thead><tr class="border-b bg-gray-50 text-gray-500">
+          <th class="p-2">Key</th><th class="p-2">Name</th><th class="p-2">Monthly</th><th class="p-2">Base $</th><th class="p-2">Seats</th><th class="p-2">Sort</th><th class="p-2">Active</th><th class="p-2 min-w-[140px]">Stripe price id</th><th class="p-2"></th>
+        </tr></thead>
+        <tbody id="commercePlansBody"></tbody>
+      </table>
+    </div>
+    <p class="text-xs text-gray-500 p-3 border-t">Edit a row and click Save. Enterprise monthly blank = unlimited.</p>
+  </div>`;
+  const tb = document.getElementById('commercePlansBody');
+  rows.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  tb.innerHTML = rows.map((r) => {
+    const rawPk = String(r.plan_key || '');
+    const pkDisp = escHtml(rawPk);
+    const m = r.monthly_rewrites;
+    const monthlyVal = m === null || m === undefined ? '' : String(m);
+    return `<tr class="border-b hover:bg-gray-50/80">
+      <td class="p-2 font-mono">${pkDisp}</td>
+      <td class="p-2"><input id="cp-${rawPk}-dn" class="border rounded px-1 py-0.5 w-24" value="${escHtml(r.display_name || '')}"/></td>
+      <td class="p-2"><input id="cp-${rawPk}-mo" type="number" class="border rounded px-1 w-20" value="${monthlyVal}" placeholder="null"/></td>
+      <td class="p-2"><input id="cp-${rawPk}-bp" type="number" step="0.01" class="border rounded px-1 w-20" value="${r.base_price_usd != null ? r.base_price_usd : ''}"/></td>
+      <td class="p-2"><input id="cp-${rawPk}-st" type="number" class="border rounded px-1 w-14" value="${r.seat_count != null ? r.seat_count : 1}"/></td>
+      <td class="p-2"><input id="cp-${rawPk}-so" type="number" class="border rounded px-1 w-14" value="${r.sort_order != null ? r.sort_order : 0}"/></td>
+      <td class="p-2"><input id="cp-${rawPk}-ac" type="checkbox" ${r.is_active !== false ? 'checked' : ''}/></td>
+      <td class="p-2"><input id="cp-${rawPk}-sp" class="border rounded px-1 py-0.5 w-full font-mono text-[10px]" value="${escHtml(r.stripe_price_id || '')}" placeholder="price_…"/></td>
+      <td class="p-2"><button type="button" class="px-2 py-1 bg-navy text-white rounded text-[11px]" onclick="commerceSavePlan(${JSON.stringify(rawPk)})">Save</button></td>
+    </tr>`;
+  }).join('');
+}
+
+async function commerceSavePlan(planKey) {
+  const pk = planKey;
+  const mo = document.getElementById(`cp-${pk}-mo`).value.trim();
+  const body = {
+    display_name: document.getElementById(`cp-${pk}-dn`).value.trim(),
+    monthly_rewrites: mo === '' ? null : parseInt(mo, 10),
+    base_price_usd: parseFloat(document.getElementById(`cp-${pk}-bp`).value) || null,
+    seat_count: parseInt(document.getElementById(`cp-${pk}-st`).value, 10) || 1,
+    sort_order: parseInt(document.getElementById(`cp-${pk}-so`).value, 10) || 0,
+    is_active: document.getElementById(`cp-${pk}-ac`).checked,
+    stripe_price_id: document.getElementById(`cp-${pk}-sp`).value.trim() || null,
+  };
+  await api(`/admin/config/plans/${encodeURIComponent(pk)}`, { method: 'PUT', body: JSON.stringify(body) });
+  alert('Saved plan ' + pk);
+}
+
+async function commerceRenderBundles(panel) {
+  const d = await api('/admin/config/credits');
+  const rows = d.bundles || [];
+  panel.innerHTML = `<div class="bg-white rounded-xl shadow-sm overflow-hidden">
+    <table class="w-full text-xs text-left">
+      <thead><tr class="border-b bg-gray-50 text-gray-500">
+        <th class="p-2">Key</th><th class="p-2">Name</th><th class="p-2">Credits</th><th class="p-2">Base $</th><th class="p-2">Sort</th><th class="p-2">Active</th><th class="p-2 min-w-[120px]">Stripe price id</th><th class="p-2"></th>
+      </tr></thead>
+      <tbody>${rows.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)).map((r) => {
+    const rawBk = String(r.bundle_key || '');
+    const bkDisp = escHtml(rawBk);
+    return `<tr class="border-b">
+      <td class="p-2 font-mono">${bkDisp}</td>
+      <td class="p-2"><input id="cb-${rawBk}-dn" class="border rounded px-1 w-28" value="${escHtml(r.display_name || '')}"/></td>
+      <td class="p-2"><input id="cb-${rawBk}-cr" type="number" class="border rounded px-1 w-20" value="${r.credits != null ? r.credits : 0}"/></td>
+      <td class="p-2"><input id="cb-${rawBk}-bp" type="number" step="0.01" class="border rounded px-1 w-20" value="${r.base_price_usd != null ? r.base_price_usd : ''}"/></td>
+      <td class="p-2"><input id="cb-${rawBk}-so" type="number" class="border rounded px-1 w-14" value="${r.sort_order != null ? r.sort_order : 0}"/></td>
+      <td class="p-2"><input id="cb-${rawBk}-ac" type="checkbox" ${r.is_active !== false ? 'checked' : ''}/></td>
+      <td class="p-2"><input id="cb-${rawBk}-sp" class="border rounded px-1 w-full font-mono text-[10px]" value="${escHtml(r.stripe_price_id || '')}"/></td>
+      <td class="p-2"><button type="button" class="px-2 py-1 bg-navy text-white rounded text-[11px]" onclick="commerceSaveBundle(${JSON.stringify(rawBk)})">Save</button></td>
+    </tr>`;
+  }).join('')}</tbody>
+    </table>
+    <p class="text-xs text-gray-500 p-3 border-t">One-time checkout uses <code class="bg-gray-100 px-1">price_data</code> in USD; optional Stripe Price ID for reference.</p>
+  </div>`;
+}
+
+async function commerceSaveBundle(bundleKey) {
+  const bk = bundleKey;
+  const body = {
+    display_name: document.getElementById(`cb-${bk}-dn`).value.trim(),
+    credits: parseInt(document.getElementById(`cb-${bk}-cr`).value, 10) || 0,
+    base_price_usd: parseFloat(document.getElementById(`cb-${bk}-bp`).value) || 0,
+    sort_order: parseInt(document.getElementById(`cb-${bk}-so`).value, 10) || 0,
+    is_active: document.getElementById(`cb-${bk}-ac`).checked,
+    stripe_price_id: document.getElementById(`cb-${bk}-sp`).value.trim() || null,
+  };
+  await api(`/admin/config/credits/${encodeURIComponent(bk)}`, { method: 'PUT', body: JSON.stringify(body) });
+  alert('Saved bundle ' + bk);
+}
+
+async function commerceRenderCountries(panel) {
+  const d = await api('/admin/config/countries');
+  const rows = d.countries || [];
+  panel.innerHTML = `<div class="bg-white rounded-xl shadow-sm overflow-hidden">
+    <table class="w-full text-xs text-left">
+      <thead><tr class="border-b bg-gray-50 text-gray-500">
+        <th class="p-2">Code</th><th class="p-2">Name</th><th class="p-2">× mult</th><th class="p-2">Sym</th><th class="p-2">Active</th><th class="p-2">Coupon id</th><th class="p-2"></th>
+      </tr></thead>
+      <tbody>${rows.sort((a, b) => (a.country_code || '').localeCompare(b.country_code || '')).map((r) => {
+    const rawCc = String(r.country_code || '');
+    const ccDisp = escHtml(rawCc);
+    return `<tr class="border-b">
+      <td class="p-2 font-mono font-bold">${ccDisp}</td>
+      <td class="p-2"><input id="cc-${rawCc}-nm" class="border rounded px-1 w-32" value="${escHtml(r.country_name || '')}"/></td>
+      <td class="p-2"><input id="cc-${rawCc}-mu" type="number" step="0.001" min="0.01" max="2" class="border rounded px-1 w-20" value="${r.price_multiplier != null ? r.price_multiplier : 1}"/></td>
+      <td class="p-2"><input id="cc-${rawCc}-sy" class="border rounded px-1 w-10" value="${escHtml(r.currency_symbol || '$')}"/></td>
+      <td class="p-2"><input id="cc-${rawCc}-ac" type="checkbox" ${r.is_active !== false ? 'checked' : ''}/></td>
+      <td class="p-2 font-mono text-[10px] text-gray-500">${escHtml(r.stripe_coupon_id || '—')}</td>
+      <td class="p-2"><button type="button" class="px-2 py-1 bg-navy text-white rounded text-[11px]" onclick="commerceSaveCountry(${JSON.stringify(rawCc)})">Save</button></td>
+    </tr>`;
+  }).join('')}</tbody>
+    </table>
+    <p class="text-xs text-gray-500 p-3 border-t">Multiplier applies to list prices; Stripe coupon is regenerated on save when Stripe is available.</p>
+  </div>`;
+}
+
+async function commerceSaveCountry(code) {
+  const cc = code;
+  const body = {
+    country_name: document.getElementById(`cc-${cc}-nm`).value.trim(),
+    price_multiplier: parseFloat(document.getElementById(`cc-${cc}-mu`).value) || 1,
+    currency_symbol: document.getElementById(`cc-${cc}-sy`).value.trim() || '$',
+    is_active: document.getElementById(`cc-${cc}-ac`).checked,
+  };
+  await api(`/admin/config/countries/${encodeURIComponent(cc)}`, { method: 'PUT', body: JSON.stringify(body) });
+  alert('Saved ' + cc + ' — refresh list to see updated coupon id');
+  await commerceRenderCountries(document.getElementById('commercePanel'));
+}
+
+async function commerceRenderSystem(panel) {
+  const d = await api('/admin/config/system');
+  const rows = d.settings || [];
+  panel.innerHTML = `<div class="bg-white rounded-xl shadow-sm p-4 space-y-3">
+    ${rows.map((s) => {
+    const k = escHtml(s.key || '');
+    const v = s.value != null ? String(s.value) : '';
+    const desc = escHtml(s.description || '');
+    return `<div class="border rounded-lg p-3">
+      <div class="flex flex-wrap justify-between gap-2">
+        <code class="text-xs font-mono bg-gray-100 px-1 rounded">${k}</code>
+        <button type="button" class="text-xs px-2 py-1 bg-rp text-white rounded" onclick="commerceSaveSystem('${String(s.key).replace(/'/g, "\\'")}')">Save</button>
+      </div>
+      <p class="text-[11px] text-gray-500 mt-1">${desc}</p>
+      <input id="sys-${k}-val" class="mt-2 w-full border rounded px-2 py-1 text-sm font-mono" value="${escHtml(v)}"/>
+    </div>`;
+  }).join('')}
+  </div>`;
+}
+
+async function commerceSaveSystem(key) {
+  const kid = String(key).replace(/[^a-zA-Z0-9_-]/g, '_');
+  const v = document.getElementById(`sys-${kid}-val`);
+  if (!v) return;
+  await api(`/admin/config/system/${encodeURIComponent(key)}`, { method: 'PUT', body: JSON.stringify({ value: v.value }) });
+  alert('Saved ' + key);
+}
+
+async function commerceRenderNudges(panel) {
+  const d = await api('/admin/config/nudges');
+  const rows = d.nudges || [];
+  panel.innerHTML = `<div class="bg-white rounded-xl shadow-sm overflow-hidden">
+    <table class="w-full text-xs text-left">
+      <thead><tr class="border-b bg-gray-50 text-gray-500">
+        <th class="p-2">From plan</th><th class="p-2">Spend ≥ ($)</th><th class="p-2">Nudge to</th><th class="p-2">Message template</th><th class="p-2"></th>
+      </tr></thead>
+      <tbody>${rows.map((r) => {
+    const rawFp = String(r.from_plan || '');
+    const fpDisp = escHtml(rawFp);
+    return `<tr class="border-b align-top">
+      <td class="p-2 font-mono">${fpDisp}</td>
+      <td class="p-2"><input id="ng-${rawFp}-sp" type="number" step="0.01" class="border rounded px-1 w-20" value="${r.nudge_at_spend_usd != null ? r.nudge_at_spend_usd : ''}"/></td>
+      <td class="p-2"><input id="ng-${rawFp}-to" class="border rounded px-1 w-24" value="${escHtml(r.nudge_to_plan || '')}"/></td>
+      <td class="p-2"><textarea id="ng-${rawFp}-msg" rows="2" class="border rounded px-1 w-full max-w-md text-[11px]">${escHtml(r.message_template || '')}</textarea></td>
+      <td class="p-2"><button type="button" class="px-2 py-1 bg-navy text-white rounded text-[11px]" onclick="commerceSaveNudge(${JSON.stringify(rawFp)})">Save</button></td>
+    </tr>`;
+  }).join('')}</tbody>
+    </table>
+    <p class="text-xs text-gray-500 p-3 border-t">Placeholders: <code class="bg-gray-100 px-1">{spent}</code>, <code class="bg-gray-100 px-1">{plan}</code>, <code class="bg-gray-100 px-1">{price}</code></p>
+  </div>`;
+}
+
+async function commerceSaveNudge(fromPlan) {
+  const fp = fromPlan;
+  const body = {
+    nudge_at_spend_usd: parseFloat(document.getElementById(`ng-${fp}-sp`).value) || 0,
+    nudge_to_plan: document.getElementById(`ng-${fp}-to`).value.trim(),
+    message_template: document.getElementById(`ng-${fp}-msg`).value,
+  };
+  await api(`/admin/config/nudges/${encodeURIComponent(fp)}`, { method: 'PUT', body: JSON.stringify(body) });
+  alert('Saved nudge for ' + fp);
 }

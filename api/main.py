@@ -99,9 +99,9 @@ def _dash_dbg(msg: str, **fields) -> None:
     print(f"[dashboard-debug] {msg} {kv}".strip())
 
 from billing_usage import (
-    DEFAULT_PLAN_LIMITS,
     load_plan_limits_merged,
     serialize_plan_limits_for_public,
+    serialize_plan_limits_from_snapshot,
     COST_GUARDRAIL_USD,
     check_rate_limit_impl,
     record_rewrite_usage,
@@ -113,29 +113,37 @@ from billing_usage import (
     EnterpriseUsageResponse,
     EnterpriseSeatsRequest,
 )
+from commerce_config import (
+    cheapest_active_bundle,
+    format_money,
+    get_commerce_snapshot,
+    load_commerce_snapshot_sync,
+    localize_usd_price,
+    resolve_country_row,
+)
 
-FREE_BASE_LIMIT = DEFAULT_PLAN_LIMITS["free"]["monthly"] or 10
+FREE_BASE_LIMIT = 10
 
 
 def _public_plan_limits_payload() -> dict:
-    """Merged DB plan caps + human labels for marketing and extension."""
-    merged = load_plan_limits_merged(supabase)
-    pl = serialize_plan_limits_for_public(merged)
+    """Plan caps + labels from ``plan_config`` (same source as /rewrite)."""
+    snap = load_commerce_snapshot_sync(supabase)
+    pl = serialize_plan_limits_from_snapshot(snap)
     return {"plan_limits": pl["raw"], "plan_limit_labels": pl["labels"]}
 
 
 def _free_monthly_cap_from_db() -> int:
-    """Free-tier monthly cap from ``app_settings.plan_limits`` (same source as /rewrite enforcement)."""
+    """Free-tier monthly cap from ``plan_config``."""
     if not supabase:
-        return int(DEFAULT_PLAN_LIMITS["free"]["monthly"] or 10)
+        return 10
     try:
         limits = load_plan_limits_merged(supabase)
         m = limits.get("free", {}).get("monthly")
         if m is None:
-            return int(DEFAULT_PLAN_LIMITS["free"]["monthly"] or 10)
+            return 10
         return int(m)
     except Exception:
-        return int(DEFAULT_PLAN_LIMITS["free"]["monthly"] or 10)
+        return 10
 
 
 async def _free_monthly_used_llm_logs(user_id: Optional[str], identity_email: str) -> int:
@@ -184,13 +192,17 @@ async def _free_monthly_used_llm_logs(user_id: Optional[str], identity_email: st
     return len(seen_ids)
 
 
-# Legacy alias — live caps come from Supabase app_settings.plan_limits + DEFAULT_PLAN_LIMITS
-PLAN_POLICY = {
-    "free": {"window": "rolling_30d", "base_limit": FREE_BASE_LIMIT},
-    "starter": {"window": "billing_cycle", "default_limit": DEFAULT_PLAN_LIMITS["starter"]["monthly"] or 25},
-    "pro": {"window": "none", "default_limit": -1},
-    "team": {"window": "none", "default_limit": -1},
-}
+def _plan_policy_limits() -> dict:
+    lim = load_plan_limits_merged(supabase) if supabase else {}
+    return {
+        "free": {"window": "rolling_30d", "base_limit": int((lim.get("free") or {}).get("monthly") or 10)},
+        "starter": {"window": "billing_cycle", "default_limit": int((lim.get("starter") or {}).get("monthly") or 25)},
+        "pro": {"window": "none", "default_limit": -1},
+        "team": {"window": "none", "default_limit": -1},
+    }
+
+
+PLAN_POLICY = {}  # populated at runtime via _plan_policy_limits() where needed
 
 def get_active_model() -> tuple[str, str]:
     """Returns (provider, model_id). Cached for 60s."""
@@ -616,7 +628,7 @@ def _degraded_free_usage_snapshot(user_id: Optional[str], req_email: str) -> tup
     Returns (used_in_window, limit).
     """
     ident = _degraded_identity_key(user_id, req_email)
-    limit = int(DEFAULT_PLAN_LIMITS["free"]["monthly"] or 10)
+    limit = int(_free_monthly_cap_from_db())
     if not ident:
         return (0, limit)
 
@@ -661,91 +673,31 @@ async def _sb_execute(builder, timeout_sec: float = 3.0):
     _mark_supabase_ok()
     return result
 
-# ═══════════════════════════════════════════
-# REGIONAL PRICING TIERS
-# ═══════════════════════════════════════════
-PRICING_TIERS = {
-    'tier1': {
-        'countries': ['US','GB','AU','CA','NZ','DE','FR','NL','SE','NO','DK','FI','CH','IE'],
-        'starter': {'amount': 200,  'currency': 'usd', 'symbol': '$',  'display': '$2'},
-        'pro':     {'amount': 900,  'currency': 'usd', 'symbol': '$',  'display': '$9'},
-        'team':    {'amount': 2500, 'currency': 'usd', 'symbol': '$',  'display': '$25'},
-    },
-    'tier2': {
-        'countries': ['AE','SA','QA','KW','BH','OM','PL','CZ','HU','RO','TR'],
-        'starter': {'amount': 149,  'currency': 'usd', 'symbol': '$',  'display': '$1.5'},
-        'pro':     {'amount': 599,  'currency': 'usd', 'symbol': '$',  'display': '$6'},
-        'team':    {'amount': 1999, 'currency': 'usd', 'symbol': '$',  'display': '$20'},
-    },
-    'tier3': {
-        'countries': ['IN'],
-        'starter': {'amount': 14900,  'currency': 'inr', 'symbol': '₹', 'display': '₹149'},
-        'pro':     {'amount': 32900,  'currency': 'inr', 'symbol': '₹', 'display': '₹329'},
-        'team':    {'amount': 199900, 'currency': 'inr', 'symbol': '₹', 'display': '₹1,999'},
-    },
-    'tier4': {
-        'countries': ['PH','MY','ID','TH','VN','MM'],
-        'starter': {'amount': 9900,  'currency': 'php', 'symbol': '₱', 'display': '₱99'},
-        'pro':     {'amount': 22900, 'currency': 'php', 'symbol': '₱', 'display': '₱229'},
-        'team':    {'amount': 129900,'currency': 'php', 'symbol': '₱', 'display': '₱1,299'},
-    },
-    'tier5': {
-        'countries': ['BR','MX','CO','AR','CL','PE'],
-        'starter': {'amount': 900,  'currency': 'brl', 'symbol': 'R$', 'display': 'R$9'},
-        'pro':     {'amount': 1900, 'currency': 'brl', 'symbol': 'R$', 'display': 'R$19'},
-        'team':    {'amount': 9900, 'currency': 'brl', 'symbol': 'R$', 'display': 'R$99'},
-    },
-    'tier6': {
-        'countries': [],
-        'starter': {'amount': 100,  'currency': 'usd', 'symbol': '$', 'display': '$1'},
-        'pro':     {'amount': 300,  'currency': 'usd', 'symbol': '$', 'display': '$3'},
-        'team':    {'amount': 1200, 'currency': 'usd', 'symbol': '$', 'display': '$12'},
-    },
-}
-
-# Stripe price IDs per tier
-STRIPE_PRICE_MAP = {
-    'tier1': {
-        'starter': os.getenv('STRIPE_PRICE_T1_STARTER', ''),
-        'pro':     os.getenv('STRIPE_PRICE_T1_PRO', ''),
-        'team':    os.getenv('STRIPE_PRICE_T1_TEAM', ''),
-    },
-    'tier2': {
-        'starter': os.getenv('STRIPE_PRICE_T2_STARTER', ''),
-        'pro':     os.getenv('STRIPE_PRICE_T2_PRO', ''),
-        'team':    os.getenv('STRIPE_PRICE_T2_TEAM', ''),
-    },
-    'tier3': {
-        'starter': os.getenv('STRIPE_PRICE_T3_STARTER', ''),
-        'pro':     os.getenv('STRIPE_PRICE_T3_PRO', ''),
-        'team':    os.getenv('STRIPE_PRICE_T3_TEAM', ''),
-    },
-    'tier4': {
-        'starter': os.getenv('STRIPE_PRICE_T4_STARTER', ''),
-        'pro':     os.getenv('STRIPE_PRICE_T4_PRO', ''),
-        'team':    os.getenv('STRIPE_PRICE_T4_TEAM', ''),
-    },
-    'tier5': {
-        'starter': os.getenv('STRIPE_PRICE_T5_STARTER', ''),
-        'pro':     os.getenv('STRIPE_PRICE_T5_PRO', ''),
-        'team':    os.getenv('STRIPE_PRICE_T5_TEAM', ''),
-    },
-    'tier6': {
-        'starter': os.getenv('STRIPE_PRICE_T6_STARTER', ''),
-        'pro':     os.getenv('STRIPE_PRICE_T6_PRO', ''),
-        'team':    os.getenv('STRIPE_PRICE_T6_TEAM', ''),
-    },
-}
-
-# In-memory IP geo-cache (1 hour TTL)
+# IP geo (1h TTL) — PPP amounts from ``plan_config`` × ``country_pricing`` multiplier
 _ip_geo_cache: dict = {}
 
-def get_tier_for_country(country_code: str) -> tuple:
-    """Returns (tier_name, tier_data) for a country code."""
-    for tier_name, tier in PRICING_TIERS.items():
-        if country_code in tier['countries']:
-            return tier_name, tier
-    return 'tier6', PRICING_TIERS['tier6']
+
+def _client_ip(request: Request) -> str:
+    xff = request.headers.get("x-forwarded-for") or request.headers.get("X-Forwarded-For") or ""
+    if xff:
+        return xff.split(",")[0].strip()
+    return (request.client.host if request.client else "") or "127.0.0.1"
+
+
+async def _geo_country_for_ip(ip: str) -> dict:
+    cached = _ip_geo_cache.get(ip)
+    if cached and cached.get("expires_at", 0) > time.time():
+        return cached["data"]
+    geo_data: dict = {"countryCode": "US", "proxy": False, "hosting": False}
+    try:
+        async with httpx.AsyncClient(timeout=2.0) as client:
+            r = await client.get(f"http://ip-api.com/json/{ip}?fields=countryCode,proxy,hosting")
+            if r.status_code == 200:
+                geo_data = r.json()
+    except Exception:
+        pass
+    _ip_geo_cache[ip] = {"data": geo_data, "expires_at": time.time() + 3600}
+    return geo_data
 
 # ═══════════════════════════════════════════
 # APP SETUP
@@ -1109,6 +1061,8 @@ class RewriteResponse(BaseModel):
     rewrites_left: Optional[int] = None
     bonus_rewrites: Optional[int] = None
     monthly_base_limit: Optional[int] = None
+    source_used: Optional[str] = None
+    credit_balance: Optional[int] = None
     usage: Optional[dict] = None
 
 
@@ -1131,14 +1085,33 @@ class GenerateResponse(BaseModel):
     rewrites_left: Optional[int] = None
     bonus_rewrites: Optional[int] = None
     monthly_base_limit: Optional[int] = None
+    source_used: Optional[str] = None
+    credit_balance: Optional[int] = None
     usage: Optional[dict] = None
 
 
+class CreditsCheckoutRequest(BaseModel):
+    bundle_key: str = Field(..., min_length=2, max_length=64)
+    country_code: str = Field(default="US", min_length=2, max_length=2)
+    email: Optional[str] = None
+    user_id: str = Field(..., min_length=10)
+
+
+class SubscriptionCheckoutRequest(BaseModel):
+    email: str
+    plan_key: str = Field(default="pro")
+    country_code: str = Field(default="US", min_length=2, max_length=2)
+    user_id: Optional[str] = None
+
+
 class CheckoutRequest(BaseModel):
+    """Legacy body — prefer ``SubscriptionCheckoutRequest`` (/checkout/subscription)."""
+
     email: str
     plan: str = Field(default="pro")
     tier: str = Field(default="tier1")
     user_id: Optional[str] = None
+
 
 class TrackRequest(BaseModel):
     event: str
@@ -2058,111 +2031,240 @@ async def generate(
 # ═══════════════════════════════════════════
 @app.get("/pricing")
 async def get_pricing(request: Request):
-    """Return localized pricing based on user's IP country. VPN users get tier1."""
-    ip = request.client.host if request.client else "unknown"
-
-    # Check cache first (1 hour TTL)
-    cached = _ip_geo_cache.get(ip)
-    if cached and cached.get('expires_at', 0) > time.time():
-        geo_data = cached['data']
-    else:
-        # Fetch from ip-api.com
-        geo_data = {'countryCode': 'US', 'proxy': False, 'hosting': False}
-        try:
-            async with httpx.AsyncClient(timeout=2.0) as client:
-                r = await client.get(f"http://ip-api.com/json/{ip}?fields=countryCode,proxy,hosting")
-                if r.status_code == 200:
-                    geo_data = r.json()
-        except Exception:
-            pass  # fallback to tier1
-        # Cache for 1 hour
-        _ip_geo_cache[ip] = {'data': geo_data, 'expires_at': time.time() + 3600}
-
-    country = geo_data.get('countryCode', 'US')
-    vpn_detected = geo_data.get('proxy', False) or geo_data.get('hosting', False)
-
-    # VPN users silently get full price
+    """Localized subscription + credit bundle display from ``plan_config`` × PPP (DB)."""
+    ip = _client_ip(request)
+    geo_data = await _geo_country_for_ip(ip)
+    country = (geo_data.get("countryCode") or "US").upper()
+    vpn_detected = bool(geo_data.get("proxy") or geo_data.get("hosting"))
     if vpn_detected:
-        tier_name, tier_data = 'tier1', PRICING_TIERS['tier1']
-    else:
-        tier_name, tier_data = get_tier_for_country(country)
+        country = "US"
 
-    # Build plan response
-    stripe_prices = STRIPE_PRICE_MAP.get(tier_name, STRIPE_PRICE_MAP['tier1'])
-    plans = {}
-    for plan_key in ['starter', 'pro', 'team']:
-        plans[plan_key] = {
-            'display': tier_data[plan_key]['display'],
-            'per': '/mo',
-            'currency': tier_data[plan_key]['currency'],
-            'stripe_price_id': stripe_prices.get(plan_key, ''),
+    snap = await get_commerce_snapshot(supabase, _sb_execute)
+    crow, mult = resolve_country_row(snap, country)
+
+    plans_out: dict = {}
+    for pk, prow in sorted(snap.plans.items(), key=lambda x: x[1].sort_order):
+        if not prow.is_active or pk in ("free", "enterprise"):
+            continue
+        if prow.base_price_usd is None:
+            continue
+        loc = localize_usd_price(float(prow.base_price_usd), mult)
+        plans_out[pk] = {
+            "display_name": prow.display_name,
+            "display": format_money(crow.currency_symbol, loc),
+            "per": "/mo",
+            "currency": "usd",
+            "base_price_usd": float(prow.base_price_usd),
+            "localized_usd": loc,
+            "stripe_price_id": prow.stripe_price_id or "",
         }
 
-    note = None if tier_name == 'tier1' else 'Pricing adjusted for your region'
+    bundles_out: dict = {}
+    for bk, brow in sorted(snap.bundles.items(), key=lambda x: x[1].sort_order):
+        if not brow.is_active:
+            continue
+        loc = localize_usd_price(float(brow.base_price_usd), mult)
+        bundles_out[bk] = {
+            "display_name": brow.display_name,
+            "credits": brow.credits,
+            "display": format_money(crow.currency_symbol, loc),
+            "localized_usd": loc,
+        }
 
-    pl = serialize_plan_limits_for_public(load_plan_limits_merged(supabase))
+    pl = serialize_plan_limits_from_snapshot(snap)
+    note = None if mult >= 0.999 else "Pricing adjusted for your region (PPP)"
 
     return {
-        'country': country,
-        'tier': tier_name,
-        'currency': tier_data['pro']['currency'],
-        'plans': plans,
-        'note': note,
-        'vpn_detected': vpn_detected,
-        'plan_limits': pl['raw'],
-        'plan_limit_labels': pl['labels'],
+        "country": country,
+        "currency_symbol": crow.currency_symbol,
+        "price_multiplier": mult,
+        "plans": plans_out,
+        "credit_bundles": bundles_out,
+        "note": note,
+        "vpn_detected": vpn_detected,
+        "plan_limits": pl["raw"],
+        "plan_limit_labels": pl["labels"],
     }
 
 
 # ═══════════════════════════════════════════
 # CHECKOUT & STRIPE
 # ═══════════════════════════════════════════
-@app.post("/create-checkout")
-async def create_checkout(body: CheckoutRequest):
-    """Create a Stripe Checkout session using tier-based pricing."""
-
-    if not STRIPE_SECRET_KEY:
+@app.post("/checkout/subscription")
+async def checkout_subscription(body: SubscriptionCheckoutRequest):
+    """Stripe Checkout subscription — catalog ``stripe_price_id`` from ``plan_config`` + PPP coupon."""
+    if not stripe or not STRIPE_SECRET_KEY:
         raise HTTPException(status_code=500, detail="Stripe not configured")
 
-    # Look up stripe price ID from tier + plan
-    tier_prices = STRIPE_PRICE_MAP.get(body.tier, STRIPE_PRICE_MAP.get('tier1', {}))
-    price_id = tier_prices.get(body.plan)
+    snap = load_commerce_snapshot_sync(supabase)
+    pk = body.plan_key.strip().lower()
+    prow = snap.plans.get(pk)
+    if not prow or not prow.is_active:
+        raise HTTPException(status_code=400, detail="Unknown or inactive plan_key")
+    price_id = (prow.stripe_price_id or "").strip()
     if not price_id:
-        raise HTTPException(status_code=400, detail=f"No Stripe price configured for {body.tier}/{body.plan}")
+        raise HTTPException(
+            status_code=400,
+            detail="No Stripe price configured for this plan — set stripe_price_id in admin / plan_config.",
+        )
+
+    cc = body.country_code.strip().upper()
+    crow, _mult = resolve_country_row(snap, cc)
+    coupon = crow.stripe_coupon_id if crow.is_active and crow.price_multiplier < 0.999 else None
 
     try:
-        checkout_params = {
+        checkout_params: dict = {
             "customer_email": body.email,
             "payment_method_types": ["card"],
             "line_items": [{"price": price_id, "quantity": 1}],
             "mode": "subscription",
             "success_url": f"{FRONTEND_SUCCESS_URL}?session_id={{CHECKOUT_SESSION_ID}}",
             "cancel_url": FRONTEND_CANCEL_URL,
-            "metadata": {"plan": body.plan, "tier": body.tier},
+            "metadata": {
+                "plan": pk,
+                "plan_key": pk,
+                "purchase_type": "subscription",
+                "country_code": cc,
+            },
         }
+        if coupon:
+            checkout_params["discounts"] = [{"coupon": coupon}]
         if body.user_id:
             checkout_params["client_reference_id"] = body.user_id
         session = stripe.checkout.Session.create(**checkout_params)
-        return {"url": session.url}
+        return {"url": session.url, "checkout_url": session.url}
     except stripe.error.StripeError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@app.post("/checkout/credits")
+async def checkout_credits(body: CreditsCheckoutRequest):
+    """One-time credit purchase — localized USD amount via ``price_data``."""
+    if not stripe or not STRIPE_SECRET_KEY:
+        raise HTTPException(status_code=500, detail="Stripe not configured")
+
+    snap = load_commerce_snapshot_sync(supabase)
+    bk = body.bundle_key.strip().lower()
+    brow = snap.bundles.get(bk)
+    if not brow or not brow.is_active:
+        raise HTTPException(status_code=400, detail="Unknown or inactive bundle_key")
+
+    cc = body.country_code.strip().upper()
+    crow, mult = resolve_country_row(snap, cc)
+    unit_usd = localize_usd_price(float(brow.base_price_usd), mult)
+    unit_cents = max(50, int(round(unit_usd * 100)))
+
+    try:
+        checkout_params = {
+            "customer_email": body.email or None,
+            "payment_method_types": ["card"],
+            "line_items": [
+                {
+                    "price_data": {
+                        "currency": "usd",
+                        "product_data": {
+                            "name": f"ReplyPals credits — {brow.display_name}",
+                            "metadata": {"bundle_key": bk},
+                        },
+                        "unit_amount": unit_cents,
+                    },
+                    "quantity": 1,
+                }
+            ],
+            "mode": "payment",
+            "success_url": f"{FRONTEND_SUCCESS_URL}?session_id={{CHECKOUT_SESSION_ID}}",
+            "cancel_url": FRONTEND_CANCEL_URL,
+            "metadata": {
+                "purchase_type": "credits",
+                "bundle_key": bk,
+                "credits": str(brow.credits),
+                "user_id": body.user_id,
+                "country_code": cc,
+                "amount_usd": str(round(unit_usd, 2)),
+            },
+            "client_reference_id": body.user_id,
+        }
+        session = stripe.checkout.Session.create(**checkout_params)
+        return {"url": session.url, "checkout_url": session.url}
+    except stripe.error.StripeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/create-checkout")
+async def create_checkout(body: CheckoutRequest):
+    """Legacy: map tier/plan to ``/checkout/subscription`` using DB ``plan_config`` only (tier ignored)."""
+    return await checkout_subscription(
+        SubscriptionCheckoutRequest(
+            email=body.email,
+            plan_key=body.plan,
+            country_code="US",
+            user_id=body.user_id,
+        )
+    )
+
+
 def _plan_from_stripe_price_id(price_id: Optional[str]) -> str:
-    if not price_id:
+    if not price_id or not supabase:
         return "starter"
-    for _tier, prices in STRIPE_PRICE_MAP.items():
-        for pname, pid in (prices or {}).items():
-            if pid and pid == price_id:
-                return pname
+    snap = load_commerce_snapshot_sync(supabase)
+    for pname, prow in snap.plans.items():
+        if prow.stripe_price_id and prow.stripe_price_id == price_id:
+            return pname
     return "starter"
 
 
 def _normalize_plan_str(p: str) -> str:
     x = (p or "free").strip().lower()
-    if x not in ("free", "starter", "pro", "team", "enterprise"):
+    allowed = {"free", "starter", "pro", "growth", "team", "enterprise"}
+    if x not in allowed:
         return "starter"
     return x
+
+
+@app.post("/geo/detect")
+async def geo_detect(request: Request, authorization: Optional[str] = Header(None)):
+    """Resolve client IP → country + PPP multiplier + localized plan/bundle prices. Optionally stores on profile."""
+    ip = _client_ip(request)
+    geo_data = await _geo_country_for_ip(ip)
+    country = (geo_data.get("countryCode") or "US").upper()
+    vpn = bool(geo_data.get("proxy") or geo_data.get("hosting"))
+    if vpn:
+        country = "US"
+
+    snap = await get_commerce_snapshot(supabase, _sb_execute)
+    crow, mult = resolve_country_row(snap, country)
+
+    localized_prices: dict = {}
+    for pk, prow in snap.plans.items():
+        if not prow.is_active or prow.base_price_usd is None:
+            continue
+        localized_prices[pk] = format_money(
+            crow.currency_symbol,
+            localize_usd_price(float(prow.base_price_usd), mult),
+        )
+
+    user = get_user_from_token(authorization) if authorization else None
+    uid = user.get("sub") if user else None
+    if supabase and uid:
+        try:
+            supabase.table("user_profiles").upsert(
+                {
+                    "id": uid,
+                    "detected_country": country,
+                    "price_multiplier": mult,
+                },
+                on_conflict="id",
+            ).execute()
+        except Exception as e:
+            print(f"[geo/detect] profile update: {e}")
+
+    return {
+        "country": country,
+        "currency_symbol": crow.currency_symbol,
+        "multiplier": mult,
+        "localized_prices": localized_prices,
+        "vpn_detected": vpn,
+    }
 
 
 def _find_user_id_for_stripe_customer(customer_id: str) -> tuple[Optional[str], Optional[str]]:
@@ -2214,12 +2316,61 @@ async def stripe_webhook(request: Request):
     if et == "checkout.session.completed":
         session = event["data"]["object"]
         email = (session.get("customer_email") or session.get("customer_details", {}).get("email") or "").strip()
-        plan = (session.get("metadata") or {}).get("plan", "pro")
+        meta = session.get("metadata") or {}
+        purchase_type = (meta.get("purchase_type") or "").strip().lower()
+        plan = meta.get("plan_key") or meta.get("plan", "pro")
         user_id = session.get("client_reference_id")
         customer_id = session.get("customer") or ""
+        now_iso = datetime.now(timezone.utc).isoformat()
+
+        if supabase and purchase_type == "credits":
+            bundle_key = (meta.get("bundle_key") or "").strip().lower()
+            credits = int(meta.get("credits") or 0)
+            amt_raw = meta.get("amount_usd")
+            try:
+                amt_usd = float(amt_raw) if amt_raw is not None else 0.0
+            except (TypeError, ValueError):
+                amt_usd = 0.0
+            if user_id and bundle_key and credits > 0:
+                try:
+                    pr = (
+                        supabase.table("user_profiles")
+                        .select("credit_balance,credit_spent_usd")
+                        .eq("id", user_id)
+                        .maybe_single()
+                        .execute()
+                    )
+                    rowp = pr.data or {}
+                    bal = int(rowp.get("credit_balance") or 0)
+                    spent = float(rowp.get("credit_spent_usd") or 0)
+                    supabase.table("user_profiles").update(
+                        {
+                            "credit_balance": bal + credits,
+                            "credit_spent_usd": round(spent + amt_usd, 2),
+                            "stripe_customer_id": customer_id or rowp.get("stripe_customer_id"),
+                        }
+                    ).eq("id", user_id).execute()
+                    supabase.table("credit_transactions").insert(
+                        {
+                            "user_id": user_id,
+                            "stripe_checkout_session_id": session.get("id"),
+                            "bundle_key": bundle_key,
+                            "credits_added": credits,
+                            "amount_paid_usd": round(amt_usd, 2),
+                        }
+                    ).execute()
+                    if email:
+                        _send_email(
+                            email,
+                            "ReplyPals — credits added",
+                            f"{credits} credits were added to your account. They never expire.",
+                            "credits_purchased",
+                        )
+                except Exception as e:
+                    print(f"[stripe webhook] credits checkout: {e}")
+            return {"status": "ok"}
 
         license_key = f"RP-{uuid.uuid4().hex[:8].upper()}-{uuid.uuid4().hex[:8].upper()}"
-        now_iso = datetime.now(timezone.utc).isoformat()
 
         if supabase:
             try:
@@ -2358,24 +2509,50 @@ async def enterprise_usage(user=Depends(_require_enterprise_user)):
     per_seat: list = []
     total_r = 0
     total_c = 0.0
+    team_credits = 0
     for ouid in uids:
         ur = await _sb_execute(
             supabase.table("usage_logs")
-            .select("rewrite_count,estimated_cost_usd")
+            .select("subscription_rewrites,credit_rewrites,rewrite_count,estimated_cost_usd")
             .eq("user_id", ouid)
             .eq("month", month),
             timeout_sec=5.0,
         )
-        sub = ur.data or []
-        rw = sum(int(x.get("rewrite_count") or 0) for x in sub)
-        co = sum(float(x.get("estimated_cost_usd") or 0) for x in sub)
+        rows = ur.data or []
+        sub_w = sum(int(x.get("subscription_rewrites") or 0) for x in rows)
+        cr_w = sum(int(x.get("credit_rewrites") or 0) for x in rows)
+        rw = sum(int(x.get("rewrite_count") or 0) for x in rows)
+        if rw == 0:
+            rw = sub_w + cr_w
+        elif sub_w == 0 and cr_w == 0:
+            sub_w = rw
+        co = sum(float(x.get("estimated_cost_usd") or 0) for x in rows)
         total_r += rw
         total_c += co
-        per_seat.append({"user_id": ouid, "rewrites": rw, "cost": round(co, 6)})
+        prb = await _sb_execute(
+            supabase.table("user_profiles").select("credit_balance").eq("id", ouid).maybe_single(),
+            timeout_sec=3.0,
+        )
+        cb = int((prb.data or {}).get("credit_balance") or 0)
+        team_credits += cb
+        per_seat.append(
+            {
+                "user_id": ouid,
+                "rewrites": rw,
+                "subscription_rewrites": sub_w,
+                "credit_rewrites": cr_w,
+                "cost": round(co, 6),
+                "cost_usd": round(co, 6),
+                "credit_balance": cb,
+            }
+        )
+    tc = round(total_c, 6)
     return EnterpriseUsageResponse(
         total_rewrites=total_r,
         per_seat=per_seat,
-        cost_estimate_usd=round(total_c, 6),
+        cost_estimate_usd=tc,
+        total_cost_estimate_usd=tc,
+        credit_balance=team_credits,
     )
 
 
@@ -2483,7 +2660,7 @@ async def check_usage(body: CheckUsageRequest):
     }
 
     if plan in ("starter", "pro", "team"):
-        result["limit"] = PLAN_POLICY.get(plan, {}).get("default_limit", 50)
+        result["limit"] = _plan_policy_limits().get(plan, {}).get("default_limit", 50)
         try:
             # FIX: was reading rewrite_logs (no license_key filter!) — now reads
             # llm_call_logs which is the actual rate-limit source of truth.
@@ -2981,18 +3158,20 @@ def _send_email(to_email: str, subject: str, body_plain: str, email_type: str = 
             pass
 
 
-def _send_cost_guardrail_alert(user_email: str, user_id: str, total_usd: float) -> None:
+def _send_cost_guardrail_alert(
+    user_email: str, user_id: str, total_usd: float, threshold_usd: float
+) -> None:
     to_addr = os.getenv("SUPPORT_EMAIL", GMAIL_ADDRESS or "support@replypals.in")
     sub = f"[ReplyPals] Cost guardrail — user {user_id[:8]}…"
     body = (
         f"Estimated daily LLM cost for user {user_id} ({user_email or 'no email'}) "
-        f"exceeded ${COST_GUARDRAIL_USD} (now ${total_usd:.4f}). Account paused 24h."
+        f"exceeded ${threshold_usd:.2f} (now ${total_usd:.4f}). Account paused 24h."
     )
     _send_email(to_addr, sub, body, "cost_guardrail")
 
 
 async def _after_llm_usage(rate: dict) -> None:
-    """usage_logs + cost guardrail ($0.50/day estimated → 24h pause + alert)."""
+    """usage_logs + cost guardrail from ``system_config`` (estimated daily cost → pause + alert)."""
     if not supabase or rate.get("degraded"):
         return
     ruid = rate.get("resolved_user_id")
@@ -3001,6 +3180,9 @@ async def _after_llm_usage(rate: dict) -> None:
     if not rate.get("user_id"):
         rate["user_id"] = ruid
     cost = float(rate.get("_last_cost_usd") or 0)
+    usage_src = rate.get("usage_source") or "subscription"
+    if usage_src not in ("subscription", "credits"):
+        usage_src = "subscription"
     await ensure_user_profile_row(
         supabase, _sb_execute, resolved_uid=ruid, email=rate.get("email")
     )
@@ -3010,9 +3192,12 @@ async def _after_llm_usage(rate: dict) -> None:
         user_id=ruid,
         team_id=rate.get("team_id"),
         cost_usd=cost,
+        usage_source=usage_src,
     )
     total = await today_total_cost_usd(supabase, _sb_execute, ruid)
-    if total > COST_GUARDRAIL_USD:
+    snap = await get_commerce_snapshot(supabase, _sb_execute)
+    guard = snap.cost_guardrail_usd()
+    if total > guard:
         await apply_cost_pause(supabase, _sb_execute, ruid)
         try:
             await asyncio.to_thread(
@@ -3020,6 +3205,7 @@ async def _after_llm_usage(rate: dict) -> None:
                 rate.get("email") or "",
                 ruid,
                 total,
+                guard,
             )
         except Exception as e:
             print(f"[cost_guardrail alert] {e}")
@@ -3220,7 +3406,7 @@ async def account_status(authorization: str = Header(None)):
             "plan": "free",
             "active": False,
             "rewrites_used": 0,
-            "rewrites_limit": int(DEFAULT_PLAN_LIMITS["free"]["monthly"] or 10),
+            "rewrites_limit": int(_free_monthly_cap_from_db()),
             "mode": "memory_only",
         }
     email_lower = (email or "").strip().lower()
@@ -3282,7 +3468,7 @@ async def account_status(authorization: str = Header(None)):
             "plan": "free",
             "active": False,
             "rewrites_used": 0,
-            "rewrites_limit": int(DEFAULT_PLAN_LIMITS["free"]["monthly"] or 10),
+            "rewrites_limit": int(_free_monthly_cap_from_db()),
             "degraded": True,
         }
 
@@ -3579,7 +3765,7 @@ async def free_usage_status(body: FreeUsageRequest):
         }
 
     if not supabase:
-        base = int(DEFAULT_PLAN_LIMITS["free"]["monthly"] or 10)
+        base = int(_free_monthly_cap_from_db())
         _usage_dbg("free_usage_fetch", path="memory_only", identity_email=identity_email, used=0, limit=base)
         return {
             "ok": True,

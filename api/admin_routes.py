@@ -130,6 +130,14 @@ class ChangePasswordReq(BaseModel):
     current_password: str
     new_password: str
 
+
+class AdminOverridePlanBody(BaseModel):
+    plan: str
+
+
+class AdminAdjustCreditsBody(BaseModel):
+    delta: int
+
 class UpdateSettingsReq(BaseModel):
     settings: dict
 
@@ -812,6 +820,98 @@ async def delete_user(user_id: str, request: Request, admin=Depends(require_admi
     return {"deleted": True, "details": deleted}
 
 
+@router.put("/users/{user_id}/plan")
+async def admin_override_user_plan(
+    user_id: str,
+    body: AdminOverridePlanBody,
+    request: Request,
+    admin=Depends(require_admin),
+):
+    from main import supabase
+
+    if not supabase:
+        raise HTTPException(500, detail="DB not configured")
+    cur = supabase.table("user_profiles").select("plan").eq("id", user_id).maybe_single().execute()
+    old_plan = (cur.data or {}).get("plan") if cur and cur.data else None
+    supabase.table("user_profiles").update({"plan": body.plan.strip().lower()}).eq("id", user_id).execute()
+    try:
+        supabase.table("admin_audit_log").insert(
+            {
+                "action": "admin_override_plan",
+                "table_name": "user_profiles",
+                "record_id": user_id,
+                "old_value": {"plan": old_plan},
+                "new_value": {"plan": body.plan},
+                "details": {},
+                "ip": request.client.host if request.client else "",
+            }
+        ).execute()
+    except Exception:
+        pass
+    _audit("user_plan_override", {"user_id": user_id, "plan": body.plan}, request.client.host, supabase)
+    return {"ok": True}
+
+
+@router.put("/users/{user_id}/credits")
+async def admin_adjust_user_credits(
+    user_id: str,
+    body: AdminAdjustCreditsBody,
+    request: Request,
+    admin=Depends(require_admin),
+):
+    from main import supabase
+
+    if not supabase:
+        raise HTTPException(500, detail="DB not configured")
+    cur = supabase.table("user_profiles").select("credit_balance").eq("id", user_id).maybe_single().execute()
+    old_bal = int((cur.data or {}).get("credit_balance") or 0) if cur and cur.data else 0
+    new_bal = max(0, old_bal + int(body.delta))
+    supabase.table("user_profiles").update({"credit_balance": new_bal}).eq("id", user_id).execute()
+    try:
+        supabase.table("admin_audit_log").insert(
+            {
+                "action": "admin_adjust_credits",
+                "table_name": "user_profiles",
+                "record_id": user_id,
+                "old_value": {"credit_balance": old_bal},
+                "new_value": {"credit_balance": new_bal, "delta": body.delta},
+                "details": {},
+                "ip": request.client.host if request.client else "",
+            }
+        ).execute()
+    except Exception:
+        pass
+    _audit("user_credits_adjust", {"user_id": user_id, "delta": body.delta}, request.client.host, supabase)
+    return {"ok": True, "credit_balance": new_bal}
+
+
+@router.post("/users/{user_id}/unflag")
+async def admin_unflag_user(user_id: str, request: Request, admin=Depends(require_admin)):
+    from main import supabase
+
+    if not supabase:
+        raise HTTPException(500, detail="DB not configured")
+    supabase.table("user_profiles").update(
+        {"cost_flagged": False, "cost_paused_until": None}
+    ).eq("id", user_id).execute()
+    try:
+        supabase.table("admin_audit_log").insert(
+            {
+                "action": "admin_unflag_cost",
+                "table_name": "user_profiles",
+                "record_id": user_id,
+                "old_value": {"cost_flagged": True},
+                "new_value": {"cost_flagged": False},
+                "details": {},
+                "ip": request.client.host if request.client else "",
+            }
+        ).execute()
+    except Exception:
+        pass
+    _audit("user_unflagged", {"user_id": user_id}, request.client.host, supabase)
+    return {"ok": True}
+
+
 # ═══════════════════════════════════════════
 # LICENSES
 # ═══════════════════════════════════════════
@@ -1028,14 +1128,14 @@ async def update_settings(body: UpdateSettingsReq, request: Request, admin=Depen
 
 @router.get("/plan-limits")
 async def admin_get_plan_limits(admin=Depends(require_admin)):
-    """Effective rewrite limits (defaults merged with ``app_settings.plan_limits`` JSON)."""
+    """Effective monthly rewrite caps from ``plan_config`` (same source as /rewrite)."""
     from main import supabase
-    from billing_usage import DEFAULT_PLAN_LIMITS, load_plan_limits_merged
+    from billing_usage import load_plan_limits_merged
 
     if not supabase:
         raise HTTPException(503, detail="Database not configured")
     merged = load_plan_limits_merged(supabase)
-    return {"limits": merged, "defaults": DEFAULT_PLAN_LIMITS}
+    return {"limits": merged, "defaults": {}, "source": "plan_config"}
 
 
 @router.put("/plan-limits")
@@ -1044,32 +1144,25 @@ async def admin_put_plan_limits(
     request: Request,
     admin=Depends(require_admin),
 ):
-    """Persist plan limits to ``app_settings`` and invalidate the in-process cache."""
-    import json as _json
-
+    """Update ``plan_config.monthly_rewrites`` per plan key and bust commerce cache."""
     from main import supabase
-    from billing_usage import (
-        APP_SETTINGS_PLAN_LIMITS_KEY,
-        DEFAULT_PLAN_LIMITS,
-        merge_plan_limits_from_raw,
-        invalidate_plan_limits_cache,
-    )
+    from billing_usage import load_plan_limits_merged, merge_plan_limits_from_raw, invalidate_plan_limits_cache
 
     if not supabase:
         raise HTTPException(503, detail="Database not configured")
-    base = {k: {"monthly": v["monthly"], "daily": v["daily"]} for k, v in DEFAULT_PLAN_LIMITS.items()}
+    base = load_plan_limits_merged(supabase)
     merged = merge_plan_limits_from_raw(base, body.limits or {})
-    try:
-        supabase.table("app_settings").upsert(
-            {
-                "key": APP_SETTINGS_PLAN_LIMITS_KEY,
-                "value": _json.dumps(merged),
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            },
-            on_conflict="key",
-        ).execute()
-    except Exception as e:
-        raise HTTPException(500, detail=f"Failed to save plan limits: {e}") from e
+    for pk, caps in merged.items():
+        mv = caps.get("monthly")
+        try:
+            supabase.table("plan_config").update(
+                {
+                    "monthly_rewrites": mv,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                }
+            ).eq("plan_key", pk).execute()
+        except Exception:
+            pass
     invalidate_plan_limits_cache()
     _audit("plan_limits_updated", {"plans": list(merged.keys())}, request.client.host, supabase)
     return {"ok": True, "limits": merged}
@@ -1159,25 +1252,37 @@ async def stripe_status(request: Request, admin=Depends(require_admin)):
 
 @router.get("/pricing-preview")
 async def pricing_preview(request: Request, country: str = "US", admin=Depends(require_admin)):
-    """Preview what pricing a user from a specific country would see."""
-    from main import PRICING_TIERS, STRIPE_PRICE_MAP, get_tier_for_country
-    tier_name, tier_data = get_tier_for_country(country.upper())
-    stripe_prices = STRIPE_PRICE_MAP.get(tier_name, STRIPE_PRICE_MAP['tier1'])
+    """Preview PPP-adjusted display amounts from ``plan_config`` + ``country_pricing``."""
+    from main import supabase
+    from commerce_config import (
+        format_money,
+        load_commerce_snapshot_sync,
+        localize_usd_price,
+        resolve_country_row,
+    )
+
+    if not supabase:
+        raise HTTPException(503, detail="Database not configured")
+    snap = load_commerce_snapshot_sync(supabase)
+    crow, mult = resolve_country_row(snap, country.upper())
     plans = {}
-    for plan_key in ['starter', 'pro', 'team']:
-        plans[plan_key] = {
-            'display': tier_data[plan_key]['display'],
-            'per': '/mo',
-            'currency': tier_data[plan_key]['currency'],
-            'stripe_price_id': stripe_prices.get(plan_key, ''),
+    for pk, prow in sorted(snap.plans.items(), key=lambda x: x[1].sort_order):
+        if not prow.is_active or pk in ("free", "enterprise") or prow.base_price_usd is None:
+            continue
+        loc = localize_usd_price(float(prow.base_price_usd), mult)
+        plans[pk] = {
+            "display": format_money(crow.currency_symbol, loc),
+            "per": "/mo",
+            "currency": "usd",
+            "stripe_price_id": prow.stripe_price_id or "",
         }
-    note = None if tier_name == 'tier1' else 'Pricing adjusted for your region'
+    note = None if mult >= 0.999 else "PPP multiplier applied"
     return {
-        'country': country.upper(),
-        'tier': tier_name,
-        'currency': tier_data['pro']['currency'],
-        'plans': plans,
-        'note': note,
+        "country": country.upper(),
+        "multiplier": mult,
+        "currency_symbol": crow.currency_symbol,
+        "plans": plans,
+        "note": note,
     }
 
 
@@ -1440,10 +1545,16 @@ async def audit_log(request: Request, limit: int = 100, admin=Depends(require_ad
     if not supabase:
         return {"logs": []}
     try:
-        r = supabase.table("admin_audit_log").select("*").order("created_at", desc=True).limit(limit).execute()
+        q = supabase.table("admin_audit_log").select("*").order("created_at", desc=True).limit(limit)
+        r = q.execute()
         return {"logs": r.data or []}
     except Exception:
         return {"logs": []}
+
+
+from admin_config_routes import router as admin_commerce_config_router
+
+router.include_router(admin_commerce_config_router)
 
 
 @router.get("/diagnostics")
