@@ -1396,10 +1396,55 @@
       const b = bundles[k];
       const name = b.display_name || k;
       const price = b.display || '';
-      return `<div class="credit-bundle-line"><span>${name} · ${b.credits} cr</span><span>${price}</span></div>`;
+      return `<div class="credit-bundle-line"><span class="credit-bundle-meta">${name} · ${b.credits} cr</span><span class="credit-bundle-price">${price}</span><button type="button" class="credit-bundle-buy" data-bundle-key="${k.replace(/"/g, '')}">Buy</button></div>`;
     }).join('');
     row.style.display = 'block';
   }
+
+  (function bindCreditBundleBuyOnce() {
+    const list = document.getElementById('creditBundlesList');
+    if (!list || list.dataset.creditBuyBound) return;
+    list.dataset.creditBuyBound = '1';
+    list.addEventListener('click', async (e) => {
+      const btn = e.target.closest('.credit-bundle-buy');
+      if (!btn) return;
+      e.preventDefault();
+      const bk = btn.getAttribute('data-bundle-key');
+      if (!bk) return;
+      const pricing = cachedPricing || await fetchPricingData();
+      const countryCode = (pricing && pricing.country) ? String(pricing.country).slice(0, 2).toUpperCase() : 'US';
+      let email = (checkoutEmail && checkoutEmail.value) ? checkoutEmail.value.trim() : '';
+      if (!email) {
+        const st = await chrome.storage.local.get('replypalEmail');
+        email = (st.replypalEmail || '').trim();
+      }
+      btn.disabled = true;
+      const prev = btn.textContent;
+      btn.textContent = '…';
+      try {
+        const resp = await safeSendMessage({
+          type: 'createCreditsCheckout',
+          payload: { bundle_key: bk, country_code: countryCode, email },
+        });
+        if (resp && resp.success && resp.url) {
+          chrome.tabs.create({ url: resp.url });
+          showToast('Opening secure checkout…', 'success');
+        } else if (resp && resp.error === 'signin_required') {
+          showToast('Sign in: open dashboard → connect extension, then try again.', 'error');
+        } else if (resp && resp.error === 'email_required') {
+          showToast('Enter your email above first.', 'error');
+          if (checkoutEmail) checkoutEmail.focus();
+        } else {
+          showToast((resp && resp.message) || (resp && resp.error) || 'Checkout failed', 'error');
+        }
+      } catch (err) {
+        showToast(err.message || 'Checkout failed', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = prev;
+      }
+    });
+  })();
 
   function renderPlanCards(pricing) {
     const plans = pricing.plans || {};

@@ -215,6 +215,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === 'createCreditsCheckout') {
+    handleCreateCreditsCheckout(message.payload)
+      .then(wrapped)
+      .catch(err => wrapped({ success: false, error: err.message }));
+    return true;
+  }
+
   if (message.type === 'verifyLicense') {
     handleVerifyLicense(message.payload)
       .then(wrapped)
@@ -449,6 +456,78 @@ async function handleGenerate(payload) {
     }
     await syncFreeUsageSnapshot(payload.email || null, payload.anon_id || null);
     return { success: true, data };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+function parseJwtSub(token) {
+  try {
+    const parts = String(token || '').split('.');
+    if (parts.length < 2) return null;
+    let b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    while (b64.length % 4) b64 += '=';
+    const json = JSON.parse(atob(b64));
+    const sub = json.sub;
+    return typeof sub === 'string' && sub.length >= 10 ? sub : null;
+  } catch {
+    return null;
+  }
+}
+
+async function handleCreateCreditsCheckout(payload) {
+  const online = await checkOnline();
+  if (!online) {
+    return { success: false, error: 'offline', message: 'ReplyPals is offline. Check your connection.' };
+  }
+  const { replypalSupabaseToken, replypalEmail } = await chrome.storage.local.get([
+    'replypalSupabaseToken',
+    'replypalEmail',
+  ]);
+  const userId = parseJwtSub(replypalSupabaseToken);
+  if (!userId) {
+    return {
+      success: false,
+      error: 'signin_required',
+      message: 'Sign in with ReplyPals (dashboard → connect extension) to buy credits.',
+    };
+  }
+  const email = (payload && payload.email) || replypalEmail || '';
+  if (!email || !email.includes('@')) {
+    return {
+      success: false,
+      error: 'email_required',
+      message: 'Enter your email above or save it in the extension.',
+    };
+  }
+  const bk = (payload && payload.bundle_key) || '';
+  if (!bk) {
+    return { success: false, error: 'bad_request', message: 'Missing bundle.' };
+  }
+  const cc = (payload && (payload.country_code || payload.country))
+    ? String(payload.country_code || payload.country).trim().slice(0, 2).toUpperCase()
+    : 'US';
+  try {
+    const res = await fetch(`${API_BASE}/checkout/credits`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        bundle_key: bk,
+        country_code: cc || 'US',
+        email: email.trim(),
+        user_id: userId,
+      }),
+      cache: 'no-store',
+    });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      const detail = errorData.detail;
+      const msg = typeof detail === 'string' ? detail : (detail && JSON.stringify(detail)) || `Server error: ${res.status}`;
+      throw new Error(msg);
+    }
+    const data = await res.json();
+    track('credits_checkout_started', { bundle: bk });
+    return { success: true, url: data.url || data.checkout_url };
   } catch (err) {
     return { success: false, error: err.message };
   }
