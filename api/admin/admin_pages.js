@@ -653,25 +653,29 @@ async function commerceRenderPlans(panel) {
       <td class="p-2"><input id="cp-${rawPk}-so" type="number" class="border rounded px-1 w-14" value="${r.sort_order != null ? r.sort_order : 0}"/></td>
       <td class="p-2"><input id="cp-${rawPk}-ac" type="checkbox" ${r.is_active !== false ? 'checked' : ''}/></td>
       <td class="p-2"><input id="cp-${rawPk}-sp" class="border rounded px-1 py-0.5 w-full font-mono text-[10px]" value="${escHtml(r.stripe_price_id || '')}" placeholder="price_…"/></td>
-      <td class="p-2"><button type="button" class="px-2 py-1 bg-navy text-white rounded text-[11px]" onclick="commerceSavePlan(${JSON.stringify(rawPk)})">Save</button></td>
+      <td class="p-2"><button type="button" class="px-2 py-1 bg-navy text-white rounded text-[11px]" onclick='commerceSavePlan(${JSON.stringify(rawPk)})'>Save</button></td>
     </tr>`;
   }).join('');
 }
 
 async function commerceSavePlan(planKey) {
   const pk = planKey;
-  const mo = document.getElementById(`cp-${pk}-mo`).value.trim();
-  const body = {
-    display_name: document.getElementById(`cp-${pk}-dn`).value.trim(),
-    monthly_rewrites: mo === '' ? null : parseInt(mo, 10),
-    base_price_usd: parseFloat(document.getElementById(`cp-${pk}-bp`).value) || null,
-    seat_count: parseInt(document.getElementById(`cp-${pk}-st`).value, 10) || 1,
-    sort_order: parseInt(document.getElementById(`cp-${pk}-so`).value, 10) || 0,
-    is_active: document.getElementById(`cp-${pk}-ac`).checked,
-    stripe_price_id: document.getElementById(`cp-${pk}-sp`).value.trim() || null,
-  };
-  await api(`/admin/config/plans/${encodeURIComponent(pk)}`, { method: 'PUT', body: JSON.stringify(body) });
-  alert('Saved plan ' + pk);
+  try {
+    const mo = document.getElementById(`cp-${pk}-mo`).value.trim();
+    const body = {
+      display_name: document.getElementById(`cp-${pk}-dn`).value.trim(),
+      monthly_rewrites: mo === '' ? null : parseInt(mo, 10),
+      base_price_usd: parseFloat(document.getElementById(`cp-${pk}-bp`).value) || null,
+      seat_count: parseInt(document.getElementById(`cp-${pk}-st`).value, 10) || 1,
+      sort_order: parseInt(document.getElementById(`cp-${pk}-so`).value, 10) || 0,
+      is_active: document.getElementById(`cp-${pk}-ac`).checked,
+      stripe_price_id: document.getElementById(`cp-${pk}-sp`).value.trim() || null,
+    };
+    await api(`/admin/config/plans/${encodeURIComponent(pk)}`, { method: 'PUT', body: JSON.stringify(body) });
+    alert('Saved plan ' + pk);
+  } catch (e) {
+    alert('Save failed: ' + (e && e.message ? e.message : String(e)));
+  }
 }
 
 async function commerceRenderBundles(panel) {
@@ -693,7 +697,7 @@ async function commerceRenderBundles(panel) {
       <td class="p-2"><input id="cb-${rawBk}-so" type="number" class="border rounded px-1 w-14" value="${r.sort_order != null ? r.sort_order : 0}"/></td>
       <td class="p-2"><input id="cb-${rawBk}-ac" type="checkbox" ${r.is_active !== false ? 'checked' : ''}/></td>
       <td class="p-2"><input id="cb-${rawBk}-sp" class="border rounded px-1 w-full font-mono text-[10px]" value="${escHtml(r.stripe_price_id || '')}"/></td>
-      <td class="p-2"><button type="button" class="px-2 py-1 bg-navy text-white rounded text-[11px]" onclick="commerceSaveBundle(${JSON.stringify(rawBk)})">Save</button></td>
+      <td class="p-2"><button type="button" class="px-2 py-1 bg-navy text-white rounded text-[11px]" onclick='commerceSaveBundle(${JSON.stringify(rawBk)})'>Save</button></td>
     </tr>`;
   }).join('')}</tbody>
     </table>
@@ -703,22 +707,27 @@ async function commerceRenderBundles(panel) {
 
 async function commerceSaveBundle(bundleKey) {
   const bk = bundleKey;
-  const body = {
-    display_name: document.getElementById(`cb-${bk}-dn`).value.trim(),
-    credits: parseInt(document.getElementById(`cb-${bk}-cr`).value, 10) || 0,
-    base_price_usd: parseFloat(document.getElementById(`cb-${bk}-bp`).value) || 0,
-    sort_order: parseInt(document.getElementById(`cb-${bk}-so`).value, 10) || 0,
-    is_active: document.getElementById(`cb-${bk}-ac`).checked,
-    stripe_price_id: document.getElementById(`cb-${bk}-sp`).value.trim() || null,
-  };
-  await api(`/admin/config/credits/${encodeURIComponent(bk)}`, { method: 'PUT', body: JSON.stringify(body) });
-  alert('Saved bundle ' + bk);
+  try {
+    const body = {
+      display_name: document.getElementById(`cb-${bk}-dn`).value.trim(),
+      credits: parseInt(document.getElementById(`cb-${bk}-cr`).value, 10) || 0,
+      base_price_usd: parseFloat(document.getElementById(`cb-${bk}-bp`).value) || 0,
+      sort_order: parseInt(document.getElementById(`cb-${bk}-so`).value, 10) || 0,
+      is_active: document.getElementById(`cb-${bk}-ac`).checked,
+      stripe_price_id: document.getElementById(`cb-${bk}-sp`).value.trim() || null,
+    };
+    await api(`/admin/config/credits/${encodeURIComponent(bk)}`, { method: 'PUT', body: JSON.stringify(body) });
+    alert('Saved bundle ' + bk);
+  } catch (e) {
+    alert('Save failed: ' + (e && e.message ? e.message : String(e)));
+  }
 }
 
 async function commerceRenderCountries(panel) {
   const d = await api('/admin/config/countries');
   const rows = d.countries || [];
-  panel.innerHTML = `<div class="bg-white rounded-xl shadow-sm overflow-hidden">
+  panel.innerHTML = `<div id="commerceCountrySaveMsg" class="text-sm mb-2 min-h-[1.5rem] rounded-lg px-3 py-2 border border-transparent" role="status" aria-live="polite"></div>
+    <div class="bg-white rounded-xl shadow-sm overflow-hidden">
     <table class="w-full text-xs text-left">
       <thead><tr class="border-b bg-gray-50 text-gray-500">
         <th class="p-2">Code</th><th class="p-2">Name</th><th class="p-2">× mult</th><th class="p-2">CCY</th><th class="p-2">Sym</th><th class="p-2">FX / USD</th><th class="p-2">Active</th><th class="p-2">Coupon id</th><th class="p-2"></th>
@@ -736,7 +745,7 @@ async function commerceRenderCountries(panel) {
       <td class="p-2"><input id="cc-${rawCc}-fx" type="number" step="0.0001" min="0" class="border rounded px-1 w-24" placeholder="e.g. 83" title="Local currency units per 1 USD; empty = PPP-USD display" value="${fxVal}"/></td>
       <td class="p-2"><input id="cc-${rawCc}-ac" type="checkbox" ${r.is_active !== false ? 'checked' : ''}/></td>
       <td class="p-2 font-mono text-[10px] text-gray-500">${escHtml(r.stripe_coupon_id || '—')}</td>
-      <td class="p-2"><button type="button" class="px-2 py-1 bg-navy text-white rounded text-[11px]" onclick="commerceSaveCountry(${JSON.stringify(rawCc)})">Save</button></td>
+      <td class="p-2"><button type="button" class="px-2 py-1 bg-navy text-white rounded text-[11px]" onclick='commerceSaveCountry(${JSON.stringify(rawCc)})'>Save</button></td>
     </tr>`;
   }).join('')}</tbody>
     </table>
@@ -748,13 +757,32 @@ async function commerceRenderCountries(panel) {
   </div>`;
 }
 
+function commerceCountrySetStatus(kind, html) {
+  const el = document.getElementById('commerceCountrySaveMsg');
+  if (!el) return;
+  el.innerHTML = html;
+  const base = 'text-sm mb-2 min-h-[1.5rem] rounded-lg px-3 py-2 border';
+  if (kind === 'ok') el.className = base + ' bg-green-50 border-green-200 text-green-900';
+  else if (kind === 'err') el.className = base + ' bg-red-50 border-red-200 text-red-800';
+  else el.className = base + ' border-transparent text-gray-500';
+}
+
 async function commerceSaveCountry(code) {
   const cc = code;
+  commerceCountrySetStatus('info', '');
   try {
-    const fxRaw = document.getElementById(`cc-${cc}-fx`).value.trim();
-    const muRaw = document.getElementById(`cc-${cc}-mu`).value;
+    const fxEl = document.getElementById(`cc-${cc}-fx`);
+    const muEl = document.getElementById(`cc-${cc}-mu`);
+    if (!fxEl || !muEl) {
+      commerceCountrySetStatus('err', '<strong>Save failed:</strong> could not find row inputs. Reload the page and try again.');
+      alert('Save failed: row not found (reload the page).');
+      return;
+    }
+    const fxRaw = fxEl.value.trim();
+    const muRaw = muEl.value;
     const mu = parseFloat(muRaw);
     if (!Number.isFinite(mu) || mu < 0.001 || mu > 2) {
+      commerceCountrySetStatus('err', '<strong>Invalid multiplier.</strong> Use a number between 0.001 and 2.0.');
       alert('Multiplier must be between 0.001 and 2.0 (check your input).');
       return;
     }
@@ -770,18 +798,21 @@ async function commerceSaveCountry(code) {
       const n = parseFloat(fxRaw);
       body.exchange_rate_per_usd = Number.isFinite(n) && n > 0 ? n : null;
     }
+    commerceCountrySetStatus('info', '<span class="text-gray-600">Saving…</span>');
     const out = await api(`/admin/config/countries/${encodeURIComponent(cc)}`, { method: 'PUT', body: JSON.stringify(body) });
     const c = out.country || {};
-    const coup = c.stripe_coupon_id ? c.stripe_coupon_id : '— (no Stripe coupon; set STRIPE_SECRET_KEY on API or US×1.0 needs no coupon)';
-    alert(
-      `Saved ${cc}.\n` +
-      `× mult=${c.price_multiplier}  FX=${c.exchange_rate_per_usd != null ? c.exchange_rate_per_usd : '(empty)'}\n` +
-      `Coupon: ${coup}\n\n` +
-      `Then click "Refresh config cache" so live /pricing and checkout pick this up (or wait for cache TTL).`
-    );
+    const coup = c.stripe_coupon_id
+      ? escHtml(String(c.stripe_coupon_id))
+      : '— (no Stripe coupon; optional if STRIPE_SECRET_KEY is unset)';
+    const fxDisp = c.exchange_rate_per_usd != null ? escHtml(String(c.exchange_rate_per_usd)) : '(empty)';
+    const okHtml =
+      `<strong>Saved ${escHtml(cc)}</strong> · × mult=${escHtml(String(c.price_multiplier))} · FX=${fxDisp} · Coupon: ${coup}<br/><span class="text-xs text-green-800/90">Click <strong>Refresh config cache</strong> above so /pricing and checkout use this (or wait for cache TTL).</span>`;
     await commerceRenderCountries(document.getElementById('commercePanel'));
+    commerceCountrySetStatus('ok', okHtml);
   } catch (e) {
-    alert('Save failed: ' + (e && e.message ? e.message : String(e)));
+    const m = e && e.message ? e.message : String(e);
+    commerceCountrySetStatus('err', '<strong>Save failed.</strong> ' + escHtml(m));
+    alert('Save failed: ' + m);
   }
 }
 
@@ -809,8 +840,12 @@ async function commerceSaveSystem(key) {
   const kid = String(key).replace(/[^a-zA-Z0-9_-]/g, '_');
   const v = document.getElementById(`sys-${kid}-val`);
   if (!v) return;
-  await api(`/admin/config/system/${encodeURIComponent(key)}`, { method: 'PUT', body: JSON.stringify({ value: v.value }) });
-  alert('Saved ' + key);
+  try {
+    await api(`/admin/config/system/${encodeURIComponent(key)}`, { method: 'PUT', body: JSON.stringify({ value: v.value }) });
+    alert('Saved ' + key);
+  } catch (e) {
+    alert('Save failed: ' + (e && e.message ? e.message : String(e)));
+  }
 }
 
 async function commerceRenderNudges(panel) {
@@ -829,7 +864,7 @@ async function commerceRenderNudges(panel) {
       <td class="p-2"><input id="ng-${rawFp}-sp" type="number" step="0.01" class="border rounded px-1 w-20" value="${r.nudge_at_spend_usd != null ? r.nudge_at_spend_usd : ''}"/></td>
       <td class="p-2"><input id="ng-${rawFp}-to" class="border rounded px-1 w-24" value="${escHtml(r.nudge_to_plan || '')}"/></td>
       <td class="p-2"><textarea id="ng-${rawFp}-msg" rows="2" class="border rounded px-1 w-full max-w-md text-[11px]">${escHtml(r.message_template || '')}</textarea></td>
-      <td class="p-2"><button type="button" class="px-2 py-1 bg-navy text-white rounded text-[11px]" onclick="commerceSaveNudge(${JSON.stringify(rawFp)})">Save</button></td>
+      <td class="p-2"><button type="button" class="px-2 py-1 bg-navy text-white rounded text-[11px]" onclick='commerceSaveNudge(${JSON.stringify(rawFp)})'>Save</button></td>
     </tr>`;
   }).join('')}</tbody>
     </table>
@@ -839,11 +874,15 @@ async function commerceRenderNudges(panel) {
 
 async function commerceSaveNudge(fromPlan) {
   const fp = fromPlan;
-  const body = {
-    nudge_at_spend_usd: parseFloat(document.getElementById(`ng-${fp}-sp`).value) || 0,
-    nudge_to_plan: document.getElementById(`ng-${fp}-to`).value.trim(),
-    message_template: document.getElementById(`ng-${fp}-msg`).value,
-  };
-  await api(`/admin/config/nudges/${encodeURIComponent(fp)}`, { method: 'PUT', body: JSON.stringify(body) });
-  alert('Saved nudge for ' + fp);
+  try {
+    const body = {
+      nudge_at_spend_usd: parseFloat(document.getElementById(`ng-${fp}-sp`).value) || 0,
+      nudge_to_plan: document.getElementById(`ng-${fp}-to`).value.trim(),
+      message_template: document.getElementById(`ng-${fp}-msg`).value,
+    };
+    await api(`/admin/config/nudges/${encodeURIComponent(fp)}`, { method: 'PUT', body: JSON.stringify(body) });
+    alert('Saved nudge for ' + fp);
+  } catch (e) {
+    alert('Save failed: ' + (e && e.message ? e.message : String(e)));
+  }
 }

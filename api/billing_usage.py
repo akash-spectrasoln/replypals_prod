@@ -193,6 +193,25 @@ def _synthetic_email_from_anon_id(anon_id: Optional[str]) -> Optional[str]:
     return f"anon_{v[:16]}@replypal.internal"
 
 
+def _resolved_uid_from_auth_sub(user_id: Optional[str]) -> Optional[str]:
+    """
+    Prefer UUID(sub) for Supabase users; if `sub` is not a UUID, derive a stable id
+    (aligned with main._resolve_user_id_for_db) so monthly caps can be tracked.
+    """
+    if not user_id:
+        return None
+    try:
+        return str(uuid.UUID(str(user_id)))
+    except Exception:
+        pass
+    try:
+        return str(
+            uuid.uuid5(uuid.NAMESPACE_DNS, f"replypals:sub:{str(user_id).strip()}")
+        )
+    except Exception:
+        return None
+
+
 def _today_utc() -> date:
     return datetime.now(timezone.utc).date()
 
@@ -848,10 +867,7 @@ async def check_rate_limit_impl(
 
     resolved_uid: Optional[str] = None
     if user_id:
-        try:
-            resolved_uid = str(uuid.UUID(str(user_id)))
-        except Exception:
-            resolved_uid = None
+        resolved_uid = _resolved_uid_from_auth_sub(user_id)
     if not resolved_uid and license_row and license_row.get("user_id"):
         try:
             resolved_uid = str(uuid.UUID(str(license_row["user_id"])))
@@ -949,7 +965,11 @@ async def check_rate_limit_impl(
     if not resolved_uid:
         raise HTTPException(
             status_code=400,
-            detail="Missing identity: sign in, pass anon_id, email, or a valid license_key.",
+            detail=(
+                "Missing identity: send Authorization: Bearer <JWT>, or JSON body with "
+                "`anon_id` (extension/device id), `email`, or `license_key`. "
+                "Anonymous clients must include `anon_id` or `email` in the same JSON body as the rewrite request."
+            ),
         )
 
     bonus = 0
