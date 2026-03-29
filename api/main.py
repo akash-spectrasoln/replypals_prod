@@ -123,6 +123,7 @@ from commerce_config import (
     resolve_country_row,
     resolve_stripe_price_id_for_bundle,
     resolve_stripe_price_id_for_plan,
+    subscription_checkout_stripe_line,
 )
 
 FREE_BASE_LIMIT = 10
@@ -2127,7 +2128,12 @@ async def get_pricing(request: Request):
 # ═══════════════════════════════════════════
 @app.post("/checkout/subscription")
 async def checkout_subscription(body: SubscriptionCheckoutRequest):
-    """Stripe Checkout subscription — catalog ``stripe_price_id`` from ``plan_config`` + PPP coupon."""
+    """Stripe Checkout subscription — ``price_data`` from ``plan_config`` × country PPP + FX (same as /pricing).
+
+    India (etc.) sees **₹/£/…** on Stripe when ``country_pricing`` has ``exchange_rate_per_usd`` + local
+    ``currency_code``; US and unknown regions see **USD** at PPP-adjusted cents. No catalog ``price_``
+    id or coupon required for this path.
+    """
     if not stripe or not STRIPE_SECRET_KEY:
         raise HTTPException(status_code=500, detail="Stripe not configured")
 
@@ -2136,28 +2142,35 @@ async def checkout_subscription(body: SubscriptionCheckoutRequest):
     prow = snap.plans.get(pk)
     if not prow or not prow.is_active:
         raise HTTPException(status_code=400, detail="Unknown or inactive plan_key")
-    price_id = resolve_stripe_price_id_for_plan(pk, prow).strip()
-    if not price_id:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"No Stripe Price ID for plan '{pk}'. "
-                "Create a recurring USD monthly Price in Stripe, then set "
-                "STRIPE_PRICE_T1_{pk.upper()} or STRIPE_PRICE_{pk.upper()} in .env, "
-                "or stripe_price_id in Admin → Commerce → Plans. "
-                "One Price per plan for all countries; PPP uses Stripe coupons."
-            ),
-        )
+    if prow.base_price_usd is None:
+        raise HTTPException(status_code=400, detail="This plan is not available for subscription checkout")
 
     cc = body.country_code.strip().upper()
-    crow, _mult = resolve_country_row(snap, cc)
-    coupon = crow.stripe_coupon_id if crow.is_active and crow.price_multiplier < 0.999 else None
+    crow, mult = resolve_country_row(snap, cc)
+
+    try:
+        currency, unit_amount, eff_usd = subscription_checkout_stripe_line(prow, crow, mult)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     try:
         checkout_params: dict = {
             "customer_email": body.email,
             "payment_method_types": ["card"],
-            "line_items": [{"price": price_id, "quantity": 1}],
+            "line_items": [
+                {
+                    "price_data": {
+                        "currency": currency,
+                        "unit_amount": unit_amount,
+                        "product_data": {
+                            "name": f"ReplyPals {prow.display_name}",
+                            "metadata": {"plan_key": pk},
+                        },
+                        "recurring": {"interval": "month"},
+                    },
+                    "quantity": 1,
+                }
+            ],
             "mode": "subscription",
             "success_url": f"{FRONTEND_SUCCESS_URL}?session_id={{CHECKOUT_SESSION_ID}}",
             "cancel_url": FRONTEND_CANCEL_URL,
@@ -2166,10 +2179,15 @@ async def checkout_subscription(body: SubscriptionCheckoutRequest):
                 "plan_key": pk,
                 "purchase_type": "subscription",
                 "country_code": cc,
+                "effective_usd": str(round(eff_usd, 2)),
+            },
+            "subscription_data": {
+                "metadata": {
+                    "plan_key": pk,
+                    "plan": pk,
+                },
             },
         }
-        if coupon:
-            checkout_params["discounts"] = [{"coupon": coupon}]
         if body.user_id:
             checkout_params["client_reference_id"] = body.user_id
         session = stripe.checkout.Session.create(**checkout_params)
@@ -2501,18 +2519,22 @@ async def stripe_webhook(request: Request):
     elif et == "customer.subscription.updated":
         sub = event["data"]["object"]
         customer_id = sub.get("customer") or ""
-        items = (sub.get("items") or {}).get("data") or []
-        price_id = items[0].get("price", {}).get("id") if items else None
-        plan = _plan_from_stripe_price_id(price_id)
+        smeta = sub.get("metadata") or {}
+        plan = (smeta.get("plan_key") or smeta.get("plan") or "").strip().lower()
+        if not plan:
+            items = (sub.get("items") or {}).get("data") or []
+            price_id = items[0].get("price", {}).get("id") if items else None
+            plan = _plan_from_stripe_price_id(price_id)
+        plan_norm = _normalize_plan_str(plan)
         uid, _ = _find_user_id_for_stripe_customer(customer_id)
         if supabase and uid:
             try:
-                supabase.table("user_profiles").update({"plan": _normalize_plan_str(plan)}).eq("id", uid).execute()
+                supabase.table("user_profiles").update({"plan": plan_norm}).eq("id", uid).execute()
             except Exception as e:
                 print(f"[stripe webhook] subscription.updated: {e}")
         if supabase and customer_id:
             try:
-                supabase.table("licenses").update({"plan": plan}).eq("stripe_customer_id", customer_id).execute()
+                supabase.table("licenses").update({"plan": plan_norm}).eq("stripe_customer_id", customer_id).execute()
             except Exception as e:
                 print(f"[stripe webhook] licenses plan sync: {e}")
 

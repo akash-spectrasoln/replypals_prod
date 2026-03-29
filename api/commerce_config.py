@@ -343,6 +343,52 @@ def round_for_currency(currency_code: str, amount: float) -> float:
     return round(amount, 2)
 
 
+def subscription_checkout_stripe_line(
+    prow: PlanConfigRow,
+    crow: CountryPricingRow,
+    mult: float,
+) -> tuple[str, int, float]:
+    """
+    Build Stripe Checkout ``price_data`` for a subscription: (currency, unit_amount_minor, effective_usd).
+
+    When the country row has ``exchange_rate_per_usd`` and currency is not USD, the charge is in **local
+    currency** (e.g. INR for India) so Checkout shows ₹… instead of the US list price ($9).
+
+    PPP is applied via ``localize_usd_price`` × multiplier, then converted with FX — **no separate
+    Stripe coupon** (avoids “still $9” when coupons are missing or confusing).
+    """
+    if prow.base_price_usd is None:
+        raise ValueError("plan has no base_price_usd")
+    base = float(prow.base_price_usd)
+    eff_usd = localize_usd_price(base, mult)
+    fx = crow.exchange_rate_per_usd
+    cc = (crow.currency_code or "USD").upper()
+    if fx is not None and float(fx) > 0 and cc != "USD":
+        local_amt = eff_usd * float(fx)
+        local_amt = round_for_currency(cc, local_amt)
+        if cc in _ZERO_DECIMAL:
+            unit = int(round(local_amt))
+        else:
+            unit = int(round(local_amt * 100))
+        unit = max(unit, _stripe_min_minor(cc))
+        return cc.lower(), unit, eff_usd
+    cents = max(50, int(round(eff_usd * 100)))
+    return "usd", cents, eff_usd
+
+
+def _stripe_min_minor(currency: str) -> int:
+    """Rough Stripe minimum charge amounts (minor units)."""
+    return {
+        "USD": 50,
+        "INR": 5000,
+        "GBP": 30,
+        "EUR": 50,
+        "BRL": 50,
+        "MXN": 1000,
+        "NGN": 5000,
+    }.get(currency.upper(), 1)
+
+
 def format_pricing_display(
     row: CountryPricingRow,
     effective_usd: float,
