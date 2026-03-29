@@ -197,25 +197,7 @@ async function renderSettings() {
       <h3 class="font-semibold text-navy mb-4">💳 Stripe</h3>
       <div id="stripeStatus" class="text-sm mb-3"></div>
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">${Object.entries(s.stripe_prices || {}).map(([p, v]) => `<div class="bg-gray-50 rounded p-2"><span class="text-gray-400">${p}</span><br><span class="font-mono">${v}</span></div>`).join('')}</div>
-    </div>
-    <div class="bg-white rounded-xl shadow-sm p-5">
-      <h3 class="font-semibold text-navy mb-2">🌍 PPP pricing preview</h3>
-      <p class="text-xs text-gray-500 mb-3">Multipliers and Stripe coupons are managed under <button type="button" class="text-rp font-semibold underline" onclick="navigate('commerce')">Commerce</button>. Countries not listed in <code class="bg-gray-100 px-1 rounded text-[11px]">country_pricing</code> use full USD (multiplier 1.0).</p>
-      <div class="flex flex-wrap items-center gap-3 mb-2">
-        <label class="text-xs text-gray-400">Preview as country:</label>
-        <select id="pricingPreviewCountry" class="border rounded-lg px-3 py-1.5 text-sm" onchange="previewPricingForCountry(this.value)">
-          <option value="">— Select —</option>
-          <option value="US">🇺🇸 United States</option>
-          <option value="GB">🇬🇧 United Kingdom</option>
-          <option value="IN">🇮🇳 India</option>
-          <option value="BR">🇧🇷 Brazil</option>
-          <option value="NG">🇳🇬 Nigeria</option>
-          <option value="DE">🇩🇪 Germany</option>
-          <option value="MX">🇲🇽 Mexico</option>
-        </select>
-        <div id="pricingPreviewResult" class="text-sm flex-1 min-w-[200px]"></div>
-      </div>
-      <div class="text-xs text-gray-400 mt-2">VPN users are treated as US for pricing on the public API.</div>
+      <p class="text-xs text-gray-500 mt-3">PPP, bundles, and live price strings: <button type="button" class="text-rp font-semibold underline" onclick="navigate('pricing')">Pricing</button> page.</p>
     </div>
     <div class="bg-white rounded-xl shadow-sm p-5">
       <h3 class="font-semibold text-navy mb-4">📧 Email (Gmail SMTP)</h3>
@@ -334,6 +316,21 @@ async function renderSecurity() {
   try {
     const [sessions, blocked, audit] = await Promise.all([api('/admin/sessions'), api('/admin/blocked-ips'), api('/admin/audit-log?limit=50')]);
     el.innerHTML = `<div class="space-y-6">
+    <div class="bg-white rounded-xl shadow-sm p-5 border-2 border-red-200">
+      <h3 class="font-semibold text-red-700 mb-2">⚠️ Danger zone — database cleanup</h3>
+      <p class="text-xs text-gray-600 mb-3">Removes rows from app tables only. Does <strong>not</strong> delete Supabase <code class="bg-gray-100 px-1 rounded">auth.users</code>. Wiping <strong>user profiles</strong> removes billing/usage-linked data (cascades e.g. usage_logs); license <strong>rows</strong> stay but <code class="bg-gray-100 px-1 rounded">user_id</code> is cleared.</p>
+      <label class="text-xs text-gray-500 block mb-1">Scope</label>
+      <select id="bulkCleanScope" class="w-full border rounded-lg px-3 py-2 text-sm mb-2" onchange="updateBulkCleanHint()">
+        <option value="free_users">free_users only (anon / leads / free-tier tracking)</option>
+        <option value="user_profiles">user_profiles only (all signed-in app profiles)</option>
+        <option value="both">Both free_users + user_profiles</option>
+      </select>
+      <label class="text-xs text-gray-500 block mb-1">Type confirmation phrase (shown below)</label>
+      <input id="bulkCleanConfirm" type="text" placeholder="Exact phrase" class="w-full border rounded-lg px-3 py-2 text-sm mb-2 font-mono"/>
+      <p id="bulkCleanPhraseHint" class="text-[11px] text-gray-500 mb-2 font-mono"></p>
+      <button type="button" onclick="updateBulkCleanHint()" class="text-xs text-rp underline mb-2">Show required phrase for selected scope</button><br/>
+      <button type="button" onclick="runBulkUserCleanup()" class="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium">Run cleanup</button>
+    </div>
     <div class="bg-white rounded-xl shadow-sm p-5">
       <h3 class="font-semibold text-navy mb-4">🔑 Change Admin Password</h3>
       <input id="secCurPass" type="password" placeholder="Current password" class="w-full border rounded-lg px-3 py-2 text-sm mb-2"/>
@@ -355,6 +352,7 @@ async function renderSecurity() {
       <div class="overflow-x-auto"><table class="w-full text-xs"><thead><tr class="text-gray-400 border-b"><th class="p-2 text-left">Time</th><th class="p-2 text-left">Action</th><th class="p-2 text-left">Details</th><th class="p-2 text-left">IP</th></tr></thead>
       <tbody>${(audit.logs || []).map(l => `<tr class="border-b"><td class="p-2 text-gray-500">${fmtTime(l.created_at)}</td><td class="p-2"><span class="badge badge-gray">${l.action || ''}</span></td><td class="p-2 font-mono text-[10px] max-w-[200px] truncate">${escHtml(JSON.stringify(l.details || {}))}</td><td class="p-2 text-gray-400">${l.ip || ''}</td></tr>`).join('')}</tbody></table></div>
     </div></div>`;
+    updateBulkCleanHint();
   } catch (e) { el.innerHTML = `<div class="text-center py-12 text-red-500">${escHtml(e.message)}</div>`; }
 }
 async function changePassword() {
@@ -368,11 +366,50 @@ async function revokeSession(jti) { try { await api(`/admin/sessions/${jti}`, { 
 async function revokeAllSessions() { if (!confirm('Revoke all sessions?')) return; try { await api('/admin/sessions', { method: 'DELETE' }); doLogout(); } catch (e) { alert(e.message); } }
 async function unblockIp(ip) { try { await api(`/admin/blocked-ips/${ip}`, { method: 'DELETE' }); renderSecurity(); } catch (e) { alert(e.message); } }
 
+const BULK_CLEAN_PHRASES = {
+  free_users: 'DELETE_ALL_FREE_USERS',
+  user_profiles: 'DELETE_ALL_USER_PROFILES',
+  both: 'DELETE_ALL_APP_USER_DATA',
+};
+function updateBulkCleanHint() {
+  const sc = document.getElementById('bulkCleanScope');
+  const hint = document.getElementById('bulkCleanPhraseHint');
+  if (!sc || !hint) return;
+  const p = BULK_CLEAN_PHRASES[sc.value];
+  hint.textContent = p ? ('Required phrase: ' + p) : '';
+}
+async function runBulkUserCleanup() {
+  const sc = document.getElementById('bulkCleanScope');
+  const inp = document.getElementById('bulkCleanConfirm');
+  if (!sc || !inp) return;
+  const scope = sc.value;
+  const confirm = inp.value.trim();
+  const need = BULK_CLEAN_PHRASES[scope];
+  if (confirm !== need) {
+    alert('Confirmation must match exactly:\n' + need);
+    updateBulkCleanHint();
+    return;
+  }
+  if (!confirm('This permanently deletes data. Continue?')) return;
+  try {
+    const d = await api('/admin/users/bulk-cleanup', {
+      method: 'POST',
+      body: JSON.stringify({ scope, confirm }),
+    });
+    const dr = d.deleted_rows || {};
+    alert('Done. Rows removed: ' + JSON.stringify(dr));
+    inp.value = '';
+  } catch (e) {
+    alert(e.message || String(e));
+  }
+}
+
 // ═══════════════════════════════════════════
-// PRICING PREVIEW
+// PRICING PAGE + PREVIEW
 // ═══════════════════════════════════════════
-async function previewPricingForCountry(cc) {
-  const el = document.getElementById('pricingPreviewResult');
+async function previewPricingForCountry(cc, resultElId) {
+  const id = resultElId || 'pricingPreviewResult';
+  const el = document.getElementById(id);
   if (!el) return;
   if (!cc) { el.textContent = ''; return; }
   el.textContent = 'Loading…';
@@ -383,6 +420,139 @@ async function previewPricingForCountry(cc) {
     el.innerHTML = `<span class="badge badge-blue">×${escHtml(String(d.multiplier ?? 1))}</span> ${parts || '—'}
             ${d.note ? `<span class="text-xs text-gray-400 ml-2">${escHtml(d.note)}</span>` : ''}`;
   } catch (e) { el.textContent = '⚠️ ' + e.message; }
+}
+
+function formatPublicPricingHtml(p) {
+  if (!p || typeof p !== 'object') return '<p class="text-sm text-gray-500">No JSON payload</p>';
+  const country = escHtml(String(p.country || '—'));
+  const ccy = escHtml(String(p.currency_code || ''));
+  const sym = escHtml(String(p.currency_symbol || ''));
+  const fx = p.exchange_rate_per_usd != null ? escHtml(String(p.exchange_rate_per_usd)) : '—';
+  const mult = escHtml(String(p.price_multiplier != null ? p.price_multiplier : '—'));
+  const note = p.note ? `<p class="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-lg p-2 mt-2">${escHtml(p.note)}</p>` : '';
+  const vpn = p.vpn_detected ? '<span class="badge badge-orange ml-2">VPN → US</span>' : '';
+
+  const plans = p.plans || {};
+  const planRows = Object.keys(plans).sort().map((k) => {
+    const x = plans[k] || {};
+    return `<tr class="border-b border-gray-100"><td class="p-2 font-mono text-[11px]">${escHtml(k)}</td><td class="p-2">${escHtml(x.display_name || '')}</td><td class="p-2 font-semibold">${escHtml(x.display || '')}${escHtml(x.per || '')}</td><td class="p-2 text-xs">${escHtml(x.currency || '')}</td><td class="p-2 text-xs tabular-nums">${x.amount_local != null ? escHtml(String(x.amount_local)) : '—'}</td><td class="p-2 text-xs text-gray-500 tabular-nums">${x.localized_usd != null ? escHtml(String(x.localized_usd)) : '—'}</td><td class="p-2 font-mono text-[10px] text-gray-500 truncate max-w-[120px]" title="${escHtml(x.stripe_price_id || '')}">${escHtml(x.stripe_price_id || '—')}</td></tr>`;
+  }).join('');
+
+  const bundles = p.credit_bundles || {};
+  const bundleRows = Object.keys(bundles).sort((a, b) => ((bundles[a].credits || 0) - (bundles[b].credits || 0))).map((k) => {
+    const x = bundles[k] || {};
+    return `<tr class="border-b border-gray-100"><td class="p-2 font-mono text-[11px]">${escHtml(k)}</td><td class="p-2">${escHtml(x.display_name || '')}</td><td class="p-2 tabular-nums">${x.credits != null ? escHtml(String(x.credits)) : '—'}</td><td class="p-2 font-semibold">${escHtml(x.display || '')}</td><td class="p-2 text-xs">${escHtml(x.currency || '')}</td></tr>`;
+  }).join('');
+
+  const labels = p.plan_limit_labels || {};
+  const labelRows = Object.keys(labels).sort().map((k) => `<tr class="border-b border-gray-100"><td class="p-2 font-mono text-[11px] capitalize">${escHtml(k)}</td><td class="p-2 text-sm">${escHtml(String(labels[k]))}</td></tr>`).join('');
+
+  return `<div class="text-xs text-gray-600 space-y-1 mb-3">
+    <div><strong>Geo country</strong> (from this request’s IP): ${country} ${vpn}</div>
+    <div><strong>Currency</strong>: ${ccy} ${sym ? '(' + sym + ')' : ''} · <strong>FX / USD</strong>: ${fx} · <strong>PPP mult</strong>: ${mult}</div>
+  </div>${note}
+  <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wide mt-4 mb-1">Subscription plans (public)</h4>
+  <div class="overflow-x-auto border border-gray-100 rounded-lg">
+    <table class="w-full text-xs text-left"><thead><tr class="bg-gray-50 text-gray-500"><th class="p-2">Key</th><th class="p-2">Name</th><th class="p-2">Display</th><th class="p-2">CCY</th><th class="p-2">Amt local</th><th class="p-2">PPP USD</th><th class="p-2">Stripe price</th></tr></thead><tbody>${planRows || '<tr><td colspan="7" class="p-3 text-gray-400">No plans</td></tr>'}</tbody></table>
+  </div>
+  <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wide mt-4 mb-1">Credit bundles</h4>
+  <div class="overflow-x-auto border border-gray-100 rounded-lg">
+    <table class="w-full text-xs text-left"><thead><tr class="bg-gray-50 text-gray-500"><th class="p-2">Key</th><th class="p-2">Name</th><th class="p-2">Credits</th><th class="p-2">Display</th><th class="p-2">CCY</th></tr></thead><tbody>${bundleRows || '<tr><td colspan="5" class="p-3 text-gray-400">No bundles</td></tr>'}</tbody></table>
+  </div>
+  <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wide mt-4 mb-1">Plan limit labels (same payload)</h4>
+  <div class="overflow-x-auto border border-gray-100 rounded-lg max-h-48 overflow-y-auto">
+    <table class="w-full text-xs text-left"><thead><tr class="bg-gray-50 text-gray-500"><th class="p-2">Plan</th><th class="p-2">Label</th></tr></thead><tbody>${labelRows || '<tr><td colspan="2" class="p-3 text-gray-400">—</td></tr>'}</tbody></table>
+  </div>`;
+}
+
+async function fillPricingPlanLimitsReadonly() {
+  const tb = document.getElementById('pricingPlanLimitsReadonly');
+  if (!tb) return;
+  try {
+    const d = await api('/admin/plan-limits');
+    const L = d.limits || {};
+    tb.innerHTML = PLAN_LIMIT_KEYS.map((p) => {
+      const row = L[p] || {};
+      const m = row.monthly;
+      const mDisp = m === null || m === undefined ? '— (unlimited)' : escHtml(String(m));
+      return `<tr class="border-b"><td class="p-2 capitalize font-medium">${escHtml(p)}</td><td class="p-2">${mDisp}</td></tr>`;
+    }).join('');
+  } catch (e) {
+    tb.innerHTML = `<tr><td colspan="2" class="p-2 text-red-500">${escHtml(e.message)}</td></tr>`;
+  }
+}
+
+async function renderPricing() {
+  const el = document.getElementById('pageContent');
+  el.innerHTML = '<div class="text-center py-12 text-gray-400">Loading pricing…</div>';
+  let publicHtml = '';
+  try {
+    const r = await fetch(`${API_BASE}/pricing`, { cache: 'no-store' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const p = await r.json();
+    publicHtml = formatPublicPricingHtml(p);
+  } catch (e) {
+    publicHtml = `<p class="text-sm text-red-600">Could not load <code class="bg-red-50 px-1 rounded">GET /pricing</code>: ${escHtml(e.message)}</p>`;
+  }
+
+  el.innerHTML = `<div class="space-y-6">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h2 class="font-bold text-lg text-navy">Pricing &amp; regional display</h2>
+        <p class="text-xs text-gray-500 mt-1">What the site and extension consume from the API. Edit source data under Commerce or plan caps under Settings.</p>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <button type="button" onclick="navigate('commerce')" class="px-4 py-2 bg-rp text-white rounded-lg text-sm font-medium">Edit Commerce (DB)</button>
+        <button type="button" onclick="navigate('settings')" class="px-4 py-2 border border-gray-200 rounded-lg text-sm text-navy hover:bg-gray-50">Plan limits (Settings)</button>
+        <button type="button" onclick="commerceRefreshCache()" class="px-4 py-2 border border-gray-200 rounded-lg text-sm text-navy hover:bg-gray-50">↻ Refresh API cache</button>
+        <span id="pricingCacheMsg" class="text-xs text-gray-500 self-center"></span>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-sm p-5 border border-gray-100">
+      <h3 class="font-semibold text-navy mb-1">🌐 Public <code class="bg-gray-100 px-1 rounded text-sm">GET /pricing</code></h3>
+      <p class="text-xs text-gray-500 mb-3">Resolved using <strong>this browser’s</strong> IP (same as opening your marketing site from here). For a chosen country code, use the admin preview below.</p>
+      <div id="pricingPublicMount">${publicHtml}</div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-sm p-5">
+      <h3 class="font-semibold text-navy mb-2">🌍 Admin preview by country</h3>
+      <p class="text-xs text-gray-500 mb-3">Uses <code class="bg-gray-100 px-1 rounded text-[11px]">/admin/pricing-preview</code> — same math as the app, without IP geo. PPP multipliers, FX, and Stripe coupons are edited under <button type="button" class="text-rp font-semibold underline" onclick="navigate('commerce')">Commerce → Countries</button>.</p>
+      <div class="flex flex-wrap items-center gap-3 mb-2">
+        <label class="text-xs text-gray-400">Country</label>
+        <select id="pricingPageCountry" class="border rounded-lg px-3 py-1.5 text-sm" onchange="previewPricingForCountry(this.value, 'pricingPagePreviewResult')">
+          <option value="">— Select —</option>
+          <option value="US">🇺🇸 United States</option>
+          <option value="GB">🇬🇧 United Kingdom</option>
+          <option value="IN">🇮🇳 India</option>
+          <option value="BR">🇧🇷 Brazil</option>
+          <option value="NG">🇳🇬 Nigeria</option>
+          <option value="DE">🇩🇪 Germany</option>
+          <option value="MX">🇲🇽 Mexico</option>
+        </select>
+        <div id="pricingPagePreviewResult" class="text-sm flex-1 min-w-[200px]"></div>
+      </div>
+      <p class="text-xs text-gray-400">End users on VPN/hosting IPs are forced to US pricing on the public API.</p>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-sm p-5">
+      <h3 class="font-semibold text-navy mb-2">📊 Monthly rewrite caps (<code class="bg-gray-100 px-1 rounded text-xs">plan_config</code>)</h3>
+      <p class="text-xs text-gray-500 mb-3">Read-only here. To change values use <button type="button" class="text-rp font-semibold underline" onclick="navigate('settings')">Settings</button> → Rewrite limits.</p>
+      <div class="overflow-x-auto max-w-xl border border-gray-100 rounded-lg">
+        <table class="w-full text-xs text-left">
+          <thead><tr class="bg-gray-50 text-gray-500"><th class="p-2">Plan</th><th class="p-2">Monthly rewrites</th></tr></thead>
+          <tbody id="pricingPlanLimitsReadonly"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="bg-slate-50 rounded-xl p-5 text-xs text-gray-600 space-y-2">
+      <p><strong>Checkout:</strong> <code class="bg-white px-1 rounded">POST /checkout/subscription</code> · <code class="bg-white px-1 rounded">POST /checkout/credits</code> — pass <code class="bg-white px-1 rounded">country_code</code> to match displayed prices.</p>
+      <p><strong>Stripe:</strong> Webhook <code class="bg-white px-1 rounded">/stripe/webhook</code> for subscriptions and credit purchases.</p>
+    </div>
+  </div>`;
+
+  await fillPricingPlanLimitsReadonly();
 }
 
 // ═══════════════════════════════════════════
@@ -402,6 +572,7 @@ async function renderCommerce() {
         <li>Point the site/extension to <code class="bg-white/10 px-1 rounded text-xs">POST /checkout/subscription</code> and <code class="bg-white/10 px-1 rounded text-xs">POST /checkout/credits</code> with <code class="bg-white/10 px-1 rounded text-xs">country_code</code>.</li>
         <li>Stripe webhook URL: <code class="bg-white/10 px-1 rounded text-xs">/stripe/webhook</code> — must handle subscription + credit checkouts.</li>
         <li>After edits here, use <strong>Refresh config cache</strong> (or wait up to TTL, default 5 min).</li>
+        <li>Open the <button type="button" class="text-white underline font-semibold" onclick="navigate('pricing')">Pricing</button> page for a live <code class="bg-white/10 px-1 rounded text-xs">GET /pricing</code> snapshot and country preview.</li>
       </ol>
       <div class="mt-4 flex flex-wrap gap-2">
         <button type="button" onclick="commerceRefreshCache()" class="px-4 py-2 bg-rp text-white rounded-lg text-sm font-medium">↻ Refresh config cache</button>
@@ -422,12 +593,17 @@ async function renderCommerce() {
 
 async function commerceRefreshCache() {
   const msg = document.getElementById('commerceCacheMsg');
+  const msgPricing = document.getElementById('pricingCacheMsg');
   if (msg) msg.textContent = 'Refreshing…';
+  if (msgPricing) msgPricing.textContent = 'Refreshing…';
   try {
     const d = await api('/admin/config/refresh', { method: 'POST' });
-    if (msg) msg.textContent = `OK · ${d.at || ''}`;
+    const ok = `OK · ${d.at || ''}`;
+    if (msg) msg.textContent = ok;
+    if (msgPricing) msgPricing.textContent = ok;
   } catch (e) {
     if (msg) msg.textContent = 'Error';
+    if (msgPricing) msgPricing.textContent = 'Error';
     alert(e.message);
   }
 }

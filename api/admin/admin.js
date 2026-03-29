@@ -65,14 +65,14 @@ document.getElementById('sidebarNav').addEventListener('click', e => {
     navigate(btn.dataset.page);
     document.getElementById('sidebar').classList.add('-translate-x-full');
 });
-const PAGE_TITLES = { dashboard: 'Dashboard', users: 'Users', licenses: 'Licenses', teams: 'Teams', analytics: 'Analytics', emails: 'Emails', logs: 'Logs', settings: 'Settings', commerce: 'Commerce & PPP', security: 'Security' };
+const PAGE_TITLES = { dashboard: 'Dashboard', users: 'Users', licenses: 'Licenses', teams: 'Teams', analytics: 'Analytics', emails: 'Emails', logs: 'Logs', settings: 'Settings', commerce: 'Commerce & PPP', pricing: 'Pricing & display', security: 'Security' };
 function navigate(page) {
     currentPage = page;
     document.getElementById('pageTitle').textContent = PAGE_TITLES[page] || page;
     document.querySelectorAll('.sidebar-item').forEach(b => b.classList.toggle('active', b.dataset.page === page));
     Object.values(chartInstances).forEach(c => { try { c.destroy() } catch (e) { } }); chartInstances = {};
     if (_refreshTimer) clearInterval(_refreshTimer);
-    const render = { dashboard: renderDashboard, users: renderUsers, licenses: renderLicenses, teams: renderTeams, analytics: renderAnalytics, emails: renderEmails, logs: renderLogs, settings: renderSettings, commerce: renderCommerce, security: renderSecurity };
+    const render = { dashboard: renderDashboard, users: renderUsers, licenses: renderLicenses, teams: renderTeams, analytics: renderAnalytics, emails: renderEmails, logs: renderLogs, settings: renderSettings, commerce: renderCommerce, pricing: renderPricing, security: renderSecurity };
     (render[page] || renderDashboard)();
 }
 

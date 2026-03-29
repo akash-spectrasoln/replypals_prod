@@ -13,7 +13,7 @@ import asyncio
 import smtplib
 from datetime import datetime, timezone, timedelta
 from email.mime.text import MIMEText
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Literal
 
 import jwt
 from fastapi import APIRouter, Request, HTTPException, Header, Depends, BackgroundTasks
@@ -137,6 +137,43 @@ class AdminOverridePlanBody(BaseModel):
 
 class AdminAdjustCreditsBody(BaseModel):
     delta: int
+
+
+class BulkUserCleanupBody(BaseModel):
+    """
+    Destructive wipe of app user tables (not Supabase auth.users).
+    confirm must match the phrase for the chosen scope.
+    """
+
+    scope: Literal["free_users", "user_profiles", "both"]
+    confirm: str
+
+
+def _bulk_delete_all_rows(supabase, table: str, pk: str = "id", batch_size: int = 500) -> int:
+    """Delete every row in table using batched primary-key deletes (PostgREST-safe)."""
+    deleted = 0
+    max_rounds = 20000
+    for _ in range(max_rounds):
+        res = supabase.table(table).select(pk).limit(batch_size).execute()
+        rows = res.data or []
+        if not rows:
+            break
+        ids = [r[pk] for r in rows if r.get(pk) is not None]
+        if not ids:
+            break
+        supabase.table(table).delete().in_(pk, ids).execute()
+        deleted += len(ids)
+        if len(rows) < batch_size:
+            break
+    return deleted
+
+
+_BULK_CLEAN_CONFIRM: dict[str, str] = {
+    "free_users": "DELETE_ALL_FREE_USERS",
+    "user_profiles": "DELETE_ALL_USER_PROFILES",
+    "both": "DELETE_ALL_APP_USER_DATA",
+}
+
 
 class UpdateSettingsReq(BaseModel):
     settings: dict
@@ -818,6 +855,60 @@ async def delete_user(user_id: str, request: Request, admin=Depends(require_admi
     except Exception: pass
     _audit("user_deleted", {"user_id": user_id, "deleted": deleted}, request.client.host, supabase)
     return {"deleted": True, "details": deleted}
+
+
+@router.post("/users/bulk-cleanup")
+async def bulk_user_cleanup(
+    body: BulkUserCleanupBody,
+    request: Request,
+    admin=Depends(require_admin),
+):
+    """
+    Wipe ``free_users`` and/or ``user_profiles`` (billing/usage rows cascade from profiles).
+    Does **not** delete ``auth.users`` — only app tables. Requires exact confirmation phrase.
+    """
+    from main import supabase
+
+    if not supabase:
+        raise HTTPException(500, detail="DB not configured")
+    expected = _BULK_CLEAN_CONFIRM.get(body.scope)
+    if not expected or (body.confirm or "").strip() != expected:
+        raise HTTPException(
+            400,
+            detail=f'Wrong confirmation. For scope "{body.scope}" type exactly: {expected}',
+        )
+
+    result: dict[str, Any] = {"scope": body.scope, "deleted_rows": {}}
+
+    try:
+        if body.scope in ("free_users", "both"):
+            n = _bulk_delete_all_rows(supabase, "free_users", "id")
+            result["deleted_rows"]["free_users"] = n
+
+        if body.scope in ("user_profiles", "both"):
+            try:
+                supabase.table("licenses").update({"user_id": None}).not_.is_("user_id", "null").execute()
+            except Exception as e:
+                result["licenses_user_id_detach_error"] = str(e)[:200]
+            n = _bulk_delete_all_rows(supabase, "user_profiles", "id")
+            result["deleted_rows"]["user_profiles"] = n
+
+        try:
+            supabase.table("admin_audit_log").insert(
+                {
+                    "action": "bulk_user_cleanup",
+                    "details": result,
+                    "ip": request.client.host if request.client else "",
+                }
+            ).execute()
+        except Exception:
+            pass
+        _audit("bulk_user_cleanup", result, request.client.host or "", supabase)
+        return {"ok": True, **result}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, detail=str(e)[:500]) from e
 
 
 @router.put("/users/{user_id}/plan")
