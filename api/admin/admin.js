@@ -43,12 +43,27 @@ function showDashboard() {
 if (TOKEN) showDashboard();
 
 // ─── API Helper ───
+function formatApiErrorDetail(d) {
+    if (!d || d.detail == null) return '';
+    const det = d.detail;
+    if (typeof det === 'string') return det;
+    if (Array.isArray(det)) {
+        return det.map((e) => (e.msg && e.loc ? `${e.loc.join('.')}: ${e.msg}` : JSON.stringify(e))).join('; ');
+    }
+    if (typeof det === 'object') return JSON.stringify(det);
+    return String(det);
+}
+
 async function api(path, opts = {}) {
     const h = { 'Content-Type': 'application/json' };
     if (TOKEN) h['Authorization'] = `Bearer ${TOKEN}`;
     const r = await fetch(`${API_BASE}${path}`, { ...opts, headers: { ...h, ...(opts.headers || {}) } });
     if (r.status === 401) { doLogout(); throw new Error('Session expired'); }
-    if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.detail || `Error ${r.status}`); }
+    if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        const msg = formatApiErrorDetail(d) || `HTTP ${r.status}`;
+        throw new Error(msg);
+    }
     return r.json();
 }
 function showModal(html) { document.getElementById('modalBox').innerHTML = html; document.getElementById('modalOverlay').classList.remove('hidden'); }

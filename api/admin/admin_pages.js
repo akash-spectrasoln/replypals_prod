@@ -730,7 +730,7 @@ async function commerceRenderCountries(panel) {
     return `<tr class="border-b">
       <td class="p-2 font-mono font-bold">${ccDisp}</td>
       <td class="p-2"><input id="cc-${rawCc}-nm" class="border rounded px-1 w-32" value="${escHtml(r.country_name || '')}"/></td>
-      <td class="p-2"><input id="cc-${rawCc}-mu" type="number" step="0.001" min="0.01" max="2" class="border rounded px-1 w-20" value="${r.price_multiplier != null ? r.price_multiplier : 1}"/></td>
+      <td class="p-2"><input id="cc-${rawCc}-mu" type="number" step="0.001" min="0.001" max="2" class="border rounded px-1 w-20" value="${r.price_multiplier != null ? r.price_multiplier : 1}"/></td>
       <td class="p-2"><input id="cc-${rawCc}-cur" class="border rounded px-1 w-12 uppercase font-mono" maxlength="3" value="${escHtml((r.currency_code || 'USD').toString())}"/></td>
       <td class="p-2"><input id="cc-${rawCc}-sy" class="border rounded px-1 w-10" value="${escHtml(r.currency_symbol || '$')}"/></td>
       <td class="p-2"><input id="cc-${rawCc}-fx" type="number" step="0.0001" min="0" class="border rounded px-1 w-24" placeholder="e.g. 83" title="Local currency units per 1 USD; empty = PPP-USD display" value="${fxVal}"/></td>
@@ -746,22 +746,32 @@ async function commerceRenderCountries(panel) {
 
 async function commerceSaveCountry(code) {
   const cc = code;
-  const fxRaw = document.getElementById(`cc-${cc}-fx`).value.trim();
-  const body = {
-    country_name: document.getElementById(`cc-${cc}-nm`).value.trim(),
-    price_multiplier: parseFloat(document.getElementById(`cc-${cc}-mu`).value) || 1,
-    currency_code: document.getElementById(`cc-${cc}-cur`).value.trim() || 'USD',
-    currency_symbol: document.getElementById(`cc-${cc}-sy`).value.trim() || '$',
-    is_active: document.getElementById(`cc-${cc}-ac`).checked,
-  };
-  if (fxRaw === '') body.exchange_rate_per_usd = null;
-  else {
-    const n = parseFloat(fxRaw);
-    body.exchange_rate_per_usd = Number.isFinite(n) && n > 0 ? n : null;
+  try {
+    const fxRaw = document.getElementById(`cc-${cc}-fx`).value.trim();
+    const muRaw = document.getElementById(`cc-${cc}-mu`).value;
+    const mu = parseFloat(muRaw);
+    if (!Number.isFinite(mu) || mu < 0.001 || mu > 2) {
+      alert('Multiplier must be between 0.001 and 2.0 (check your input).');
+      return;
+    }
+    const body = {
+      country_name: document.getElementById(`cc-${cc}-nm`).value.trim(),
+      price_multiplier: mu,
+      currency_code: (document.getElementById(`cc-${cc}-cur`).value.trim() || 'USD').slice(0, 3).toUpperCase(),
+      currency_symbol: document.getElementById(`cc-${cc}-sy`).value.trim() || '$',
+      is_active: document.getElementById(`cc-${cc}-ac`).checked,
+    };
+    if (fxRaw === '') body.exchange_rate_per_usd = null;
+    else {
+      const n = parseFloat(fxRaw);
+      body.exchange_rate_per_usd = Number.isFinite(n) && n > 0 ? n : null;
+    }
+    await api(`/admin/config/countries/${encodeURIComponent(cc)}`, { method: 'PUT', body: JSON.stringify(body) });
+    alert('Saved ' + cc + ' — refresh list to see updated coupon id');
+    await commerceRenderCountries(document.getElementById('commercePanel'));
+  } catch (e) {
+    alert('Save failed: ' + (e && e.message ? e.message : String(e)));
   }
-  await api(`/admin/config/countries/${encodeURIComponent(cc)}`, { method: 'PUT', body: JSON.stringify(body) });
-  alert('Saved ' + cc + ' — refresh list to see updated coupon id');
-  await commerceRenderCountries(document.getElementById('commercePanel'));
 }
 
 async function commerceRenderSystem(panel) {

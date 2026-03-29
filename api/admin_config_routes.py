@@ -1,6 +1,18 @@
 """
 Admin API — DB-driven commerce config (plans, bundles, PPP, system, nudges).
 Mounted under /admin/config/*. Uses same JWT auth as the admin panel.
+
+Commerce → Stripe (no code deploy for routine price changes)
+  • Subscriptions: ``/checkout/subscription`` builds amounts from ``plan_config`` + ``country_pricing``
+    (see ``subscription_checkout_stripe_line``). Saving plans/countries here calls
+    ``invalidate_commerce_cache()`` — the next checkout uses the new numbers. You do **not** need to
+    edit STRIPE_PRICE_T* env vars or Stripe Prices for that flow.
+  • Credit packs: ``base_price_usd`` in ``credit_bundle_config`` drives dynamic checkout; optional
+    ``STRIPE_PRICE_BUNDLE_*`` / coupons are only if you use those paths.
+  • ``POST /admin/config/refresh`` busts the in-memory cache if something changed outside this API.
+
+When you **do** touch Stripe: create Dashboard coupons only if you still use coupon-based flows;
+``ensure_ppp_coupon`` may update ``stripe_coupon_id`` when ``price_multiplier`` changes on a country.
 """
 
 from __future__ import annotations
@@ -271,7 +283,7 @@ class CountryCreateBody(BaseModel):
     country_name: str = ""
     currency_code: str = "USD"
     currency_symbol: str = "$"
-    price_multiplier: float = Field(1.0, ge=0.01, le=2.0)
+    price_multiplier: float = Field(1.0, ge=0.001, le=2.0)
     is_active: bool = True
     # Local units per 1 USD; omit or null = PPP-USD display only
     exchange_rate_per_usd: Optional[float] = Field(None, ge=0)
@@ -281,7 +293,8 @@ class CountryPatchBody(BaseModel):
     country_name: Optional[str] = None
     currency_code: Optional[str] = None
     currency_symbol: Optional[str] = None
-    price_multiplier: Optional[float] = Field(None, ge=0.01, le=2.0)
+    # PPP factors are often < 1 (e.g. 0.28–0.42); allow small floor so validation never blocks real rows
+    price_multiplier: Optional[float] = Field(None, ge=0.001, le=2.0)
     is_active: Optional[bool] = None
     exchange_rate_per_usd: Optional[float] = Field(None, ge=0)
 
@@ -324,10 +337,20 @@ async def config_put_country(
             patch[k] = v
     mult = float(patch.get("price_multiplier", old.get("price_multiplier") or 1))
     if "price_multiplier" in patch:
-        cid = ensure_ppp_coupon(cc, mult, old.get("stripe_coupon_id"))
-        if cid:
-            patch["stripe_coupon_id"] = cid
-    supabase.table("country_pricing").update(patch).eq("country_code", cc).execute()
+        try:
+            cid = ensure_ppp_coupon(cc, mult, old.get("stripe_coupon_id"))
+            if cid:
+                patch["stripe_coupon_id"] = cid
+        except Exception as e:
+            # DB row must still save; coupon sync can fail if Stripe keys missing or API error
+            print(f"[admin config] ensure_ppp_coupon non-fatal: {e}")
+    try:
+        supabase.table("country_pricing").update(patch).eq("country_code", cc).execute()
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Database update failed: {e}. If you never ran migration 20260331_country_pricing_fx.sql, add column exchange_rate_per_usd or fix RLS/service role.",
+        ) from e
     invalidate_commerce_cache()
     _cfg_audit(supabase, request, "update_country_ppp", "country_pricing", cc, old, patch)
     nr = supabase.table("country_pricing").select("*").eq("country_code", cc).single().execute()
