@@ -1276,6 +1276,12 @@ def build_user_prompt(
     parts = []
 
     ins = (instruction or "").strip()
+    # 'short' is an internal sentinel sent by the "Make it shorter" button —
+    # route it through the dedicated short-mode prompt rather than the generic
+    # custom-instruction block, which would only see the literal word "short".
+    if ins.lower() == "short":
+        ins = ""
+        mode = "short"
     if ins:
         src = (text or "").strip()
         parts.append(
@@ -1311,6 +1317,13 @@ def build_user_prompt(
         parts.append("Summarize the following text in 1-2 clear, concise sentences.")
         parts.append("Preserve the key meaning. Do NOT add any opinion.")
         parts.append(f'\nText:\n"{text}"')
+        if language not in ("en-rewrite", "auto"):
+            lang_name = LANGUAGE_NAMES.get(language)
+            if lang_name:
+                parts.append(
+                    f"If the source text is in {lang_name}, write the summary in natural English "
+                    "unless the user's language setting specifies otherwise."
+                )
         parts.append('\nRespond ONLY with valid JSON: {"rewritten":"your summary","score":null,"tip":null}')
         return "\n".join(parts)
 
@@ -1495,10 +1508,13 @@ def _parse_ai_response(raw: str) -> dict:
             raise HTTPException(status_code=500, detail="Failed to parse AI response")
 
     rewritten = data.get("rewritten") or data.get("rewritten_text", "")
-    score = int(data.get("score") or data.get("native_score", 75))
+    raw_score = data.get("score") or data.get("native_score")
+    # Only coerce a numeric score when the AI returned one; preserve None for
+    # modes that intentionally return score:null (summary, reply, translate, etc.)
+    score = int(raw_score) if raw_score is not None else None
     tip = data.get("tip") or data.get("explanation")
 
-    if score >= 95:
+    if score is not None and score >= 95:
         tip = None
 
     return {

@@ -1299,7 +1299,7 @@ try {
             rpOpenUpgradeForLimit(ctx);
             return;
           }
-          renderLoading();
+          renderLoading(type, payload);
           safeSendMessage({ type: type, payload: payload }, function (res) {
             clearInterval(_tipTimer);
             if (res && res.error === 'offline') {
@@ -1329,13 +1329,28 @@ try {
         });
       }
 
-      function renderLoading() {
+      function renderLoading(type, payload) {
+        var mode = (payload && payload.mode) || type || 'rewrite';
+        var instruction = (payload && payload.instruction) || '';
+        var LOADING_LABELS = {
+          rewrite:   'Rewriting as ' + selectedTone + '…',
+          generate:  'Generating…',
+          reply:     'Writing your reply…',
+          summary:   'Summarizing…',
+          fix:       'Fixing grammar…',
+          meaning:   'Explaining…',
+          translate: 'Translating…',
+          short:     'Making it shorter…',
+        };
+        var loadingLabel = (instruction === 'short')
+          ? 'Making it shorter…'
+          : (LOADING_LABELS[mode] || 'Rewriting as ' + selectedTone + '…');
         body.innerHTML = '';
         var v = document.createElement('div');
         v.className = 'rp-state-view rp-loading-view';
         v.innerHTML = `
           <div class="rp-spinner"></div>
-          <div class="rp-loading-title">Rewriting as ${selectedTone}...</div>
+          <div class="rp-loading-title">${loadingLabel}</div>
           <div class="rp-progress-track"><div class="rp-progress-fill" id="rp-prog" style="width:0%"></div></div>
           <div class="rp-loading-tip" id="rp-tip">Removing non-native phrases…</div>
         `;
@@ -1357,17 +1372,17 @@ try {
         var v = document.createElement('div');
         v.className = 'rp-state-view';
 
-        var outText = data.rewritten || data.generated || '';
-        var sc = data.score || 100;
-        var scClass = sc >= 80 ? 'rp-score-high' : (sc >= 60 ? 'rp-score-mid' : 'rp-score-low');
-        var scColor = sc >= 80 ? '#10B981' : (sc >= 60 ? '#F59E0B' : '#EF4444');
+        var outText = data.rewritten || data.generated || data.text || '';
+        var sc = (data.score != null && data.score !== 0) ? data.score : null;
+        var scClass = !sc ? '' : sc >= 80 ? 'rp-score-high' : (sc >= 60 ? 'rp-score-mid' : 'rp-score-low');
+        var scColor = !sc ? '#94a3b8' : sc >= 80 ? '#10B981' : (sc >= 60 ? '#F59E0B' : '#EF4444');
 
         v.innerHTML = `
-          <div class="rp-score-row">
+          <div class="rp-score-row" style="${!sc ? 'display:none' : ''}">
             <span class="rp-label" style="margin:0; font-size:12px;">Native Score:</span>
             <div style="display:flex; align-items:center; flex:1; margin:0 12px; max-width:120px; justify-content:flex-end;">
               <div class="rp-mini-prog"><div class="rp-mini-prog-fill" style="width:0%; background:${scColor}"></div></div>
-              <span class="rp-score-badge ${scClass}">${sc}/100 🎯</span>
+              <span class="rp-score-badge ${scClass}">${sc ? sc + '/100 🎯' : '—'}</span>
             </div>
           </div>
           
@@ -2010,7 +2025,7 @@ try {
               if (pill) pill.classList.remove('rp-loading');
               if (res && res.success && res.data) {
                 rpApplyQuotaFromApi(res.data);
-                var out = res.data.rewritten || res.data.generated || '';
+                var out = res.data.rewritten || res.data.generated || res.data.text || '';
                 if (mode === 'rewrite') {
                   setText(el, out);
                   rpShowScoreToast(res.data.score);
@@ -2515,12 +2530,15 @@ try {
     document.addEventListener('mouseup', function(e) {
       var selTb = document.getElementById(RP_SEL_ID);
       if (selTb && selTb.contains(e.target)) return;
+      // Don't re-show toolbar when interacting with the result panel
+      var resultPanel = document.getElementById('rp-result-panel');
+      if (resultPanel && resultPanel.contains(e.target)) return;
 
       setTimeout(function() {
         var sel  = window.getSelection();
         var text = sel ? sel.toString().trim() : '';
 
-        if (text && text.length > 3 && sel.rangeCount > 0) {
+        if (text && text.length > 15 && sel.rangeCount > 0) {
           try {
             var rect = sel.getRangeAt(0).getBoundingClientRect();
             rpShowSelToolbar(rect);
@@ -2735,7 +2753,7 @@ try {
       var meta = META[mode] || META.rewrite;
       var scoreColor = !score ? '#94a3b8' : score >= 80 ? '#10b981' : score >= 60 ? '#f59e0b' : '#ef4444';
       var scoreW = score ? score + '%' : '0%';
-      var canInsert = (mode === 'rewrite' || mode === 'write' || mode === 'reply' || mode === 'fix') && _rpMiniActive;
+      var canInsert = (mode === 'rewrite' || mode === 'write' || mode === 'reply' || mode === 'fix' || mode === 'summary') && _rpMiniActive;
 
       panel.innerHTML =
         // Header
@@ -2785,7 +2803,7 @@ try {
             '<button id="rp-panel-replace" style="all:unset;display:flex;align-items:center;gap:5px;' +
                 'background:#0f172a;color:white;border-radius:8px;padding:7px 12px;font-size:11px;' +
                 'font-weight:700;cursor:pointer;letter-spacing:0.02em">' +
-              RP_SVG.replace + (mode === 'reply' ? ' Use this reply' : ' Use this') +
+              RP_SVG.replace + (mode === 'reply' ? ' Use this reply' : mode === 'summary' ? ' Use this summary' : ' Use this') +
             '</button>'
           : '') +
         '</div>';
