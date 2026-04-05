@@ -2429,15 +2429,20 @@ try {
           safeSendMessage(
             { type: 'selectionAction', payload: { text: text, mode: mode, tone: tone || null, language: selectedLang } },
             function(res) {
+              var errMsg = (res && res.error) ? String(res.error)
+                : (!res ? 'No response from extension. Reload the page or check the extension.' : 'Action failed');
               if (res && res.success && res.data) {
                 rpApplyQuotaFromApi(res.data);
                 var out = res.data.rewritten || res.data.generated || res.data.text || '';
                 if (!out || !String(out).trim()) out = '⚠️ No output returned from AI';
                 rpShowResultPanel(mode, out, res.data.score);
               } else if (rpIsLimitReachedError(res)) {
+                var pnl = document.getElementById('rp-result-panel');
+                if (pnl) pnl.classList.remove('rp-panel-visible');
                 rpOpenUpgradeForLimit(text);
               } else {
-                rpShowErrorToast((res && res.error) || 'Action failed');
+                rpShowResultPanel(mode, '⚠️ ' + errMsg, null);
+                rpShowErrorToast(errMsg);
               }
             }
           );

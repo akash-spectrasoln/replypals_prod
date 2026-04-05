@@ -441,9 +441,10 @@ if (bgSrc || popupSrc) {
 section('Build Constants');
 
 if (bgSrc) {
-  assertNotContains(bgSrc, "'http://localhost", 'No localhost in production background.js');
   assertNotContains(bgSrc, 'YOUR_MIXPANEL_TOKEN', 'No placeholder Mixpanel token');
   assertContains(bgSrc, 'replypals.in', 'Production domain present in API_BASE');
+  assertContains(bgSrc, 'PROD_API_BASE', 'PROD_API_BASE for production API URL');
+  assertContains(bgSrc, 'https://www.replypals.in', 'Production API host in background.js');
 }
 
 // ── 13. Manifest validation ───────────────────────────────────────────────────
@@ -467,10 +468,8 @@ if (manifest) {
   assert(manifest.minimum_chrome_version, 'minimum_chrome_version set');
   assert(parseInt(manifest.minimum_chrome_version) >= 116, 'Minimum Chrome >= 116 (side panel)');
 
-  // No localhost in externally_connectable
+  // Production origins required; localhost/127.* may appear for local dashboard ↔ extension dev
   const extConnectable = JSON.stringify(manifest.externally_connectable || {});
-  assertNotContains(extConnectable, 'localhost', 'No localhost in externally_connectable');
-  assertNotContains(extConnectable, '127.0.0.1', 'No 127.0.0.1 in externally_connectable');
   assertContains(extConnectable, 'replypals.in', 'replypals.in in externally_connectable');
 }
 
@@ -688,10 +687,11 @@ assert(validateRewriteShape({}) !== null, 'Missing rewritten key fails validatio
 // ── 23. UI Wiring Regression Guards ───────────────────────────────────────────
 section('UI Wiring Regression Guards');
 
-const rootDir = process.cwd();
-const popupCssPath = path.join(rootDir, 'extension', 'popup.css');
-const popupJsPath = path.join(rootDir, 'extension', 'popup.js');
-const contentJsPath = path.join(rootDir, 'extension', 'content.js');
+// Resolve extension dir from this test file so `node .../test_extension.js` works from any cwd.
+const extDir = path.join(__dirname, '../../extension');
+const popupCssPath = path.join(extDir, 'popup.css');
+const popupJsPath = path.join(extDir, 'popup.js');
+const contentJsPath = path.join(extDir, 'content.js');
 
 const popupCss = fs.readFileSync(popupCssPath, 'utf8');
 const popupJs = fs.readFileSync(popupJsPath, 'utf8');

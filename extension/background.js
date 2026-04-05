@@ -32,6 +32,26 @@ function isAllowedExternalSender(sender) {
   }
 }
 
+/** FastAPI may return ``detail`` as a string, list of validation errors, or object */
+function formatFastApiDetail(errorData) {
+  const d = errorData && errorData.detail;
+  if (d == null || d === '') return '';
+  if (typeof d === 'string') return d;
+  if (Array.isArray(d)) {
+    return d
+      .map((e) => {
+        if (e && typeof e === 'object' && e.msg) {
+          const loc = Array.isArray(e.loc) ? e.loc.filter(Boolean).join('.') : '';
+          return (loc ? loc + ': ' : '') + e.msg;
+        }
+        return JSON.stringify(e);
+      })
+      .join('; ');
+  }
+  if (typeof d === 'object') return JSON.stringify(d);
+  return String(d);
+}
+
 // ─── Onboarding + Install ───
 chrome.runtime.onInstalled.addListener(async (details) => {
   // Context menu
@@ -352,8 +372,7 @@ async function handleRewrite(payload) {
     });
     if (!res.ok) {
       const errorData = await res.json().catch(() => ({}));
-      let msg = errorData.detail || `Server error: ${res.status}`;
-      if (typeof msg === 'object') msg = JSON.stringify(msg);
+      const msg = formatFastApiDetail(errorData) || `Server error: ${res.status}`;
       throw new Error(msg);
     }
     const data = await res.json();
@@ -783,26 +802,34 @@ async function handleSelectionAction(payload) {
       headers['Authorization'] = 'Bearer ' + replypalSupabaseToken;
     }
 
-    const res = await fetch(`${API_BASE}/rewrite`, {
-      method: 'POST',
-      headers: headers,
-      body: JSON.stringify({
-        text:        effectiveText,
-        tone:        activeTone,
-        language:    language || 'auto',
-        email:       replypalEmail || null,
-        anon_id:     anonId,
-        event_id:    crypto.randomUUID(),
-        license_key: replypalLicense || null,
-        mode:        normalizedMode,
-        source:      'content_selection',
-      })
+    const bodyJson = JSON.stringify({
+      text:        effectiveText,
+      tone:        activeTone,
+      language:    language || 'auto',
+      email:       replypalEmail || null,
+      anon_id:     anonId,
+      event_id:    crypto.randomUUID(),
+      license_key: replypalLicense || null,
+      mode:        normalizedMode,
+      source:      'content_selection',
     });
+    const controller = new AbortController();
+    const tid = setTimeout(function () { controller.abort(); }, 120000);
+    let res;
+    try {
+      res = await fetch(`${API_BASE}/rewrite`, {
+        method: 'POST',
+        headers: headers,
+        signal: controller.signal,
+        body: bodyJson,
+      });
+    } finally {
+      clearTimeout(tid);
+    }
 
     if (!res.ok) {
       const errorData = await res.json().catch(() => ({}));
-      let msg = errorData.detail || `Server error: ${res.status}`;
-      if (typeof msg === 'object') msg = JSON.stringify(msg);
+      const msg = formatFastApiDetail(errorData) || `Server error: ${res.status}`;
       throw new Error(msg);
     }
 
@@ -811,7 +838,12 @@ async function handleSelectionAction(payload) {
     await syncFreeUsageSnapshot(replypalEmail || null, anonId);
     return { success: true, data };
   } catch (err) {
-    return { success: false, error: err.message };
+    const name = err && err.name;
+    const msg = err && err.message;
+    if (name === 'AbortError' || (msg && /aborted/i.test(msg))) {
+      return { success: false, error: 'Request timed out. Check your connection and try again.' };
+    }
+    return { success: false, error: msg || 'Request failed' };
   }
 }
 

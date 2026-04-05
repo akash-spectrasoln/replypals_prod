@@ -90,7 +90,12 @@ class TestFreeUserJourney:
         assert len(data["rewritten"]) > 10
 
     def test_j1_score_returned(self):
-        r = post("/rewrite", json={"text": "Please do the needful.", "tone": "Confident"})
+        r = post("/rewrite", json={
+            "text": "Please do the needful.",
+            "tone": "Confident",
+            "anon_id": "integration-test-anon-1",
+            "email": unique_email(),
+        })
         assert r.status_code == 200
         data = r.json()
         assert data.get("score") is not None
