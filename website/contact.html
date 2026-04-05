@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Contact ReplyPals</title>
+  <meta name="description" content="Contact ReplyPals support, sales, and onboarding team.">
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 text-slate-900">
+  <main class="max-w-3xl mx-auto px-4 py-10">
+    <a href="/" class="text-sm text-orange-600 hover:underline">← Back to Home</a>
+    <h1 class="text-3xl font-bold mt-4">Contact ReplyPals</h1>
+    <p class="text-slate-600 mt-2">Tell us what you need. Team plan, onboarding, priority support, and billing questions are handled here.</p>
+
+    <div class="mt-8 bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+      <form id="contactForm" class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium mb-1" for="name">Name</label>
+          <input id="name" name="name" required class="w-full rounded-lg border border-slate-300 px-3 py-2" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1" for="email">Work Email</label>
+          <input id="email" name="email" type="email" required class="w-full rounded-lg border border-slate-300 px-3 py-2" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1" for="company">Company (optional)</label>
+          <input id="company" name="company" class="w-full rounded-lg border border-slate-300 px-3 py-2" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1" for="inquiry_type">Inquiry Type</label>
+          <select id="inquiry_type" name="inquiry_type" class="w-full rounded-lg border border-slate-300 px-3 py-2">
+            <option value="general">General</option>
+            <option value="team">Team Plan</option>
+            <option value="onboarding">Onboarding Call</option>
+            <option value="priority-support">Priority Support</option>
+            <option value="billing">Billing</option>
+            <option value="technical">Technical Issue</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1" for="subject">Subject</label>
+          <input id="subject" name="subject" required class="w-full rounded-lg border border-slate-300 px-3 py-2" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1" for="message">Message</label>
+          <textarea id="message" name="message" rows="6" required class="w-full rounded-lg border border-slate-300 px-3 py-2"></textarea>
+        </div>
+        <button id="submitBtn" type="submit" class="w-full rounded-lg bg-slate-900 text-white py-2.5 font-semibold hover:bg-slate-800 transition">
+          Send Request
+        </button>
+      </form>
+      <p id="result" class="text-sm mt-4 text-slate-600"></p>
+      <p class="text-xs mt-3 text-slate-500">By submitting, you agree to our <a href="/terms" class="underline">Terms</a> and <a href="/privacy" class="underline">Privacy Policy</a>.</p>
+    </div>
+  </main>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const type = params.get("type");
+    const subject = params.get("subject");
+    if (type) document.getElementById("inquiry_type").value = type;
+    if (subject) document.getElementById("subject").value = subject;
+
+    document.getElementById("contactForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const result = document.getElementById("result");
+      const submitBtn = document.getElementById("submitBtn");
+      result.textContent = "";
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Sending...";
+
+      const payload = {
+        name: document.getElementById("name").value.trim(),
+        email: document.getElementById("email").value.trim(),
+        company: document.getElementById("company").value.trim(),
+        inquiry_type: document.getElementById("inquiry_type").value.trim(),
+        subject: document.getElementById("subject").value.trim(),
+        message: document.getElementById("message").value.trim(),
+      };
+
+      try {
+        const res = await fetch("/contact-us", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Failed to send request");
+        result.textContent = data.message || "Request sent.";
+        result.className = "text-sm mt-4 text-emerald-700";
+        e.target.reset();
+      } catch (err) {
+        result.textContent = err.message || "Failed to send request.";
+        result.className = "text-sm mt-4 text-red-600";
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Send Request";
+      }
+    });
+  </script>
+</body>
+</html>

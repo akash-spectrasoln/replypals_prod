@@ -1,0 +1,15 @@
+# ReplyPals API — pinned for reproducible production builds
+# To update: pip install -U <package> then update version here
+fastapi>=0.104.0,<0.200.0
+uvicorn[standard]>=0.24.0,<0.40.0
+pydantic>=2.5.0,<3.0.0
+slowapi>=0.1.9,<0.2.0
+supabase>=2.0.0,<3.0.0
+stripe>=7.0.0,<12.0.0
+google-genai>=1.0.0
+openai>=1.6.0,<2.0.0
+anthropic>=0.40.0,<1.0.0
+python-dotenv>=1.0.0,<2.0.0
+PyJWT>=2.8.0,<3.0.0
+httpx>=0.25.0,<0.30.0
+python-dateutil>=2.8.0,<3.0.0

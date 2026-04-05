@@ -1,0 +1,67 @@
+{
+  "manifest_version": 3,
+  "name": "ReplyPals: Rewrite Anything",
+  "description": "Rewrite any text — confident, polite, casual, formal. Built for non-native English speakers. Voice input supported. Audio is processed by Chrome's built-in speech recognition and never sent to our servers.",
+  "version": "1.2.0",
+  "minimum_chrome_version": "116",
+  "permissions": [
+    "storage",
+    "clipboardWrite",
+    "activeTab",
+    "scripting",
+    "sidePanel",
+    "contextMenus"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "voice-engine.js",
+        "voice-bridge.html"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ],
+  "externally_connectable": {
+    "matches": [
+      "https://*.replypals.in/*",
+      "https://replypals.in/*",
+      "http://localhost:3000/*",
+      "http://localhost:5173/*",
+      "http://127.0.0.1:3000/*",
+      "http://127.0.0.1:5173/*"
+    ]
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["voice-engine.js", "content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
+  "side_panel": {
+    "default_path": "popup.html"
+  },
+  "action": {
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    },
+    "default_title": "ReplyPals: Rewrite Anything"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

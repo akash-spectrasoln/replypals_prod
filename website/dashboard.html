@@ -1,0 +1,1435 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard — ReplyPals</title>
+  <meta name="description"
+    content="Manage your ReplyPals subscription, view writing stats, and access your license key.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Syne:wght@500;600;700;800&display=swap"
+    rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: #F8F9FE;
+      min-height: 100vh;
+      color: #1A1D2E;
+    }
+
+    .nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid #EAECF4;
+      z-index: 50;
+    }
+
+    .nav-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 24px;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      text-decoration: none;
+    }
+
+    .logo-mark {
+      width: 32px;
+      height: 32px;
+      background: #FF6B35;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 14px;
+    }
+
+    .logo-text {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 20px;
+      color: #0F2544;
+    }
+
+    .nav-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .avatar {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #FF6B35, #FF8C42);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 14px;
+      cursor: pointer;
+      position: relative;
+    }
+
+    .dropdown {
+      position: absolute;
+      top: 42px;
+      right: 0;
+      width: 200px;
+      background: #fff;
+      border: 1px solid #EAECF4;
+      border-radius: 12px;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+      display: none;
+      overflow: hidden;
+      z-index: 60;
+    }
+
+    .dropdown.show {
+      display: block;
+    }
+
+    .dropdown a,
+    .dropdown button {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      padding: 10px 16px;
+      font-size: 13px;
+      color: #374151;
+      text-decoration: none;
+      border: none;
+      background: none;
+      cursor: pointer;
+      font-family: 'DM Sans', sans-serif;
+      text-align: left;
+    }
+
+    .dropdown a:hover,
+    .dropdown button:hover {
+      background: #F8F9FE;
+    }
+
+    .dropdown .sep {
+      height: 1px;
+      background: #EAECF4;
+      margin: 4px 0;
+    }
+
+    .main {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 88px 24px 60px;
+    }
+
+    .greeting {
+      background: #fff;
+      border: 1px solid #EAECF4;
+      border-radius: 16px;
+      padding: 24px 28px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .greeting h2 {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 24px;
+      color: #0F2544;
+    }
+
+    .greeting .email {
+      color: #6B7280;
+      font-size: 14px;
+      margin-top: 2px;
+    }
+
+    .section {
+      background: #fff;
+      border: 1px solid #EAECF4;
+      border-radius: 16px;
+      padding: 24px 28px;
+      margin-bottom: 20px;
+    }
+
+    .section-title {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 15px;
+      color: #6B7280;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .plan-card {
+      background: linear-gradient(135deg, #FFF8F5, #FFF3EE);
+      border: 2px solid #FFCCB8;
+      border-radius: 14px;
+      padding: 20px 24px;
+    }
+
+    .plan-card.free {
+      background: #F8F9FE;
+      border-color: #EAECF4;
+    }
+
+    .plan-name {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 20px;
+      color: #0F2544;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .plan-badge {
+      font-size: 11px;
+      background: #10B981;
+      color: #fff;
+      padding: 2px 8px;
+      border-radius: 100px;
+      font-weight: 700;
+    }
+
+    .plan-detail {
+      color: #6B7280;
+      font-size: 14px;
+      margin-top: 8px;
+    }
+
+    .plan-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 16px;
+      flex-wrap: wrap;
+    }
+
+    .btn-outline {
+      padding: 10px 20px;
+      border: 1.5px solid #EAECF4;
+      border-radius: 10px;
+      background: #fff;
+      color: #374151;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: 'DM Sans', sans-serif;
+    }
+
+    .btn-outline:hover {
+      border-color: #FF6B35;
+      color: #FF6B35;
+    }
+
+    .btn-orange {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #FF6B35, #FF8C42);
+      color: #fff;
+      font-weight: 700;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: 'Syne', sans-serif;
+      box-shadow: 0 4px 12px rgba(255, 107, 53, 0.3);
+    }
+
+    .btn-orange:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 16px rgba(255, 107, 53, 0.4);
+    }
+
+    .btn-navy {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 10px;
+      background: #0F2544;
+      color: #fff;
+      font-weight: 700;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: 'Syne', sans-serif;
+    }
+
+    .btn-navy:hover {
+      background: #1a3a6e;
+    }
+
+    .usage-bar {
+      height: 8px;
+      background: #EAECF4;
+      border-radius: 8px;
+      overflow: hidden;
+      margin: 12px 0 6px;
+    }
+
+    .usage-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #FF6B35, #FF8C42);
+      border-radius: 8px;
+      transition: width 0.5s;
+    }
+
+    .usage-text {
+      font-size: 13px;
+      color: #6B7280;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    @media (max-width: 640px) {
+      .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    .stat-card {
+      background: #F8F9FE;
+      border-radius: 12px;
+      padding: 16px;
+      text-align: center;
+    }
+
+    .stat-value {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 28px;
+      color: #0F2544;
+    }
+
+    .stat-label {
+      font-size: 12px;
+      color: #6B7280;
+      margin-top: 4px;
+    }
+
+    .chart-wrap {
+      height: 200px;
+      margin: 20px 0;
+    }
+
+    .key-box {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: #F8F9FE;
+      border: 1.5px solid #EAECF4;
+      border-radius: 10px;
+      padding: 14px 18px;
+      font-family: 'Courier New', monospace;
+      font-size: 16px;
+      letter-spacing: 0.05em;
+      color: #0F2544;
+      margin-bottom: 12px;
+    }
+
+    .key-box span {
+      flex: 1;
+    }
+
+    .copy-btn {
+      padding: 8px 16px;
+      border: 1.5px solid #EAECF4;
+      border-radius: 8px;
+      background: #fff;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      color: #374151;
+      transition: all 0.2s;
+      font-family: 'DM Sans', sans-serif;
+    }
+
+    .copy-btn:hover {
+      border-color: #FF6B35;
+      color: #FF6B35;
+    }
+
+    .install-grid {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .install-features {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+      font-size: 13px;
+      color: #6B7280;
+    }
+
+    .plan-card-opt {
+      border: 2px solid #EAECF4;
+      border-radius: 16px;
+      padding: 20px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+      background: #fff;
+      box-shadow: 0 2px 14px rgba(15, 37, 68, 0.04);
+    }
+
+    .plan-card-opt:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 30px rgba(15, 37, 68, 0.1);
+    }
+
+    .plan-card-opt.is-selected {
+      border-color: #FF6B35;
+      background: linear-gradient(180deg, #FFF8F5 0%, #ffffff 90%);
+      box-shadow: 0 14px 32px rgba(255, 107, 53, 0.18);
+    }
+
+    .plan-card-opt .plan-tag {
+      position: absolute;
+      top: -12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #FF6B35;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 12px;
+      border-radius: 100px;
+      white-space: nowrap;
+    }
+
+    .plan-card-opt .price {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 30px;
+      color: #0F2544;
+    }
+
+    .plan-card-opt.is-selected .price {
+      color: #FF6B35;
+    }
+
+    .plan-card-opt .price small {
+      font-size: 14px;
+      color: #6B7280;
+      font-weight: 500;
+    }
+
+    .plan-features {
+      margin-top: 12px;
+      font-size: 12px;
+      color: #6B7280;
+      line-height: 1.8;
+    }
+
+    .referral-hero {
+      background: radial-gradient(circle at 90% 0%, rgba(255, 107, 53, 0.14), rgba(255, 107, 53, 0.02) 45%),
+                  linear-gradient(135deg, #0F2544 0%, #1C3F75 70%);
+      border-radius: 16px;
+      padding: 18px 18px 14px;
+      color: #fff;
+      margin-bottom: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+    }
+
+    .referral-hero-title {
+      font-family: 'Syne', sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .referral-hero-sub {
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.82);
+      line-height: 1.6;
+    }
+
+    .referral-link {
+      background: rgba(255, 255, 255, 0.9);
+      border: 1.5px dashed rgba(255, 107, 53, 0.5);
+      border-radius: 12px;
+      padding: 12px 14px;
+      font-size: 13px;
+      color: #0F2544;
+      word-break: break-all;
+      margin: 12px 0 2px;
+    }
+
+    .referral-actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    .btn-wa {
+      background: #25D366;
+      color: #fff;
+      border-color: #25D366;
+    }
+
+    .btn-wa:hover {
+      filter: brightness(0.95);
+      color: #fff;
+    }
+
+    .toast {
+      position: fixed;
+      top: 80px;
+      right: 24px;
+      background: #ECFDF5;
+      color: #065F46;
+      border: 1px solid #A7F3D0;
+      padding: 12px 20px;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 500;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+      z-index: 100;
+      display: none;
+      animation: slideIn 0.3s ease;
+    }
+
+    @keyframes slideIn {
+      from {
+        transform: translateX(100px);
+        opacity: 0;
+      }
+
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+
+    .skeleton {
+      background: linear-gradient(90deg, #EAECF4 25%, #F3F4F6 50%, #EAECF4 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+      border-radius: 8px;
+    }
+
+    @keyframes shimmer {
+      0% {
+        background-position: 200% 0;
+      }
+
+      100% {
+        background-position: -200% 0;
+      }
+    }
+
+    .upgrade-plans {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin: 16px 0;
+    }
+
+    @media (max-width: 640px) {
+      .upgrade-plans {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .uplan {
+      border: 1.5px solid #EAECF4;
+      border-radius: 12px;
+      padding: 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .uplan:hover,
+    .uplan.selected {
+      border-color: #FF6B35;
+      background: #FFF8F5;
+    }
+
+    .uplan.popular {
+      border-color: #FF6B35;
+      position: relative;
+    }
+
+    .uplan .pop-badge {
+      position: absolute;
+      top: -10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #FF6B35;
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 10px;
+      border-radius: 100px;
+    }
+
+    .uplan h4 {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 16px;
+      color: #0F2544;
+    }
+
+    .uplan .price {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 24px;
+      color: #0F2544;
+    }
+
+    .uplan .per {
+      font-size: 13px;
+      color: #6B7280;
+    }
+
+    .upgrade-features {
+      font-size: 13px;
+      color: #6B7280;
+      line-height: 2;
+      margin-bottom: 16px;
+    }
+
+    .upgrade-email {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1.5px solid #EAECF4;
+      border-radius: 10px;
+      font-size: 14px;
+      margin-bottom: 12px;
+      outline: none;
+      font-family: 'DM Sans', sans-serif;
+    }
+
+    .upgrade-email:focus {
+      border-color: #FF6B35;
+    }
+
+    .pricing-note {
+      font-size: 12px;
+      color: #9CA3AF;
+      text-align: center;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+
+<body>
+  <nav class="nav">
+    <div class="nav-inner">
+      <a href="index.html" class="logo">
+        <div class="logo-mark">R</div><span class="logo-text">ReplyPals</span>
+      </a>
+      <div class="nav-right">
+        <div class="avatar" id="avatarBtn"><span id="avatarInitial">?</span>
+          <div class="dropdown" id="dropdown">
+            <a href="dashboard">📊 Dashboard</a>
+            <div class="sep"></div>
+            <button id="signOutBtn">🚪 Sign Out</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <div class="main" id="mainContent" style="display:none;">
+    <!-- Greeting -->
+    <div class="greeting">
+      <div>
+        <h2 id="greetName">👋 Welcome back</h2>
+        <div class="email" id="greetEmail">loading...</div>
+      </div>
+    </div>
+
+    <!-- Plan Status -->
+    <div class="section" id="planSection">
+      <div class="section-title">📋 Your Plan</div>
+      <div id="planContent">
+        <div class="skeleton" style="height:80px;width:100%;"></div>
+      </div>
+    </div>
+
+    <!-- ✨ FREE USER: Full upgrade experience (shown dynamically) -->
+    <div id="freeUserUpgrade" style="display:none;">
+
+      <!-- Hero banner -->
+      <div style="background:linear-gradient(135deg,#0F2544 0%,#1a3a6e 50%,#FF6B35 100%);border-radius:20px;padding:36px 32px;margin-bottom:20px;color:#fff;position:relative;overflow:hidden;">
+        <div style="position:absolute;top:-40px;right:-40px;width:200px;height:200px;background:rgba(255,107,53,0.15);border-radius:50%;"></div>
+        <div style="position:absolute;bottom:-60px;left:-30px;width:160px;height:160px;background:rgba(255,255,255,0.05);border-radius:50%;"></div>
+        <div style="position:relative;z-index:1;">
+          <div style="display:inline-block;background:rgba(255,107,53,0.3);border:1px solid rgba(255,107,53,0.6);border-radius:100px;padding:4px 16px;font-size:12px;font-weight:700;letter-spacing:0.08em;margin-bottom:16px;">🚀 UPGRADE TODAY</div>
+          <h2 style="font-family:'Syne',sans-serif;font-size:28px;font-weight:800;line-height:1.2;margin-bottom:10px;">Write better English.<br>Sound more confident.</h2>
+          <p style="opacity:0.8;font-size:15px;line-height:1.6;margin-bottom:24px;max-width:480px;">You're on the free plan — 5 rewrites per session. Upgrade to unlock <strong>unlimited rewrites</strong>, voice input in 8 languages, and tone memory that learns your style.</p>
+          <button onclick="scrollToPlans()" style="background:linear-gradient(135deg,#FF6B35,#FF8C42);border:none;color:#fff;font-family:'Syne',sans-serif;font-weight:700;font-size:15px;padding:14px 32px;border-radius:12px;cursor:pointer;box-shadow:0 4px 20px rgba(255,107,53,0.5);transition:all 0.2s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='none'">
+            ⚡ See Plans & Pricing →
+          </button>
+        </div>
+      </div>
+
+      <!-- Feature highlights grid -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;" id="featureHighlights">
+        <div style="background:#fff;border:1.5px solid #EAECF4;border-radius:14px;padding:18px;text-align:center;">
+          <div style="font-size:28px;margin-bottom:8px;">🎤</div>
+          <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:14px;color:#0F2544;margin-bottom:4px;">Voice Input</div>
+          <div style="font-size:12px;color:#6B7280;line-height:1.5;">Speak in Malayalam, Hindi, Arabic, Tagalog & more</div>
+        </div>
+        <div style="background:#fff;border:1.5px solid #EAECF4;border-radius:14px;padding:18px;text-align:center;">
+          <div style="font-size:28px;margin-bottom:8px;">♾️</div>
+          <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:14px;color:#0F2544;margin-bottom:4px;">Unlimited Rewrites</div>
+          <div style="font-size:12px;color:#6B7280;line-height:1.5;">No daily caps. Rewrite as much as you need</div>
+        </div>
+        <div style="background:#fff;border:1.5px solid #EAECF4;border-radius:14px;padding:18px;text-align:center;">
+          <div style="font-size:28px;margin-bottom:8px;">🧠</div>
+          <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:14px;color:#0F2544;margin-bottom:4px;">Tone Memory</div>
+          <div style="font-size:12px;color:#6B7280;line-height:1.5;">ReplyPals learns your preferred writing style</div>
+        </div>
+      </div>
+
+      <!-- Pricing cards -->
+      <div class="section" id="pricingSection">
+        <div class="section-title">💳 Choose Your Plan</div>
+        <p style="font-size:14px;color:#6B7280;margin-bottom:20px;">All plans include a 7-day money-back guarantee. Cancel anytime.</p>
+
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:24px;" id="planCardsGrid">
+
+          <!-- Starter -->
+          <div class="plan-card-opt" data-plan="starter" onclick="selectPlan('starter')">
+            <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;color:#0F2544;margin-bottom:4px;">Starter</div>
+            <div class="price">$2<small>/mo</small></div>
+            <div class="plan-features">
+              <span id="dashPlanRewriteStarter">✅ 50 rewrites/month</span><br>
+              ✅ All tones & modes<br>
+              ✅ Gmail, WhatsApp, LinkedIn<br>
+              ❌ Voice input<br>
+              ❌ Tone Memory
+            </div>
+          </div>
+
+          <!-- Pro (Popular) -->
+          <div class="plan-card-opt is-selected" data-plan="pro" onclick="selectPlan('pro')">
+            <div class="plan-tag">⭐ MOST POPULAR</div>
+            <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;color:#0F2544;margin-bottom:4px;">Pro</div>
+            <div class="price">$9<small>/mo</small></div>
+            <div class="plan-features">
+              <span id="dashPlanRewritePro">✅ <strong>Unlimited</strong> rewrites</span><br>
+              ✅ Voice in 8 languages<br>
+              ✅ Tone Memory<br>
+              ✅ 25+ Email Templates<br>
+              ✅ Priority support
+            </div>
+          </div>
+
+          <!-- Team -->
+          <div class="plan-card-opt" data-plan="team" onclick="selectPlan('team')">
+            <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;color:#0F2544;margin-bottom:4px;">Team</div>
+            <div class="price">$25<small>/mo</small></div>
+            <div class="plan-features">
+              ✅ Up to 5 team members<br>
+              ✅ Shared brand voice<br>
+              ✅ Team usage dashboard<br>
+              ✅ All Pro features<br>
+              ✅ Priority support
+            </div>
+          </div>
+
+        </div>
+
+        <!-- CTA -->
+        <div style="text-align:center;">
+          <button id="upgradeBtn" onclick="doUpgrade()" style="background:linear-gradient(135deg,#FF6B35,#FF8C42);border:none;color:#fff;font-family:'Syne',sans-serif;font-weight:700;font-size:16px;padding:16px 48px;border-radius:14px;cursor:pointer;box-shadow:0 4px 20px rgba(255,107,53,0.4);transition:all 0.2s;width:100%;max-width:360px;"
+            onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='none'">
+            ⚡ Upgrade to <span id="selectedPlanLabel">Pro</span> — Start Now
+          </button>
+          <div style="margin-top:10px;font-size:12px;color:#9CA3AF;">🔒 Secure checkout via Stripe · 7-day money-back guarantee</div>
+        </div>
+      </div>
+
+      <!-- Social proof -->
+      <div style="background:#fff;border:1.5px solid #EAECF4;border-radius:16px;padding:24px 28px;margin-bottom:20px;">
+        <div class="section-title" style="margin-bottom:16px;">💬 What users say</div>
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;">
+          <div style="background:#F8F9FE;border-radius:12px;padding:16px;">
+            <div style="font-size:13px;color:#374151;line-height:1.6;margin-bottom:10px;">"Game changer for non-native speakers. My emails now sound so much more professional!"</div>
+            <div style="font-size:12px;color:#6B7280;font-weight:600;">— Priya R., Kerala 🇮🇳</div>
+          </div>
+          <div style="background:#F8F9FE;border-radius:12px;padding:16px;">
+            <div style="font-size:13px;color:#374151;line-height:1.6;margin-bottom:10px;">"Voice input in Arabic is perfect. I speak, it writes — exactly what I needed."</div>
+            <div style="font-size:12px;color:#6B7280;font-weight:600;">— Ahmed K., UAE 🇦🇪</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- PAID USER: License Key (shown only for paid plans) -->
+    <div class="section" id="licenseSection" style="display:none;">
+      <div class="section-title">🔑 Your License Key</div>
+      <p style="font-size:14px;color:#6B7280;margin-bottom:12px;">Use this key to activate ReplyPals in Chrome</p>
+      <div class="key-box">
+        <span id="licenseKeyDisplay">Loading...</span>
+        <button class="copy-btn" id="copyKeyBtn">📋 Copy</button>
+      </div>
+      <button class="btn-outline" id="resendKeyBtn" style="width:100%;">📧 Resend key to my email</button>
+      <div style="margin-top:16px;padding:16px;background:#F8F9FE;border-radius:10px;font-size:13px;color:#6B7280;line-height:1.8;">
+        <strong style="color:#0F2544;">How to use:</strong><br>
+        1. Install ReplyPals from Chrome Web Store<br>
+        2. Click the extension icon<br>
+        3. Click "Already have a key?"<br>
+        4. Paste your key above and click Activate
+      </div>
+    </div>
+
+    <!-- Writing Stats (shown for all users) -->
+    <div class="section" id="statsSection">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <div class="section-title" style="margin-bottom:0;">📊 Your Writing Stats</div>
+      </div>
+      <div id="statsContent">
+        <div class="skeleton" style="height:160px;width:100%;"></div>
+      </div>
+    </div>
+
+    <!-- Install Extension -->
+    <div class="section">
+      <div class="section-title">📥 Install ReplyPals</div>
+      <div class="install-grid">
+        <a href="https://chromewebstore.google.com/detail/replypal/EXTENSION_ID_HERE" class="btn-orange"
+          style="padding:14px 32px;font-size:15px;text-decoration:none;">Add to Chrome — Free</a>
+        <div class="install-features">
+          <span>✅ Gmail</span>
+          <span>✅ WhatsApp Web</span>
+          <span>✅ LinkedIn</span>
+          <span>✅ Malayalam, Hindi, Arabic</span>
+          <span>✅ Voice input</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Referral -->
+    <div class="section" id="referralSection">
+      <div class="section-title">🎁 Refer Friends, Earn Free Rewrites</div>
+      <div class="referral-hero">
+        <div class="referral-hero-title">Give 5 rewrites. Get 5 rewrites.</div>
+        <div class="referral-hero-sub">Share your personal invite link with friends and teammates. Rewards apply automatically after successful signup.</div>
+      </div>
+      <div class="referral-link" id="referralLink">Loading...</div>
+      <div id="referralBonusTip" style="font-size:12px;color:#6B7280;margin-bottom:8px;"></div>
+      <div class="referral-actions">
+        <button class="btn-outline" id="copyRefBtn">📋 Copy Link</button>
+        <button class="btn-outline btn-wa" id="shareWaBtn">💬 Share on WhatsApp</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // ── Config ─────────────────────────────────────────────
+    const FALLBACK_SUPABASE_URL = 'https://nutchvfpcmowrlqjwkns.supabase.co';
+    const apiBaseOverride = new URLSearchParams(window.location.search).get('api_base');
+    const API_BASE = apiBaseOverride || window.location.origin;
+    const DASH_DEBUG = new URLSearchParams(window.location.search).get('debug') === '1';
+
+    const { createClient } = supabase;
+    let sb = null;
+    let authListenerBound = false;
+    const RP_LOCAL_SESSION_KEY = 'rp_local_auth_session_v1';
+    const IS_LOCAL_DEV = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+
+    let chartInstance = null;
+    let referralUrlCache = '';
+
+    function dlog(...args) {
+      if (!DASH_DEBUG) return;
+      console.log('[dashboard-debug]', ...args);
+    }
+
+    function applyDashboardPlanLabels(cfg) {
+      const labels = cfg && cfg.plan_limit_labels;
+      if (!labels) return;
+      const st = document.getElementById('dashPlanRewriteStarter');
+      const pr = document.getElementById('dashPlanRewritePro');
+      if (st && labels.starter) st.textContent = '✅ ' + labels.starter;
+      if (pr && labels.pro) {
+        if (/^unlimited$/i.test(String(labels.pro).trim())) {
+          pr.innerHTML = '✅ <strong>Unlimited</strong> rewrites';
+        } else {
+          pr.textContent = '✅ ' + labels.pro;
+        }
+      }
+    }
+
+    async function initSupabaseClient() {
+      if (sb) return sb;
+      let url = FALLBACK_SUPABASE_URL;
+      let anon = '';
+      try {
+        const r = await fetch(API_BASE + '/public-config');
+        if (r.ok) {
+          const cfg = await r.json();
+          url = cfg.supabase_url || url;
+          anon = cfg.supabase_anon_key || '';
+          applyDashboardPlanLabels(cfg);
+        }
+      } catch (_) {}
+      if (!url || !anon) return null;
+      sb = createClient(url, anon);
+      dlog('supabase client initialized', { url, hasAnon: !!anon });
+      return sb;
+    }
+
+    function bindAuthListener() {
+      if (!sb || authListenerBound) return;
+      authListenerBound = true;
+      sb.auth.onAuthStateChange((event, session) => {
+        if (event === 'SIGNED_IN' && session) {
+          syncSessionToExtension(session.access_token);
+        } else if (event === 'SIGNED_OUT') {
+          syncSessionToExtension(null);
+          window.location.href = '/login';
+        }
+      });
+    }
+
+    // ── Init Dashboard ─────────────────────────────────────
+    async function initDashboard() {
+      dlog('initDashboard start', { host: window.location.host, path: window.location.pathname });
+      await initSupabaseClient();
+      bindAuthListener();
+      let session = null;
+      let error = null;
+      if (sb) {
+        try {
+          const result = await sb.auth.getSession();
+          session = result?.data?.session || null;
+          error = result?.error || null;
+          dlog('getSession result', { hasSession: !!session, error: error?.message || null });
+        } catch (e) {
+          error = e;
+          dlog('getSession exception', { error: String(e) });
+        }
+      }
+
+      let localUser = null;
+      if (!session && IS_LOCAL_DEV) {
+        try {
+          localUser = JSON.parse(localStorage.getItem(RP_LOCAL_SESSION_KEY) || 'null');
+        } catch (_) {
+          localUser = null;
+        }
+      }
+      
+      if (!session && !localUser) {
+        const main = document.getElementById('mainContent');
+        main.style.display = 'block';
+        main.innerHTML = `
+          <div class="section">
+            <div class="section-title">🔐 Session Required</div>
+            <p style="color:#6B7280;font-size:14px;line-height:1.6;">
+              You are not signed in yet. Redirecting to login...
+            </p>
+            <div style="margin-top:14px;">
+              <a href="/login" class="btn-orange" style="text-decoration:none;display:inline-block;">Go to Login</a>
+            </div>
+          </div>`;
+        setTimeout(() => {
+          window.location.href = '/login';
+        }, 800);
+        return;
+      }
+
+      // Show main content
+      document.getElementById('mainContent').style.display = 'block';
+
+      // 1. Set greeting
+      const user = session?.user || {
+        email: localUser.email,
+        user_metadata: { full_name: localUser.full_name || '' },
+      };
+      const name = user.user_metadata?.full_name || (user.email || '').split('@')[0] || 'User';
+      document.getElementById('greetName').textContent = `👋 Welcome back, ${name}`;
+      document.getElementById('greetEmail').textContent = user.email;
+      
+      // Avatar initials
+      document.getElementById('avatarInitial').textContent = name.charAt(0).toUpperCase();
+
+      const token = session?.access_token || null;
+      const tokenRef = { value: token };
+      dlog('token ready', { hasToken: !!tokenRef.value });
+
+      // 2. Sync token to extension immediately
+      syncSessionToExtension(tokenRef.value);
+
+      if (tokenRef.value) {
+        // Load all sections in parallel for faster dashboard rendering.
+        await Promise.allSettled([
+          loadAccountStatus(tokenRef),
+          loadStats(tokenRef),
+          loadReferral(tokenRef),
+        ]);
+        ensureDashboardSectionsRendered(user.email || '');
+      } else {
+        // Local dev fallback when Supabase is unreachable in browser.
+        document.getElementById('planContent').innerHTML = `
+          <div class="plan-card free" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+            <div>
+              <div class="plan-name">🆓 Free Plan <span style="font-size:13px;font-weight:400;color:#6B7280;">· Local mode</span></div>
+              <div class="plan-detail">Auth service unavailable in browser. Core dashboard is still usable in local mode.</div>
+            </div>
+          </div>`;
+        document.getElementById('statsContent').innerHTML = '<p style="color:#6B7280;">Stats are unavailable in local mode.</p>';
+        const refEl = document.getElementById('referralLink');
+        if (refEl) refEl.textContent = 'Referral link unavailable in local mode.';
+      }
+    }
+
+    // ── Referral ─────────────────────────────────────────
+    async function loadReferral(tokenRef) {
+      try {
+        const { ok, status, data } = await apiJsonAuthed('/account/referral', tokenRef);
+        dlog('loadReferral response', { ok, status, data });
+        if (!ok) throw new Error(data?.detail || `Referral failed (${status})`);
+        const url  = data.referral_url || '';
+        referralUrlCache = url;
+        const el   = document.getElementById('referralLink');
+        if (el) el.textContent = url || 'Referral link unavailable right now.';
+
+        const bonus = data.bonus_rewrites || 0;
+        const bonusTip = document.getElementById('referralBonusTip');
+        if (bonusTip) {
+          bonusTip.textContent = bonus > 0
+            ? `You've earned ${bonus} bonus rewrites from referrals.`
+            : 'Invite friends to unlock bonus rewrites for both of you.';
+        }
+      } catch (e) {
+        console.warn('Referral load error:', e);
+        dlog('loadReferral error', { error: String(e) });
+        const el = document.getElementById('referralLink');
+        if (el) el.textContent = 'Could not load referral link. Refresh and try again.';
+        const bonusTip = document.getElementById('referralBonusTip');
+        if (bonusTip) bonusTip.textContent = '';
+      }
+    }
+
+    function bindReferralActions() {
+      const copyBtn = document.getElementById('copyRefBtn');
+      if (copyBtn) {
+        copyBtn.addEventListener('click', () => {
+          if (!referralUrlCache) {
+            showToast('⚠️ Referral link is not ready yet');
+            return;
+          }
+          navigator.clipboard.writeText(referralUrlCache).then(() => showToast('✅ Referral link copied!'));
+        });
+      }
+
+      const waBtn = document.getElementById('shareWaBtn');
+      if (waBtn) {
+        waBtn.addEventListener('click', () => {
+          if (!referralUrlCache) {
+            showToast('⚠️ Referral link is not ready yet');
+            return;
+          }
+          const msg = encodeURIComponent(`Hey! I've been using ReplyPals to write better emails in English. It's great for non-native speakers 🚀 Try it free: ${referralUrlCache}`);
+          window.open(`https://wa.me/?text=${msg}`, '_blank');
+        });
+      }
+    }
+
+    // ── Sync to Extension ──────────────────────────────────
+    function syncSessionToExtension(token) {
+      const EXTENSION_ID = (window.REPLYPAL_EXTENSION_ID || '').trim();
+      const isLikelyValidId = /^[a-p]{32}$/.test(EXTENSION_ID);
+      if (!isLikelyValidId) {
+        // Website should work even when extension ID is not configured.
+        return;
+      }
+
+      if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
+        try {
+          chrome.runtime.sendMessage(
+            EXTENSION_ID,
+            { type: 'setSupabaseSession', token: token },
+            (response) => {
+              if (chrome.runtime.lastError) {
+                console.log('Extension not installed or not listening');
+              } else {
+                console.log('Session synced to extension:', response);
+              }
+            }
+          );
+        } catch (_) {
+          // Ignore sync failures; do not break dashboard UX.
+        }
+      }
+    }
+
+    // ── UI Helpers ─────────────────────────────────────────
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      toast.textContent = msg;
+      toast.style.display = 'block';
+      setTimeout(() => toast.style.display = 'none', 3000);
+    }
+
+    async function apiJson(url, options = {}, timeoutMs = 10000) {
+      const ctl = new AbortController();
+      const t = setTimeout(() => ctl.abort(), timeoutMs);
+      try {
+        const res = await fetch(url, { ...options, signal: ctl.signal });
+        let data = {};
+        try { data = await res.json(); } catch (_) {}
+        return { ok: res.ok, status: res.status, data };
+      } finally {
+        clearTimeout(t);
+      }
+    }
+
+    async function apiJsonAuthed(path, tokenRef, timeoutMs = 10000) {
+      const firstToken = tokenRef?.value || '';
+      let res = await apiJson(API_BASE + path, {
+        headers: { 'Authorization': 'Bearer ' + firstToken }
+      }, timeoutMs);
+
+      if (res.status === 401 && sb) {
+        dlog('apiJsonAuthed 401, attempting refresh', { path });
+        try {
+          const rr = await sb.auth.refreshSession();
+          const newToken = rr?.data?.session?.access_token || '';
+          if (newToken) {
+            if (tokenRef) tokenRef.value = newToken;
+            res = await apiJson(API_BASE + path, {
+              headers: { 'Authorization': 'Bearer ' + newToken }
+            }, timeoutMs);
+            dlog('apiJsonAuthed retry result', { path, status: res.status });
+          }
+        } catch (e) {
+          dlog('apiJsonAuthed refresh failed', { path, error: String(e) });
+        }
+      }
+
+      return res;
+    }
+
+    function shortRefCodeFromEmail(email) {
+      const src = String(email || '').toLowerCase().trim();
+      let h = 0;
+      for (let i = 0; i < src.length; i++) {
+        h = ((h << 5) - h) + src.charCodeAt(i);
+        h |= 0;
+      }
+      return Math.abs(h).toString(16).slice(0, 8).toUpperCase().padEnd(8, '0');
+    }
+
+    function ensureDashboardSectionsRendered(email = '') {
+      const planEl = document.getElementById('planContent');
+      if (planEl && planEl.querySelector('.skeleton')) {
+        planEl.innerHTML = `
+          <div class="plan-card free" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+            <div>
+              <div class="plan-name" style="margin-bottom:6px;">🆓 Free Plan <span style="font-size:13px;font-weight:400;color:#6B7280;">· 5 rewrites left</span></div>
+              <div style="font-size:12px;color:#6B7280;">Plan API is slow right now. You can still continue using the app.</div>
+            </div>
+            <button onclick="scrollToPlans()" style="background:linear-gradient(135deg,#FF6B35,#FF8C42);border:none;color:#fff;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;padding:10px 22px;border-radius:10px;cursor:pointer;">⚡ Upgrade</button>
+          </div>`;
+      }
+
+      const statsEl = document.getElementById('statsContent');
+      if (statsEl && statsEl.querySelector('.skeleton')) {
+        statsEl.innerHTML = '<p style="color:#6B7280;">Stats are taking longer than expected. Refresh in a few seconds.</p>';
+      }
+
+      const refEl = document.getElementById('referralLink');
+      if (refEl && (!refEl.textContent || refEl.textContent.trim() === 'Loading...')) {
+        const code = shortRefCodeFromEmail(email || 'replypals-user');
+        referralUrlCache = `${window.location.origin}/signup?ref=${code}`;
+        refEl.textContent = referralUrlCache;
+        const bonusTip = document.getElementById('referralBonusTip');
+        if (bonusTip && !bonusTip.textContent) {
+          bonusTip.textContent = 'Share this link now. Bonus syncs automatically once referrals are processed.';
+        }
+      }
+    }
+
+    // Avatar Dropdown
+    document.getElementById('avatarBtn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      document.getElementById('dropdown').classList.toggle('show');
+    });
+    document.addEventListener('click', () => {
+      document.getElementById('dropdown').classList.remove('show');
+    });
+
+    // Sign out
+    document.getElementById('signOutBtn').addEventListener('click', async () => {
+      localStorage.removeItem(RP_LOCAL_SESSION_KEY);
+      try {
+        await sb.auth.signOut();
+      } catch (_) {
+        window.location.href = '/login';
+      }
+    });
+
+    // ── Load Account Status ────────────────────────────────
+    let selectedPlan = 'pro';
+    function selectPlan(plan) {
+      selectedPlan = plan;
+      document.querySelectorAll('.plan-card-opt').forEach(el => {
+        const isPicked = el.dataset.plan === plan;
+        if (isPicked) {
+          el.classList.add('is-selected');
+        } else {
+          el.classList.remove('is-selected');
+        }
+      });
+      const labels = { starter: 'Starter', pro: 'Pro', team: 'Team' };
+      document.getElementById('selectedPlanLabel').textContent = labels[plan] || 'Pro';
+    }
+
+    function scrollToPlans() {
+      const el = document.getElementById('pricingSection');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    async function doUpgrade() {
+      const btn = document.getElementById('upgradeBtn');
+      btn.textContent = 'Loading checkout…';
+      btn.disabled = true;
+      try {
+        const { data: { session } } = await sb.auth.getSession();
+        const res = await fetch(API_BASE + '/create-checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session?.access_token },
+          body: JSON.stringify({ plan: selectedPlan, email: session?.user?.email })
+        });
+        const data = await res.json();
+        if (data.url) {
+          window.location.href = data.url;
+        } else {
+          throw new Error(data.detail || 'Checkout failed');
+        }
+      } catch (e) {
+        btn.innerHTML = `⚡ Upgrade to <span id="selectedPlanLabel">${selectedPlan.charAt(0).toUpperCase() + selectedPlan.slice(1)}</span> — Start Now`;
+        btn.disabled = false;
+        showToast('⚠️ ' + e.message);
+      }
+    }
+
+    async function loadAccountStatus(tokenRef) {
+      try {
+        const { ok, status, data } = await apiJsonAuthed('/account/status', tokenRef);
+        dlog('loadAccountStatus response', { ok, status, data });
+        if (!ok) throw new Error(data?.detail || `Status failed (${status})`);
+        const el = document.getElementById('planContent');
+
+        if (data.plan === 'free' || !data.active) {
+          // ── FREE PLAN — show usage + reveal upgrade experience ──
+          const limit  = data.rewrites_limit ?? 10;
+          const used   = data.rewrites_used  || 0;
+          const pct    = Math.min(100, Math.round((used / limit) * 100));
+          const remain = Math.max(0, limit - used);
+          const barColor = pct >= 80 ? '#EF4444' : pct >= 50 ? '#F59E0B' : '#FF6B35';
+
+          el.innerHTML = `
+            <div class="plan-card free" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+              <div>
+                <div class="plan-name" style="margin-bottom:6px;">🆓 Free Plan <span style="font-size:13px;font-weight:400;color:#6B7280;">· ${remain} rewrites left</span></div>
+                <div style="width:220px;height:8px;background:#EAECF4;border-radius:8px;overflow:hidden;margin:4px 0;">
+                  <div style="width:${pct}%;height:100%;background:${barColor};border-radius:8px;transition:width 0.5s;"></div>
+                </div>
+                <div style="font-size:12px;color:#6B7280;margin-top:4px;">${used} of ${limit} rewrites used</div>
+              </div>
+              <button onclick="scrollToPlans()" style="background:linear-gradient(135deg,#FF6B35,#FF8C42);border:none;color:#fff;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;padding:10px 22px;border-radius:10px;cursor:pointer;box-shadow:0 4px 12px rgba(255,107,53,0.35);white-space:nowrap;">
+                ⚡ Upgrade Now
+              </button>
+            </div>`;
+
+          // Reveal full upgrade experience below
+          document.getElementById('freeUserUpgrade').style.display = 'block';
+
+        } else {
+          // ── PAID PLAN ──
+          const planNames = { starter: 'Starter', pro: 'Pro 🚀', team: 'Team 👥' };
+          const renews = data.renews_at
+            ? new Date(data.renews_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+            : null;
+
+          el.innerHTML = `
+            <div class="plan-card" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+              <div>
+                <div class="plan-name">🟠 ${planNames[data.plan] || data.plan.toUpperCase()} Plan
+                  <span class="plan-badge">${data.active ? 'ACTIVE' : 'INACTIVE'}</span>
+                </div>
+                ${renews ? `<div class="plan-detail">Renews on: ${renews}</div>` : '<div class="plan-detail">Unlimited rewrites · All features unlocked</div>'}
+              </div>
+              <button class="btn-outline" id="manageBillingBtn">⚙️ Manage Billing</button>
+            </div>`;
+
+          // Show license key section
+          document.getElementById('licenseSection').style.display = 'block';
+          document.getElementById('licenseKeyDisplay').textContent = data.license_key || '—';
+
+          // Copy key button
+          document.getElementById('copyKeyBtn').addEventListener('click', () => {
+            navigator.clipboard.writeText(data.license_key || '').then(() => showToast('✅ License key copied!'));
+          });
+
+          // Resend key
+          document.getElementById('resendKeyBtn')?.addEventListener('click', async () => {
+            const r = await fetch(API_BASE + '/resend-license', { method: 'POST', headers: { 'Authorization': 'Bearer ' + (tokenRef?.value || '') } });
+            const d = await r.json();
+            showToast(d.ok ? '📧 Key sent to your email!' : '⚠️ ' + (d.error || 'Failed to resend'));
+          });
+        }
+      } catch (e) {
+        dlog('loadAccountStatus error', { error: String(e) });
+        document.getElementById('planContent').innerHTML = `<div style="color:#EF4444;font-size:14px;padding:12px;">Could not load plan status (${String(e.message || 'request failed')}). <a href="javascript:location.reload()" style="color:#FF6B35;">Retry</a></div>`;
+        console.error('Status error:', e);
+      }
+    }
+
+    // ── Load Stats ─────────────────────────────────────────
+    async function loadStats(tokenRef) {
+      try {
+        // Fetch stats from backend with Authorization header
+        const { ok, status, data } = await apiJsonAuthed('/account/stats', tokenRef);
+        dlog('loadStats response', { ok, status, data });
+
+        if (!ok) throw new Error(data?.detail || `Stats failed (${status})`);
+
+        const el = document.getElementById('statsContent');
+        
+        // Build stats grid HTML
+        el.innerHTML = `
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-value">${data.total_rewrites || 0}</div>
+            <div class="stat-label">Total Rewrites</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">${data.avg_score || 0}/100</div>
+            <div class="stat-label">Avg Score</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">${data.top_tone || 'None'}</div>
+            <div class="stat-label">Top Tone</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">${data.scores_by_day?.length || 0}</div>
+            <div class="stat-label">Active Days</div>
+          </div>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="scoreChart"></canvas>
+        </div>`;
+
+        // Render chart if we have data
+        if (data.scores_by_day && data.scores_by_day.length > 0) {
+          renderChart(data.scores_by_day);
+        }
+
+      } catch (e) {
+        dlog('loadStats error', { error: String(e) });
+        document.getElementById('statsContent').innerHTML = `<p style="color:#6B7280;">Could not load stats (${String(e.message || 'request failed')}).</p>`;
+      }
+    }
+
+    // ── Render Chart ───────────────────────────────────────
+    function renderChart(scoresData) {
+      const ctx = document.getElementById('scoreChart').getContext('2d');
+      
+      if (chartInstance) {
+        chartInstance.destroy(); // Destroy previous chart instance before redrawing
+      }
+
+      chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: scoresData.map(d => d.date),
+          datasets: [{
+            label: 'Avg Score',
+            data: scoresData.map(d => d.avg),
+            borderColor: '#FF6B35',
+            backgroundColor: 'rgba(255,107,53,0.1)',
+            fill: true,
+            tension: 0.4,
+            pointRadius: 4,
+            pointBackgroundColor: '#FF6B35',
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: { min: 0, max: 100, grid: { color: '#F3F4F6' } },
+            x: { grid: { display: false } }
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (context) => {
+                  const d = scoresData[context.dataIndex];
+                  return `Score: ${d.avg}/100 (${d.count} rewrites)`;
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    // ── Run on page load ───────────────────────────────────
+    document.addEventListener('DOMContentLoaded', () => {
+      bindReferralActions();
+      initDashboard();
+    });
+  </script>
+</body>
+
+</html>

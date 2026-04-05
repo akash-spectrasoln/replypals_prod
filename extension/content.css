@@ -1,0 +1,76 @@
+/* ReplyPals content.css — injected by manifest, CSP-safe */
+
+/* ── Keyframe animations ── */
+@keyframes rpFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes rpPulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+@keyframes rpScoreIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Mini floating toolbar (input-focus trigger) ── */
+#rp-mini-toolbar {
+  all: initial;
+  position: fixed !important;
+  z-index: 2147483647 !important;
+  display: none;
+  align-items: center;
+  gap: 3px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 4px 7px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.13);
+  font-family: system-ui, -apple-system, sans-serif;
+  pointer-events: all;
+  animation: rpFadeIn 0.15s ease;
+}
+#rp-mini-toolbar.rp-tb-visible {
+  display: flex !important;
+}
+#rp-mini-toolbar button {
+  all: unset;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  line-height: 1;
+  color: #374151;
+  transition: background 0.1s;
+  white-space: nowrap;
+}
+#rp-mini-toolbar button:hover {
+  background: #f3f4f6;
+}
+#rp-mini-toolbar .rp-tb-divider {
+  width: 1px;
+  height: 18px;
+  background: #e5e7eb;
+  margin: 0 2px;
+}
+
+/* ── Selection toolbar — Grammarly-style icon pill ── */
+/* All critical styles are set inline (all:initial!important) in JS  */
+/* This block is kept for the animation and fallback              */
+#rp-sel-toolbar {
+  animation: rpFadeIn 0.12s ease;
+}
+#rp-tone-menu {
+  animation: rpFadeIn 0.1s ease;
+}
+
+/* ── Score toast ── */
+#rp-score-toast {
+  animation: rpScoreIn 0.2s ease;
+}
+
+/* ── Selection result panel ── */
+#rp-sel-result {
+  animation: rpScoreIn 0.2s ease;
+}

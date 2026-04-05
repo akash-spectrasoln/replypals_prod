@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login — ReplyPals</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'DM Sans', sans-serif; }
+    .syne { font-family: 'Syne', sans-serif; }
+  </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-slate-50 to-orange-50 flex items-center justify-center p-4">
+
+  <div class="w-full max-w-md">
+    <!-- Logo -->
+    <div class="text-center mb-8">
+      <div class="inline-flex items-center gap-3">
+        <div class="w-10 h-10 rounded-full bg-gradient-to-br from-orange-500 to-orange-400 flex items-center justify-center text-white font-bold text-lg">R</div>
+        <span class="syne text-2xl font-bold text-slate-800">ReplyPals</span>
+      </div>
+      <p class="text-slate-500 mt-2 text-sm">Sign in to your account</p>
+    </div>
+
+    <!-- Card -->
+    <div class="bg-white rounded-2xl shadow-xl p-8">
+      
+      <!-- Error/Success alerts -->
+      <div id="alert" class="hidden mb-4 p-3 rounded-lg text-sm font-medium"></div>
+
+      <!-- Google Sign In -->
+      <button id="google-btn" onclick="signInWithGoogle()"
+        class="w-full flex items-center justify-center gap-3 border-2 border-slate-200 
+               rounded-xl py-3 px-4 text-slate-700 font-medium hover:bg-slate-50 
+               hover:border-slate-300 transition-all mb-6">
+        <svg width="20" height="20" viewBox="0 0 48 48">
+          <path fill="#4285F4" d="M47.5 24.6c0-1.6-.1-3.1-.4-4.6H24v8.7h13.2c-.6 3-2.3 5.5-4.9 7.2v6h7.9c4.6-4.2 7.3-10.5 7.3-17.3z"/>
+          <path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.9-6c-2.1 1.4-4.9 2.3-8 2.3-6.1 0-11.3-4.1-13.1-9.7H2.7v6.2C6.7 42.7 14.8 48 24 48z"/>
+          <path fill="#FBBC04" d="M10.9 28.8c-.5-1.4-.7-2.9-.7-4.4s.2-3 .7-4.4v-6.2H2.7C1 17.2 0 20.5 0 24s1 6.8 2.7 9.9l8.2-5.1z"/>
+          <path fill="#E94235" d="M24 9.5c3.4 0 6.5 1.2 8.9 3.5l6.6-6.6C35.9 2.5 30.5 0 24 0 14.8 0 6.7 5.3 2.7 13.1l8.2 5.1C12.7 13.6 17.9 9.5 24 9.5z"/>
+        </svg>
+        Continue with Google
+      </button>
+
+      <div class="relative mb-6">
+        <div class="absolute inset-0 flex items-center">
+          <div class="w-full border-t border-slate-200"></div>
+        </div>
+        <div class="relative flex justify-center text-sm">
+          <span class="bg-white px-3 text-slate-400">or sign in with email</span>
+        </div>
+      </div>
+
+      <!-- Email/Password Form -->
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">Email</label>
+          <input id="email" type="email" placeholder="you@example.com"
+            class="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm
+                   focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent
+                   transition-all">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">Password</label>
+          <div class="relative">
+            <input id="password" type="password" placeholder="••••••••"
+              class="w-full border border-slate-200 rounded-xl px-4 py-3 pr-12 text-sm
+                     focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent
+                     transition-all">
+            <button onclick="togglePassword()" 
+              class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+              <svg id="eye-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between">
+          <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+            <input type="checkbox" id="remember" class="rounded border-slate-300 text-orange-500">
+            Remember me
+          </label>
+          <a href="/forgot-password" class="text-sm text-orange-500 hover:text-orange-600 font-medium">
+            Forgot password?
+          </a>
+        </div>
+
+        <button id="login-btn" onclick="signInWithEmail()"
+          class="w-full bg-gradient-to-r from-orange-500 to-orange-400 text-white font-semibold
+                 rounded-xl py-3 px-4 hover:from-orange-600 hover:to-orange-500 transition-all
+                 flex items-center justify-center gap-2 shadow-lg shadow-orange-200">
+          <span id="login-text">Sign In</span>
+          <svg id="login-spinner" class="hidden animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0" stroke-dasharray="60" stroke-dashoffset="60"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Magic Link option -->
+      <div class="mt-4 text-center">
+        <button onclick="sendMagicLink()" 
+          class="text-sm text-slate-500 hover:text-orange-500 transition-colors">
+          📧 Send magic link instead
+        </button>
+      </div>
+    </div>
+
+    <p class="text-center text-sm text-slate-500 mt-6">
+      Don't have an account? 
+      <a href="/signup" class="text-orange-500 font-semibold hover:text-orange-600">Sign up free</a>
+    </p>
+  </div>
+
+  <!-- Supabase -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    // ── Config ─────────────────────────────────────────────
+    // REPLACE THESE with your actual values
+    const FALLBACK_SUPABASE_URL = 'https://nutchvfpcmowrlqjwkns.supabase.co';
+    const apiBaseOverride = new URLSearchParams(window.location.search).get('api_base');
+    const API_BASE = apiBaseOverride || window.location.origin;
+
+    const { createClient } = supabase;
+    let sb = null;
+    const HOST = window.location.hostname || '';
+    const IS_LOCAL_DEV =
+      /^(localhost|127\.0\.0\.1|0\.0\.0\.0)$/i.test(HOST) ||
+      /^192\.168\./.test(HOST) ||
+      /^10\./.test(HOST) ||
+      /^172\.(1[6-9]|2\d|3[0-1])\./.test(HOST);
+    const RP_LOCAL_USERS_KEY = 'rp_local_auth_users_v1';
+    const RP_LOCAL_SESSION_KEY = 'rp_local_auth_session_v1';
+
+    function loadLocalUsers() {
+      try {
+        return JSON.parse(localStorage.getItem(RP_LOCAL_USERS_KEY) || '{}');
+      } catch (_) {
+        return {};
+      }
+    }
+
+    function setLocalSession(user) {
+      localStorage.setItem(RP_LOCAL_SESSION_KEY, JSON.stringify({
+        id: user.id,
+        email: user.email,
+        full_name: user.full_name || user.email.split('@')[0],
+      }));
+    }
+
+    function fallbackSignIn(email, password) {
+      const users = loadLocalUsers();
+      const user = users[email.toLowerCase()];
+      if (!user || user.password !== password) return false;
+      setLocalSession(user);
+      return true;
+    }
+
+    function isNetworkFetchFailure(errLike) {
+      const msg = String(errLike?.message || errLike || '').toLowerCase();
+      return (
+        msg.includes('failed to fetch') ||
+        msg.includes('networkerror') ||
+        msg.includes('load failed') ||
+        msg.includes('dns') ||
+        msg.includes('getaddrinfo') ||
+        msg.includes('cors') ||
+        msg.includes('fetch')
+      );
+    }
+
+    async function initSupabaseClient() {
+      if (sb) return sb;
+      let url = FALLBACK_SUPABASE_URL;
+      let anon = '';
+      try {
+        const r = await fetch(API_BASE + '/public-config');
+        if (r.ok) {
+          const cfg = await r.json();
+          url = cfg.supabase_url || url;
+          anon = cfg.supabase_anon_key || '';
+        }
+      } catch (_) {}
+      if (!url || !anon) return null;
+      sb = createClient(url, anon, {
+        auth: {
+          redirectTo: window.location.origin + '/auth-callback',
+          persistSession: true,
+          autoRefreshToken: true,
+        }
+      });
+      return sb;
+    }
+
+    // ── Check if already logged in ─────────────────────────
+    window.addEventListener('DOMContentLoaded', async () => {
+      await initSupabaseClient();
+      const localSession = localStorage.getItem(RP_LOCAL_SESSION_KEY);
+      if (localSession) {
+        window.location.href = '/dashboard';
+        return;
+      }
+      if (!sb) return;
+      try {
+        const { data: { session } } = await sb.auth.getSession();
+        if (session) {
+          window.location.href = '/dashboard';
+        }
+      } catch (_) {
+        // Ignore transient auth network failures on local dev.
+      }
+    });
+
+    // ── Show alert ─────────────────────────────────────────
+    function showAlert(msg, type = 'error') {
+      const el = document.getElementById('alert');
+      el.textContent = msg;
+      el.className = `mb-4 p-3 rounded-lg text-sm font-medium ${
+        type === 'error'   ? 'bg-red-50 text-red-700 border border-red-200' :
+        type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' :
+                             'bg-blue-50 text-blue-700 border border-blue-200'
+      }`;
+      el.classList.remove('hidden');
+    }
+
+    function hideAlert() {
+      document.getElementById('alert').classList.add('hidden');
+    }
+
+    // ── Loading state ──────────────────────────────────────
+    function setLoading(loading) {
+      const btn  = document.getElementById('login-btn');
+      const text = document.getElementById('login-text');
+      const spin = document.getElementById('login-spinner');
+      btn.disabled = loading;
+      text.textContent = loading ? 'Signing in...' : 'Sign In';
+      if (loading) spin.classList.remove('hidden');
+      else         spin.classList.add('hidden');
+    }
+
+    // ── Email + Password Sign In ───────────────────────────
+    async function signInWithEmail() {
+      hideAlert();
+      const email    = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+
+      if (!email || !password) {
+        showAlert('Please enter your email and password.');
+        return;
+      }
+
+      setLoading(true);
+      try {
+        if (!sb) await initSupabaseClient();
+        if (!sb && IS_LOCAL_DEV) {
+          const ok = fallbackSignIn(email, password);
+          if (ok) {
+            window.location.href = '/dashboard';
+          } else {
+            showAlert('Local account not found. Please sign up first.');
+          }
+          return;
+        }
+        if (!sb) {
+          showAlert('Auth is not configured on server. Please set SUPABASE_ANON_KEY in Railway variables.');
+          return;
+        }
+        const { data, error } = await sb.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+        if (error) {
+          if (IS_LOCAL_DEV && isNetworkFetchFailure(error)) {
+            const ok = fallbackSignIn(email, password);
+            if (ok) {
+              window.location.href = '/dashboard';
+            } else {
+              showAlert('Local account not found. Please sign up first.');
+            }
+            return;
+          }
+          // Friendly error messages
+          const msgs = {
+            'Invalid login credentials': 'Wrong email or password. Please try again.',
+            'Email not confirmed':       'Please check your email and click the confirmation link first.',
+            'Too many requests':         'Too many attempts. Please wait a minute and try again.',
+          };
+          showAlert(msgs[error.message] || error.message);
+          return;
+        }
+
+        if (data.session) {
+          // Register user with backend (links Supabase user_id)
+          await registerUserWithBackend(data.session);
+          window.location.href = '/dashboard';
+        }
+      } catch (e) {
+        if (IS_LOCAL_DEV && isNetworkFetchFailure(e)) {
+          const ok = fallbackSignIn(email, password);
+          if (ok) {
+            window.location.href = '/dashboard';
+          } else {
+            showAlert('Local account not found. Please sign up first.');
+          }
+          return;
+        }
+        showAlert('Something went wrong. Please try again.');
+        console.error('Login error:', e);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    // ── Google OAuth ───────────────────────────────────────
+    async function signInWithGoogle() {
+      hideAlert();
+      if (!sb) await initSupabaseClient();
+      if (!sb) {
+        showAlert('Google sign-in is not configured on server yet.');
+        return;
+      }
+      const btn = document.getElementById('google-btn');
+      btn.disabled = true;
+      btn.innerHTML = `
+        <svg class="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0"/>
+        </svg>
+        Connecting to Google...
+      `;
+
+      try {
+        const { data, error } = await sb.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            // CRITICAL: This MUST match exactly what you set in:
+            // 1. Supabase Auth > URL Configuration > Redirect URLs
+            // 2. Google Cloud Console > Authorized redirect URIs
+            redirectTo: window.location.origin + '/auth-callback',
+            scopes: 'email profile',
+            queryParams: {
+              access_type: 'offline',
+              prompt: 'consent',
+            },
+          }
+        });
+
+        if (error) {
+          showAlert('Google sign-in failed: ' + error.message);
+          btn.disabled = false;
+          btn.innerHTML = `
+            <svg width="20" height="20" viewBox="0 0 48 48">
+              <path fill="#4285F4" d="M47.5 24.6c0-1.6-.1-3.1-.4-4.6H24v8.7h13.2c-.6 3-2.3 5.5-4.9 7.2v6h7.9c4.6-4.2 7.3-10.5 7.3-17.3z"/>
+              <path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.9-6c-2.1 1.4-4.9 2.3-8 2.3-6.1 0-11.3-4.1-13.1-9.7H2.7v6.2C6.7 42.7 14.8 48 24 48z"/>
+              <path fill="#FBBC04" d="M10.9 28.8c-.5-1.4-.7-2.9-.7-4.4s.2-3 .7-4.4v-6.2H2.7C1 17.2 0 20.5 0 24s1 6.8 2.7 9.9l8.2-5.1z"/>
+              <path fill="#E94235" d="M24 9.5c3.4 0 6.5 1.2 8.9 3.5l6.6-6.6C35.9 2.5 30.5 0 24 0 14.8 0 6.7 5.3 2.7 13.1l8.2 5.1C12.7 13.6 17.9 9.5 24 9.5z"/>
+            </svg>
+            Continue with Google
+          `;
+        }
+        // If no error: Supabase redirects to Google automatically
+      } catch (e) {
+        showAlert('Google sign-in failed. Please try again.');
+        console.error('Google OAuth error:', e);
+      }
+    }
+
+    // ── Magic Link ─────────────────────────────────────────
+    async function sendMagicLink() {
+      const email = document.getElementById('email').value.trim();
+      if (!email) {
+        showAlert('Enter your email address first, then click magic link.');
+        return;
+      }
+
+      const { error } = await sb.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: window.location.origin + '/auth-callback',
+        }
+      });
+
+      if (error) {
+        showAlert(error.message);
+      } else {
+        showAlert(`✅ Magic link sent to ${email} — check your inbox!`, 'success');
+      }
+    }
+
+    // ── Register user with backend ─────────────────────────
+    async function registerUserWithBackend(session) {
+      try {
+        await fetch(API_BASE + '/account/register', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + session.access_token,
+          },
+          body: JSON.stringify({
+            user_id:    session.user.id,
+            email:      session.user.email,
+            full_name:  session.user.user_metadata?.full_name || '',
+          })
+        });
+      } catch (e) {
+        // Non-fatal — don't block login if this fails
+        console.warn('Backend registration failed:', e);
+      }
+    }
+
+    // ── Enter key support ──────────────────────────────────
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') signInWithEmail();
+    });
+
+    // ── Toggle password visibility ─────────────────────────
+    function togglePassword() {
+      const input = document.getElementById('password');
+      input.type = input.type === 'password' ? 'text' : 'password';
+    }
+  </script>
+</body>
+</html>

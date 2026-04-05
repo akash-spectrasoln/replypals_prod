@@ -1,0 +1,39 @@
+# Environment / secrets — NEVER COMMIT THESE
+api/.env
+.env
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# Node
+node_modules/
+.npm/
+
+# Extension release packages (build with scripts/build-extension.ps1 or scripts/build.sh)
+replypal-extension*.zip
+
+# Dev artifacts
+extension/temp.txt
+extension/build2.js
+extension/new_logic.js
+extension/voice-test.html
+api/test_results.txt
+
+# OS
+.DS_Store
+Thumbs.db
+
+/generated/prisma
+
+tests/playwright/.pw-ext-user-data/
+tests/playwright/test-results/
+.env.local

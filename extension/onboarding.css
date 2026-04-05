@@ -1,0 +1,467 @@
+/* ═══════════════════════════════════════════
+   ReplyPals — Onboarding Styles
+   ═══════════════════════════════════════════ */
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+:root {
+    --orange: #FF6B35;
+    --orange-dark: #E85520;
+    --orange-light: #FFF3ED;
+    --orange-glow: rgba(255, 107, 53, 0.15);
+    --navy: #0F2544;
+    --white: #FFFFFF;
+    --bg: #F8F9FE;
+    --text-primary: #1A1D2E;
+    --text-secondary: #6B7280;
+    --text-muted: #9CA3AF;
+    --border: #EAECF4;
+    --green: #10B981;
+    --green-bg: #ECFDF5;
+    --radius: 16px;
+    --transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+html,
+body {
+    width: 100%;
+    min-height: 100vh;
+    font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 14px;
+    color: var(--text-primary);
+    background: var(--bg);
+    -webkit-font-smoothing: antialiased;
+}
+
+/* ─── Container ─── */
+.onboarding-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 24px;
+}
+
+.onboarding-card {
+    width: 480px;
+    max-width: 100%;
+    background: var(--white);
+    border-radius: 20px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08), 0 4px 16px rgba(0, 0, 0, 0.04);
+    padding: 32px;
+    position: relative;
+    overflow: hidden;
+}
+
+/* ─── Logo ─── */
+.ob-logo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.ob-logo-circle {
+    width: 40px;
+    height: 40px;
+    background: var(--orange);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 20px;
+    color: var(--white);
+    box-shadow: 0 4px 12px rgba(255, 107, 53, 0.3);
+}
+
+.ob-logo-text {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 22px;
+    color: var(--navy);
+}
+
+/* ─── Progress Dots ─── */
+.ob-progress {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 24px;
+}
+
+.ob-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--border);
+    transition: var(--transition);
+}
+
+.ob-dot.active {
+    background: var(--orange);
+    box-shadow: 0 0 0 3px var(--orange-glow);
+}
+
+.ob-dot.completed {
+    background: var(--green);
+}
+
+/* ─── Steps ─── */
+.ob-steps-wrapper {
+    position: relative;
+    overflow: hidden;
+}
+
+.ob-step {
+    display: none;
+    animation: obSlideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ob-step.active {
+    display: block;
+}
+
+@keyframes obSlideIn {
+    from {
+        opacity: 0;
+        transform: translateX(30px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* ─── Gradient Header (Step 1) ─── */
+.ob-gradient-header {
+    background: linear-gradient(135deg, #FF6B35, #FF8C42);
+    border-radius: 14px;
+    padding: 24px;
+    color: var(--white);
+    text-align: center;
+    margin-bottom: 24px;
+}
+
+.ob-gradient-header h2 {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 22px;
+    margin-bottom: 8px;
+}
+
+.ob-gradient-header p {
+    font-size: 14px;
+    opacity: 0.9;
+    line-height: 1.5;
+}
+
+/* ─── Text Animation ─── */
+.ob-animation-area {
+    margin-bottom: 24px;
+}
+
+.ob-text-animation {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+
+.ob-text-before,
+.ob-text-after {
+    width: 100%;
+    padding: 14px 16px;
+    border-radius: 10px;
+    position: relative;
+}
+
+.ob-text-before {
+    background: #FEF2F2;
+    border-left: 3px solid #EF4444;
+    animation: obFadeStrike 3s ease-in-out infinite;
+}
+
+.ob-text-after {
+    background: var(--green-bg);
+    border-left: 3px solid var(--green);
+    animation: obFadeGlow 3s ease-in-out infinite;
+}
+
+.ob-text-before p,
+.ob-text-after p {
+    font-size: 13.5px;
+    line-height: 1.5;
+    color: var(--text-primary);
+}
+
+.ob-text-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #EF4444;
+    margin-bottom: 4px;
+    display: block;
+}
+
+.ob-text-label-green {
+    color: var(--green);
+}
+
+.ob-arrow-down {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: obBounce 2s ease-in-out infinite;
+}
+
+@keyframes obBounce {
+
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(4px);
+    }
+}
+
+@keyframes obFadeStrike {
+
+    0%,
+    100% {
+        opacity: 0.7;
+    }
+
+    50% {
+        opacity: 1;
+    }
+}
+
+@keyframes obFadeGlow {
+
+    0%,
+    100% {
+        opacity: 0.8;
+    }
+
+    50% {
+        opacity: 1;
+        box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.15);
+    }
+}
+
+/* ─── Step Titles ─── */
+.ob-step-title {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 20px;
+    color: var(--navy);
+    margin-bottom: 6px;
+    text-align: center;
+}
+
+.ob-step-sub {
+    font-size: 13px;
+    color: var(--text-secondary);
+    text-align: center;
+    margin-bottom: 20px;
+    line-height: 1.5;
+}
+
+/* ─── Sites Grid (Step 2) ─── */
+.ob-sites-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-bottom: 24px;
+}
+
+.ob-site-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 16px;
+    background: var(--white);
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.ob-site-card:hover {
+    border-color: var(--orange);
+}
+
+.ob-site-card.selected {
+    border-color: var(--orange);
+    background: var(--orange-light);
+}
+
+.ob-site-icon {
+    font-size: 20px;
+}
+
+.ob-site-name {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text-primary);
+}
+
+/* ─── Goals List (Step 3) ─── */
+.ob-goals-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 24px;
+}
+
+.ob-goal-option {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    background: var(--white);
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.ob-goal-option:hover {
+    border-color: var(--orange);
+}
+
+.ob-goal-option.selected {
+    border-color: var(--orange);
+    background: var(--orange-light);
+}
+
+.ob-goal-option input[type="radio"] {
+    display: none;
+}
+
+.ob-goal-radio {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    flex-shrink: 0;
+    position: relative;
+    transition: var(--transition);
+}
+
+.ob-goal-option.selected .ob-goal-radio {
+    border-color: var(--orange);
+}
+
+.ob-goal-option.selected .ob-goal-radio::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--orange);
+}
+
+.ob-goal-icon {
+    font-size: 18px;
+}
+
+.ob-goal-text {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+/* ─── Buttons ─── */
+.ob-btn {
+    display: block;
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: var(--radius);
+    font-family: 'Syne', sans-serif;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: var(--transition);
+    letter-spacing: 0.3px;
+}
+
+.ob-btn-primary {
+    background: linear-gradient(135deg, var(--orange), var(--orange-dark));
+    color: var(--white);
+    box-shadow: 0 4px 18px rgba(255, 107, 53, 0.35);
+}
+
+.ob-btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 24px rgba(255, 107, 53, 0.45);
+}
+
+.ob-btn-primary:active {
+    transform: translateY(0);
+}
+
+/* ─── Success State ─── */
+.ob-success {
+    text-align: center;
+    padding: 40px 20px;
+    animation: obSlideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ob-check-animation svg {
+    margin-bottom: 16px;
+}
+
+.ob-check-circle {
+    stroke-dasharray: 283;
+    stroke-dashoffset: 283;
+    animation: obDrawCircle 0.6s ease forwards;
+}
+
+.ob-check-mark {
+    stroke-dasharray: 80;
+    stroke-dashoffset: 80;
+    animation: obDrawCheck 0.4s ease 0.5s forwards;
+}
+
+@keyframes obDrawCircle {
+    to {
+        stroke-dashoffset: 0;
+    }
+}
+
+@keyframes obDrawCheck {
+    to {
+        stroke-dashoffset: 0;
+    }
+}
+
+.ob-success-text {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 22px;
+    color: var(--navy);
+    margin-bottom: 6px;
+}
+
+.ob-success-sub {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
