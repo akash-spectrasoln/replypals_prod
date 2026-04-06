@@ -1,0 +1,21 @@
+---
+const chromeUrl = 'https://chrome.google.com/webstore/detail/replypals/jipgphhkpgkjjfpjbjjnbdikjkgmnnkp'
+---
+
+<header class="border-b border-slate-200 bg-white/90 backdrop-blur">
+  <div class="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4">
+    <a href="/" class="text-lg font-bold text-indigo-700">ReplyPals</a>
+    <nav class="flex flex-wrap items-center gap-6 text-sm font-medium text-slate-700">
+      <a href="/#features" class="hover:text-indigo-700">Features</a>
+      <a href="/pricing" class="hover:text-indigo-700">Pricing</a>
+      <a
+        href={chromeUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        class="rounded-lg bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700"
+      >
+        Install
+      </a>
+    </nav>
+  </div>
+</header>

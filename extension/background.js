@@ -1,17 +1,10 @@
 // ─── ReplyPals Background Service Worker ───
-// API base — set REPLYPAL_API_URL at build time for production packages.
-// Defaults keep local dev simple while making unpacked builds work in production.
-const DEV_API_BASE = 'http://' + 'localhost' + ':8150';
-const PROD_API_BASE = 'https://www.replypals.in';
-const IS_DEV_BUILD = chrome.runtime.getManifest?.().update_url === undefined;
-const BUILD_TIME_API_BASE = '__REPLYPAL_API_URL__';
+const API_BASE = 'https://replypals.in/api';
+if (!API_BASE || !API_BASE.startsWith('https://')) {
+  console.error('[ReplyPals] API_BASE is misconfigured:', API_BASE);
+}
+
 const BUILD_TIME_MIXPANEL_TOKEN = '__MIXPANEL_TOKEN__';
-
-const injectedApiBase = (BUILD_TIME_API_BASE && !BUILD_TIME_API_BASE.startsWith('__'))
-  ? BUILD_TIME_API_BASE
-  : '';
-
-const API_BASE = injectedApiBase || (IS_DEV_BUILD ? DEV_API_BASE : PROD_API_BASE);
 
 const ALLOWED_EXTERNAL_ORIGINS = new Set([
   'https://replypals.in',
@@ -116,12 +109,66 @@ async function checkOnline() {
   }
 }
 
+let _cachedAnonId = null;
+
 async function getOrCreateAnonId() {
+  if (_cachedAnonId) return _cachedAnonId;
   const { replypalAnonId } = await chrome.storage.local.get('replypalAnonId');
-  if (replypalAnonId) return replypalAnonId;
+  if (replypalAnonId) {
+    _cachedAnonId = replypalAnonId;
+    return replypalAnonId;
+  }
   const anonId = crypto.randomUUID();
   await chrome.storage.local.set({ replypalAnonId: anonId });
+  _cachedAnonId = anonId;
   return anonId;
+}
+
+/** Use client-supplied event_id for dedup on retries; never replace a non-empty payload id. */
+function pickEventId(payload) {
+  const e = payload && payload.event_id;
+  if (e != null && String(e).trim().length >= 8) return String(e).trim();
+  return crypto.randomUUID();
+}
+
+/** Persist quota fields from a successful /rewrite or /generate JSON body (single source of truth). */
+async function persistQuotaFromRewriteResponse(data) {
+  if (!data || typeof data !== 'object') return;
+  const patch = {};
+  if (typeof data.plan === 'string' && data.plan.length) {
+    patch.replypalPlan = data.plan;
+  }
+  if (typeof data.rewrites_used === 'number') {
+    patch.replypalCount = data.rewrites_used;
+    patch.replypalUsageUsed = data.rewrites_used;
+  }
+  if (typeof data.rewrites_limit === 'number') {
+    const limit = data.rewrites_limit;
+    patch.replypalUsageLimit = limit;
+    patch.replypalRewritesLimit = limit;
+    let bonus = 0;
+    if (data.plan === 'anon') {
+      bonus = 0;
+    } else if (typeof data.bonus_rewrites === 'number') {
+      bonus = Math.max(0, data.bonus_rewrites);
+    } else if (typeof data.monthly_base_limit === 'number') {
+      bonus = Math.max(0, limit - data.monthly_base_limit);
+    } else {
+      bonus = Math.max(0, limit - 10);
+    }
+    patch.replypalBonusRewrites = bonus;
+  }
+  if (typeof data.monthly_base_limit === 'number') {
+    patch.replypalMonthlyBaseLimit = data.monthly_base_limit;
+  }
+  if (typeof data.rewrites_left === 'number') {
+    patch.replypalUsageLeft = data.rewrites_left;
+  } else if (typeof data.rewrites_used === 'number' && typeof data.rewrites_limit === 'number') {
+    patch.replypalUsageLeft = Math.max(0, data.rewrites_limit - data.rewrites_used);
+  }
+  if (Object.keys(patch).length) {
+    await chrome.storage.local.set(patch);
+  }
 }
 
 async function syncFreeUsageSnapshot(emailHint = null, anonHint = null) {
@@ -140,21 +187,27 @@ async function syncFreeUsageSnapshot(emailHint = null, anonHint = null) {
       const serverUsed = Number(snap.rewrites_used || 0);
       const mergedUsed = Math.max(currentUsed, serverUsed);
       const limit = Number(snap.rewrites_limit || replypalUsageLimit || 10);
+      const mergedLeft = Math.max(0, limit - mergedUsed);
       let bonus = 0;
-      if (typeof snap.bonus_rewrites === 'number') {
+      if (snap.plan === 'anon') {
+        bonus = 0;
+      } else if (typeof snap.bonus_rewrites === 'number') {
         bonus = Math.max(0, snap.bonus_rewrites);
       } else {
         const base = typeof snap.monthly_base_limit === 'number' ? snap.monthly_base_limit : 10;
         bonus = Math.max(0, limit - base);
       }
-      await chrome.storage.local.set({
+      const patch = {
         replypalUsageUsed: mergedUsed,
+        replypalCount: mergedUsed,
         replypalUsageLimit: limit,
-        replypalUsageLeft: Math.max(0, limit - mergedUsed),
+        replypalUsageLeft: mergedLeft,
         replypalRewritesLimit: limit,
         replypalBonusRewrites: bonus,
         replypalMonthlyBaseLimit: typeof snap.monthly_base_limit === 'number' ? snap.monthly_base_limit : undefined,
-      });
+      };
+      if (typeof snap.plan === 'string') patch.replypalPlan = snap.plan;
+      await chrome.storage.local.set(patch);
     }
   } catch (_) { }
 }
@@ -365,8 +418,8 @@ async function handleRewrite(payload) {
       body: JSON.stringify({
         ...payload,
         email: payload.email || replypalEmail || null,
-        anon_id: payload.anon_id || anonId,
-        event_id: payload.event_id || crypto.randomUUID(),
+        anon_id: payload.anon_id != null && payload.anon_id !== '' ? payload.anon_id : anonId,
+        event_id: pickEventId(payload),
         source: payload.source || 'popup',   // popup | content_input | voice
       })
     });
@@ -420,8 +473,11 @@ async function handleRewrite(payload) {
       }
     }
 
-    // Keep popup counters synced with any surface (popup, R-sign, bulb, selection).
-    await syncFreeUsageSnapshot(payload.email || null, payload.anon_id || null);
+    if (typeof data.rewrites_used === 'number' || typeof data.rewrites_limit === 'number' || typeof data.rewrites_left === 'number') {
+      await persistQuotaFromRewriteResponse(data);
+    } else {
+      await syncFreeUsageSnapshot(payload.email || null, payload.anon_id || null);
+    }
 
     return { success: true, data };
   } catch (err) {
@@ -452,8 +508,8 @@ async function handleGenerate(payload) {
       body: JSON.stringify({
         ...payload,
         email: payload.email || replypalEmail || null,
-        anon_id: payload.anon_id || anonId,
-        event_id: payload.event_id || crypto.randomUUID(),
+        anon_id: payload.anon_id != null && payload.anon_id !== '' ? payload.anon_id : anonId,
+        event_id: pickEventId(payload),
       })
     });
     if (!res.ok) {
@@ -473,7 +529,11 @@ async function handleGenerate(payload) {
       if (scores.length > 50) scores.splice(0, scores.length - 50);
       await chrome.storage.local.set({ replypalScores: scores });
     }
-    await syncFreeUsageSnapshot(payload.email || null, payload.anon_id || null);
+    if (typeof data.rewrites_used === 'number' || typeof data.rewrites_limit === 'number' || typeof data.rewrites_left === 'number') {
+      await persistQuotaFromRewriteResponse(data);
+    } else {
+      await syncFreeUsageSnapshot(payload.email || null, payload.anon_id || null);
+    }
     return { success: true, data };
   } catch (err) {
     return { success: false, error: err.message };
@@ -807,8 +867,8 @@ async function handleSelectionAction(payload) {
       tone:        activeTone,
       language:    language || 'auto',
       email:       replypalEmail || null,
-      anon_id:     anonId,
-      event_id:    crypto.randomUUID(),
+      anon_id:     payload.anon_id != null && payload.anon_id !== '' ? payload.anon_id : anonId,
+      event_id:    pickEventId(payload),
       license_key: replypalLicense || null,
       mode:        normalizedMode,
       source:      'content_selection',
@@ -835,7 +895,11 @@ async function handleSelectionAction(payload) {
 
     const data = await res.json();
     track('selection_action', { mode: normalizedMode, score: data.score }); // no personal data
-    await syncFreeUsageSnapshot(replypalEmail || null, anonId);
+    if (typeof data.rewrites_used === 'number' || typeof data.rewrites_limit === 'number' || typeof data.rewrites_left === 'number') {
+      await persistQuotaFromRewriteResponse(data);
+    } else {
+      await syncFreeUsageSnapshot(replypalEmail || null, anonId);
+    }
     return { success: true, data };
   } catch (err) {
     const name = err && err.name;

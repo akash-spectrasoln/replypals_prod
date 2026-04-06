@@ -99,12 +99,15 @@ def _dash_dbg(msg: str, **fields) -> None:
     print(f"[dashboard-debug] {msg} {kv}".strip())
 
 from billing_usage import (
+    ANON_LIFETIME_LIMIT,
     load_plan_limits_merged,
     serialize_plan_limits_for_public,
     serialize_plan_limits_from_snapshot,
     COST_GUARDRAIL_USD,
     check_rate_limit_impl,
     extract_request_identity,
+    get_anon_total_used,
+    increment_anon_usage,
     record_rewrite_usage,
     ensure_user_profile_row,
     today_total_cost_usd,
@@ -515,7 +518,7 @@ load_dotenv(dotenv_path=Path(__file__).with_name(".env"), override=True)
 # ═══════════════════════════════════════════
 def _check_production_config():
     """Refuse to start in production with dangerous defaults."""
-    is_prod = os.getenv("APP_ENV", "development").lower() == "production"
+    is_prod = (os.getenv("APP_ENV") or os.getenv("ENVIRONMENT", "development")).lower() == "production"
     if not is_prod:
         return
     errors = []
@@ -583,13 +586,15 @@ if not _origins:
     _origins = [
         "http://localhost:8150",
         "http://127.0.0.1:8150",
-        "https://replypal.app",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
         "https://replypals.in",
+        "https://www.replypals.in",
     ]
 
 ALLOWED_ORIGINS = _origins
 ALLOW_ORIGIN_REGEX = os.getenv("ALLOW_ORIGIN_REGEX", "").strip() or (
-    r"chrome-extension://[a-z]{32}" if _has_placeholder_ext else None
+    r"chrome-extension://[a-z]{32}" if _has_placeholder_ext else r"chrome-extension://.*"
 )
 ALLOW_CREDENTIALS = "*" not in ALLOWED_ORIGINS
 
@@ -600,6 +605,7 @@ FRONTEND_CANCEL_URL = os.getenv("FRONTEND_CANCEL_URL", "https://replypals.in/das
 _SUPABASE_BACKOFF_UNTIL = 0.0
 _SUPABASE_BACKOFF_SECONDS = 30
 _DEGRADED_FREE_HITS = {}
+_DEGRADED_ANON_HITS: dict[str, int] = {}
 
 
 def _rate_ctx_degraded(user_id: Optional[str], req_email: str) -> dict:
@@ -653,6 +659,54 @@ def _degraded_free_record_hit(user_id: Optional[str], req_email: str) -> None:
     arr = _DEGRADED_FREE_HITS.get(ident, [])
     arr.append(now)
     _DEGRADED_FREE_HITS[ident] = arr
+
+
+def _degraded_anon_snapshot(anon_id: str) -> tuple[int, int]:
+    """In-process fallback: lifetime count per anon_id, cap ANON_LIFETIME_LIMIT."""
+    aid = (anon_id or "").strip()
+    if not aid:
+        return (0, ANON_LIFETIME_LIMIT)
+    used = int(_DEGRADED_ANON_HITS.get(aid, 0))
+    return (used, ANON_LIFETIME_LIMIT)
+
+
+def _degraded_anon_record_hit(anon_id: str) -> None:
+    aid = (anon_id or "").strip()
+    if not aid:
+        return
+    _DEGRADED_ANON_HITS[aid] = int(_DEGRADED_ANON_HITS.get(aid, 0)) + 1
+
+
+def _rate_ctx_degraded_anon(anon_id: str, used: int) -> dict:
+    syn = _synthetic_email_from_anon_id(anon_id) or ""
+    try:
+        ruid = str(
+            uuid.uuid5(uuid.NAMESPACE_DNS, f"replypals:{syn.strip().lower()}")
+        )
+    except Exception:
+        ruid = None
+    return {
+        "user_id": None,
+        "email": syn,
+        "license_key": "",
+        "plan": "anon",
+        "limit": ANON_LIFETIME_LIMIT,
+        "used": used,
+        "has_license": False,
+        "brand_voice": None,
+        "degraded": True,
+        "degraded_reason": "db_unreachable",
+        "persistence": "best_effort",
+        "anon_only": True,
+        "anon_id": (anon_id or "").strip(),
+        "resolved_user_id": ruid,
+        "usage_source": "subscription",
+        "usage_meta": UsageMetadata(
+            allowed=True,
+            remaining_monthly=max(0, ANON_LIFETIME_LIMIT - used - 1),
+            reset_in="never",
+        ).model_dump(),
+    }
 
 
 def _mark_supabase_down(reason: Exception) -> None:
@@ -723,7 +777,11 @@ async def _geo_country_for_ip(ip: str) -> dict:
 # APP SETUP
 # ═══════════════════════════════════════════
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="ReplyPals API", version="1.2.0")
+_fp_kwargs = dict(title="ReplyPals API", version="1.2.0")
+_root_path = os.getenv("ROOT_PATH", "/api").strip()
+if _root_path:
+    _fp_kwargs["root_path"] = _root_path
+app = FastAPI(**_fp_kwargs)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -758,8 +816,8 @@ app.add_middleware(
     allow_origins=ALLOWED_ORIGINS,
     allow_origin_regex=ALLOW_ORIGIN_REGEX,
     allow_credentials=ALLOW_CREDENTIALS,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 # ─── Body Caching Middleware (fixes double-read in check_rate_limit) ───
@@ -908,6 +966,9 @@ def _resolve_user_id_for_db(user_id: Optional[str], email: str) -> Optional[str]
 # ─── Admin Router ───
 from admin_routes import router as admin_router, require_admin
 app.include_router(admin_router)
+# React admin SPA JSON endpoints (also used by legacy HTML admin) are defined on ``admin_router``:
+# GET /admin/me, GET /admin/stats, POST /admin/login (email/password), GET /admin/users?plan=...,
+# GET /admin/logs?page=..., GET/PATCH /admin/settings (dashboard fields merged with legacy settings).
 
 def is_admin_request(request: Request) -> bool:
     try:
@@ -1084,6 +1145,7 @@ class RewriteResponse(BaseModel):
     rewritten: str
     score: int
     tip: Optional[str] = None
+    plan: Optional[str] = None
     rewrites_used: Optional[int] = None
     rewrites_limit: Optional[int] = None
     rewrites_left: Optional[int] = None
@@ -1116,6 +1178,7 @@ class GenerateResponse(BaseModel):
     generated: str
     subject: Optional[str] = None
     score: int
+    plan: Optional[str] = None
     rewrites_used: Optional[int] = None
     rewrites_limit: Optional[int] = None
     rewrites_left: Optional[int] = None
@@ -1624,24 +1687,47 @@ async def check_rate_limit(
     user_id    = user.get("sub")   if user else None
     user_email = user.get("email") if user else None
 
+    req_anon_parsed = ""
     try:
         import json as _json
         body_bytes = await request.body()
         # Starlette allows reading the body once; check_rate_limit_impl needs the same bytes.
         request.state._replypals_body_bytes = body_bytes
         body_raw = _json.loads(body_bytes) if body_bytes else {}
-        req_email, _req_anon, _req_key = extract_request_identity(body_raw, request, user_email)
+        req_email, req_anon_parsed, _req_key = extract_request_identity(body_raw, request, user_email)
     except Exception:
         req_email = (user_email or "").strip().lower()
         try:
             hdrs = request.headers
             a = (hdrs.get("x-anon-id") or hdrs.get("x-replypals-anon-id") or "").strip()
+            req_anon_parsed = a
             if not req_email and a:
                 req_email = (_synthetic_email_from_anon_id(a) or "").strip().lower()
         except Exception:
             pass
 
-    if _supabase_in_backoff():
+    def _degraded_backoff_ctx() -> dict:
+        if not user_id and req_anon_parsed:
+            used_d, limit_d = _degraded_anon_snapshot(req_anon_parsed)
+            if used_d >= limit_d:
+                raise HTTPException(
+                    status_code=429,
+                    detail={
+                        "error": "limit_reached",
+                        "plan": "anon",
+                        "used": used_d,
+                        "limit": limit_d,
+                        "upgrade_url": "https://replypals.in/login",
+                        "message": (
+                            "You've used all 3 free tries. Sign in for 10 free rewrites per month!"
+                        ),
+                        "degraded": True,
+                    },
+                )
+            ctx = _rate_ctx_degraded_anon(req_anon_parsed, used_d)
+            ctx["used"] = used_d
+            ctx["limit"] = limit_d
+            return ctx
         used_d, limit_d = _degraded_free_usage_snapshot(user_id, req_email)
         if used_d >= limit_d:
             raise HTTPException(429, detail={
@@ -1660,27 +1746,14 @@ async def check_rate_limit(
         ctx.setdefault("resolved_user_id", None)
         return ctx
 
+    if _supabase_in_backoff():
+        return _degraded_backoff_ctx()
+
     try:
         await _sb_execute(supabase.table("licenses").select("id").limit(1), timeout_sec=2.0)
     except Exception as e:
         _mark_supabase_down(e)
-        used_d, limit_d = _degraded_free_usage_snapshot(user_id, req_email)
-        if used_d >= limit_d:
-            raise HTTPException(429, detail={
-                "error": "limit_reached",
-                "plan": "free",
-                "used": used_d,
-                "limit": limit_d,
-                "upgrade_url": "https://replypals.in/#pricing",
-                "resets_in": "30 days rolling",
-                "degraded": True,
-            })
-        ctx = _rate_ctx_degraded(user_id, req_email)
-        ctx["used"] = used_d
-        ctx["limit"] = limit_d
-        ctx.setdefault("usage_meta", UsageMetadata().model_dump())
-        ctx.setdefault("resolved_user_id", None)
-        return ctx
+        return _degraded_backoff_ctx()
 
     return await check_rate_limit_impl(
         supabase=supabase,
@@ -1701,7 +1774,22 @@ async def check_rate_limit(
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "ReplyPals API", "version": "1.2.0"}
+    db = "ok"
+    if not supabase:
+        db = "not_configured"
+    else:
+        try:
+            await asyncio.to_thread(
+                lambda: supabase.table("user_profiles").select("id").limit(1).execute()
+            )
+        except Exception as e:
+            db = str(e)
+    return {
+        "status": "ok" if db == "ok" else "degraded",
+        "database": db,
+        "service": "ReplyPals API",
+        "version": "1.2.0",
+    }
 
 
 # ═══════════════════════════════════════════
@@ -1935,12 +2023,15 @@ async def rewrite(
     await _after_llm_usage(rate)
     if rate.get("degraded") and (rate.get("plan") == "free"):
         _degraded_free_record_hit(rate.get("user_id"), rate.get("email") or "")
+    elif rate.get("degraded") and rate.get("plan") == "anon" and rate.get("anon_id"):
+        _degraded_anon_record_hit(str(rate["anon_id"]))
     used_before = int(rate.get("used") or 0)
     limit = rate.get("limit")
     try:
         limit_i = int(limit) if limit is not None else None
     except Exception:
         limit_i = None
+    result["plan"] = rate.get("plan")
     if limit_i and limit_i > 0:
         used_after = min(used_before + 1, limit_i)
         result["rewrites_used"] = used_after
@@ -1950,6 +2041,9 @@ async def rewrite(
             base_cap = _free_monthly_cap_from_db()
             result["monthly_base_limit"] = base_cap
             result["bonus_rewrites"] = max(0, limit_i - base_cap)
+        elif rate.get("plan") == "anon":
+            result["monthly_base_limit"] = ANON_LIFETIME_LIMIT
+            result["bonus_rewrites"] = 0
     result["usage"] = rate.get("usage_meta")
     return RewriteResponse(**result)
 
@@ -2055,6 +2149,8 @@ async def generate(
         await _after_llm_usage(rate)
     if rate.get("degraded") and (rate.get("plan") == "free"):
         _degraded_free_record_hit(rate.get("user_id"), rate.get("email") or "")
+    elif rate.get("degraded") and rate.get("plan") == "anon" and rate.get("anon_id"):
+        _degraded_anon_record_hit(str(rate["anon_id"]))
 
     used_before = int(rate.get("used") or 0)
     limit = rate.get("limit")
@@ -2062,6 +2158,7 @@ async def generate(
         limit_i = int(limit) if limit is not None else None
     except Exception:
         limit_i = None
+    result["plan"] = rate.get("plan")
     if limit_i and limit_i > 0:
         used_after = min(used_before + 1, limit_i)
         result["rewrites_used"] = used_after
@@ -2071,6 +2168,9 @@ async def generate(
             base_cap = _free_monthly_cap_from_db()
             result["monthly_base_limit"] = base_cap
             result["bonus_rewrites"] = max(0, limit_i - base_cap)
+        elif rate.get("plan") == "anon":
+            result["monthly_base_limit"] = ANON_LIFETIME_LIMIT
+            result["bonus_rewrites"] = 0
 
     # Update user_profiles stats for generate calls too
     if rate.get("user_id"):
@@ -3281,6 +3381,9 @@ async def _after_llm_usage(rate: dict) -> None:
     """usage_logs + cost guardrail from ``system_config`` (estimated daily cost → pause + alert)."""
     if not supabase or rate.get("degraded"):
         return
+    if rate.get("anon_only") and rate.get("anon_id"):
+        await increment_anon_usage(supabase, _sb_execute, str(rate["anon_id"]))
+        return
     ruid = rate.get("resolved_user_id")
     if not ruid:
         return
@@ -3850,14 +3953,24 @@ async def track_rewrite_anonymous(request: Request):
 @app.post("/free-usage")
 async def free_usage_status(body: FreeUsageRequest):
     """
-    Return free-plan usage without incrementing counters.
-    Uses email first, then anonymous synthetic email from anon_id.
+    Return usage without incrementing counters.
+    - Real email (signed-in / saved email): free tier, calendar month, cap from plan_config (10/mo default).
+    - anon_id only (or synthetic @replypal.internal): lifetime anon cap (3), plan ``anon``.
     """
-    email = (body.email or "").strip().lower()
-    anon_email = _synthetic_email_from_anon_id(body.anon_id)
-    identity_email = email or anon_email or ""
+    raw_email = (body.email or "").strip().lower()
+    anon_id = (body.anon_id or "").strip()
 
-    if not identity_email:
+    if raw_email and not raw_email.endswith("@replypal.internal"):
+        identity_email = raw_email
+        is_anon_tier = False
+    elif anon_id:
+        identity_email = (_synthetic_email_from_anon_id(anon_id) or "").strip().lower()
+        is_anon_tier = True
+    else:
+        identity_email = ""
+        is_anon_tier = False
+
+    if not identity_email and not anon_id:
         cap = _free_monthly_cap_from_db()
         _usage_dbg("free_usage_fetch", path="no_identity", used=0, limit=cap)
         return {
@@ -3872,6 +3985,18 @@ async def free_usage_status(body: FreeUsageRequest):
         }
 
     if not supabase:
+        if is_anon_tier and anon_id:
+            _usage_dbg("free_usage_fetch", path="memory_only_anon", anon_id=anon_id, used=0, limit=ANON_LIFETIME_LIMIT)
+            return {
+                "ok": True,
+                "plan": "anon",
+                "rewrites_used": 0,
+                "rewrites_limit": ANON_LIFETIME_LIMIT,
+                "rewrites_left": ANON_LIFETIME_LIMIT,
+                "source": "anon_id",
+                "bonus_rewrites": 0,
+                "monthly_base_limit": ANON_LIFETIME_LIMIT,
+            }
         base = int(_free_monthly_cap_from_db())
         _usage_dbg("free_usage_fetch", path="memory_only", identity_email=identity_email, used=0, limit=base)
         return {
@@ -3883,6 +4008,27 @@ async def free_usage_status(body: FreeUsageRequest):
             "source": "memory_only",
             "bonus_rewrites": 0,
             "monthly_base_limit": base,
+        }
+
+    if is_anon_tier and anon_id:
+        used = await get_anon_total_used(supabase, _sb_execute, anon_id)
+        lim = ANON_LIFETIME_LIMIT
+        _usage_dbg(
+            "free_usage_fetch",
+            path="anon_db",
+            anon_id=anon_id,
+            used=used,
+            limit=lim,
+        )
+        return {
+            "ok": True,
+            "plan": "anon",
+            "rewrites_used": used,
+            "rewrites_limit": lim,
+            "rewrites_left": max(0, lim - used),
+            "source": "anon_id",
+            "bonus_rewrites": 0,
+            "monthly_base_limit": lim,
         }
 
     bonus = 0
@@ -3899,8 +4045,9 @@ async def free_usage_status(body: FreeUsageRequest):
     except Exception:
         bonus = 0
 
-    from dateutil.relativedelta import relativedelta
-    free_window_start = (datetime.now(timezone.utc) - relativedelta(months=1)).isoformat()
+    month_start = datetime.now(timezone.utc).replace(
+        day=1, hour=0, minute=0, second=0, microsecond=0
+    ).isoformat()
     used = 0
     try:
         cnt = await _sb_execute(
@@ -3908,7 +4055,7 @@ async def free_usage_status(body: FreeUsageRequest):
             .select("id", count="exact")
             .eq("email", identity_email)
             .eq("status", "success")
-            .gte("created_at", free_window_start),
+            .gte("created_at", month_start),
             timeout_sec=4.0
         )
         used = int(cnt.count or 0)
@@ -3924,7 +4071,7 @@ async def free_usage_status(body: FreeUsageRequest):
         used=used,
         limit=limit,
         bonus=bonus,
-        source=("email" if email else "anon_id"),
+        source="email",
     )
     return {
         "ok": True,
@@ -3932,7 +4079,7 @@ async def free_usage_status(body: FreeUsageRequest):
         "rewrites_used": used,
         "rewrites_limit": limit,
         "rewrites_left": max(0, limit - used),
-        "source": "email" if email else "anon_id",
+        "source": "email",
         "bonus_rewrites": bonus,
         "monthly_base_limit": base_cap,
     }

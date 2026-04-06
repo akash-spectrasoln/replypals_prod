@@ -1,0 +1,22 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro'
+import Header from '../components/Header.astro'
+import Footer from '../components/Footer.astro'
+import PricingTable from '../components/PricingTable.jsx'
+
+const title = 'Simple, honest pricing'
+const description = 'ReplyPals pricing — free forever, upgrade when you need more'
+const canonicalUrl = 'https://replypals.in/pricing'
+---
+
+<BaseLayout title={title} description={description} canonicalUrl={canonicalUrl}>
+  <Header />
+  <main class="py-12">
+    <div class="mx-auto max-w-6xl px-4 text-center">
+      <h1 class="text-4xl font-bold text-slate-900">Simple, honest pricing</h1>
+      <p class="mt-3 text-lg text-slate-600">Choose the plan that fits how you work.</p>
+    </div>
+    <PricingTable client:load />
+  </main>
+  <Footer />
+</BaseLayout>

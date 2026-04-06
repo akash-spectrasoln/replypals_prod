@@ -106,6 +106,9 @@ async def get_plan_limits(supabase: Any, sb_execute: Callable) -> dict[str, dict
 COST_GUARDRAIL_USD = 0.50
 COST_PAUSE_HOURS = 24
 
+# Anonymous (no JWT): lifetime cap, never resets. Signed-in free uses plan_config monthly.
+ANON_LIFETIME_LIMIT = 3
+
 # ─── Pydantic error / response schemas (v2) ──────────────────────────────────
 
 
@@ -398,6 +401,48 @@ def _warning_message_if_needed(percent_used: float, warn_pct: float) -> Optional
 
 async def _exec_sb(builder, sb_execute: Callable) -> Any:
     return await sb_execute(builder, timeout_sec=3.0)
+
+
+async def get_anon_total_used(supabase: Any, sb_execute: Callable, anon_id: str) -> int:
+    """Successful rewrites for this anon_id (lifetime, cap ANON_LIFETIME_LIMIT)."""
+    if not supabase or not anon_id:
+        return 0
+    aid = str(anon_id).strip()
+    if not aid:
+        return 0
+    try:
+        r = await _exec_sb(
+            supabase.table("anon_usage").select("total_used").eq("anon_id", aid).maybe_single(),
+            sb_execute,
+        )
+        row = getattr(r, "data", None) if r is not None else None
+        if row:
+            return max(0, int(row.get("total_used") or 0))
+    except Exception:
+        pass
+    return 0
+
+
+async def increment_anon_usage(supabase: Any, sb_execute: Callable, anon_id: str) -> None:
+    """Increment lifetime anon counter after a successful rewrite (server-side truth)."""
+    if not supabase or not anon_id:
+        return
+    aid = str(anon_id).strip()
+    if not aid:
+        return
+    cur = await get_anon_total_used(supabase, sb_execute, aid)
+    new_val = cur + 1
+    now = datetime.now(timezone.utc).isoformat()
+    try:
+        await _exec_sb(
+            supabase.table("anon_usage").upsert(
+                {"anon_id": aid, "total_used": new_val, "updated_at": now},
+                on_conflict="anon_id",
+            ),
+            sb_execute,
+        )
+    except Exception as e:
+        print(f"[anon_usage] increment failed: {e}")
 
 
 def _normalize_plan(raw: Optional[str], snap: CommerceSnapshot) -> str:
@@ -906,6 +951,76 @@ async def check_rate_limit_impl(
                     team_id = tr.data.get("id")
             except Exception:
                 pass
+
+    # ── Anonymous trial (no JWT, no license): lifetime cap by anon_id only ──
+    if not user_id and not has_license:
+        aid = (req_anon or "").strip()
+        if not aid:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Anonymous requests must include `anon_id` in the JSON body "
+                    "(extension device id)."
+                ),
+            )
+        used_a = await get_anon_total_used(supabase, sb_execute, aid)
+        if used_a >= ANON_LIFETIME_LIMIT:
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "error": "limit_reached",
+                    "plan": "anon",
+                    "used": used_a,
+                    "limit": ANON_LIFETIME_LIMIT,
+                    "message": (
+                        "You've used all 3 free tries. Sign in for 10 free rewrites per month!"
+                    ),
+                    "upgrade_url": "https://replypals.in/login",
+                },
+            )
+        syn_em = (_synthetic_email_from_anon_id(aid) or "").strip().lower()
+        resolved_anon_uid = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"replypals:{syn_em}"))
+        left_after_this = max(0, ANON_LIFETIME_LIMIT - used_a - 1)
+        pct = min(100.0, (float(used_a) / float(ANON_LIFETIME_LIMIT)) * 100.0) if ANON_LIFETIME_LIMIT else 0.0
+        um = UsageMetadata(
+            allowed=True,
+            source="subscription",
+            remaining_daily=None,
+            remaining_monthly=left_after_this,
+            credit_balance=0,
+            percent_used=round(pct, 2),
+            usage_warning=(used_a + 1 >= ANON_LIFETIME_LIMIT),
+            reset_in="never",
+            message=None,
+            localized_upgrade_price="",
+            nudge={"show": False, "upgrade_to": "", "message": ""},
+        )
+        return {
+            "user_id": None,
+            "email": syn_em,
+            "license_key": "",
+            "plan": "anon",
+            "limit": ANON_LIFETIME_LIMIT,
+            "used": used_a,
+            "has_license": False,
+            "brand_voice": None,
+            "degraded": False,
+            "persistence": "strong",
+            "window_start": None,
+            "allowed": True,
+            "usage_source": "subscription",
+            "anon_only": True,
+            "anon_id": aid,
+            "remaining_daily": None,
+            "remaining_monthly": left_after_this,
+            "credit_balance": 0,
+            "percent_used": um.percent_used,
+            "usage_warning": um.usage_warning,
+            "reset_in": "never",
+            "usage_meta": um.model_dump(),
+            "team_id": None,
+            "resolved_user_id": resolved_anon_uid,
+        }
 
     resolved_uid: Optional[str] = None
     if user_id:

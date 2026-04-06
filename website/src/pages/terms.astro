@@ -1,0 +1,54 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro'
+import Header from '../components/Header.astro'
+import Footer from '../components/Footer.astro'
+
+const title = 'Terms of Service — ReplyPals'
+const description = 'Terms governing use of the ReplyPals service.'
+const canonicalUrl = 'https://replypals.in/terms'
+---
+
+<BaseLayout title={title} description={description} canonicalUrl={canonicalUrl}>
+  <Header />
+  <main class="mx-auto max-w-3xl space-y-4 px-4 py-12 text-slate-700">
+    <h1 class="text-3xl font-bold text-slate-900">Terms of Service</h1>
+    <p class="text-slate-600">Last updated: April 5, 2026</p>
+
+    <h2 class="mt-8 text-xl font-semibold">Acceptable use</h2>
+    <p>
+      You agree not to misuse ReplyPals, including attempting to probe or break security, automate abusive use, or use
+      the service to generate unlawful, harassing, or deceptive content. We may suspend or terminate accounts that violate
+      these rules.
+    </p>
+
+    <h2 class="mt-8 text-xl font-semibold">No warranty</h2>
+    <p>
+      ReplyPals is provided &ldquo;as is&rdquo; without warranties of any kind, express or implied. We do not guarantee
+      uninterrupted or error-free operation.
+    </p>
+
+    <h2 class="mt-8 text-xl font-semibold">Limitation of liability</h2>
+    <p>
+      To the maximum extent permitted by law, ReplyPals and its suppliers shall not be liable for any indirect,
+      incidental, special, consequential, or punitive damages, or any loss of profits or data, arising from your use of
+      the service.
+    </p>
+
+    <h2 class="mt-8 text-xl font-semibold">Refund policy</h2>
+    <p>
+      For paid subscriptions, you may request a pro-rated refund within 7 days of your initial purchase if you are not
+      satisfied, subject to verification. Contact support with your account email and invoice details.
+    </p>
+
+    <h2 class="mt-8 text-xl font-semibold">Governing law</h2>
+    <p>
+      These terms are governed by the laws applicable to ReplyPals&apos; operating jurisdiction, without regard to
+      conflict-of-law rules.
+    </p>
+
+    <p class="mt-8">
+      Questions: <a href="mailto:legal@replypals.in" class="text-indigo-700 hover:underline">legal@replypals.in</a>
+    </p>
+  </main>
+  <Footer />
+</BaseLayout>
