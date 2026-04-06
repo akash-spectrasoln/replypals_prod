@@ -48,6 +48,8 @@ try {
     /** Synced with API: when limit > 0 and left === 0, all actions are blocked (free + capped plans). */
     let replypalUsageLeft = null;
     let replypalRewritesLimit = null;
+    /** API plan: anon | free | pro | team — drives messaging */
+    let replypalPlan = null;
     /** Fallback until API response; align with server default free monthly cap */
     const FREE_LIMIT_BASE = 10;
 
@@ -64,7 +66,7 @@ try {
       }
     }
 
-    safeStorageGet(['toneMemory', 'replypalAutoImprove', 'replypalLicense', 'replypalCount', 'explainExpanded', 'replypalBonusRewrites', 'replypalUsageUsed', 'replypalUsageLimit', 'replypalUsageLeft', 'replypalRewritesLimit', 'replypalMonthlyBaseLimit'], function (s) {
+    safeStorageGet(['toneMemory', 'replypalAutoImprove', 'replypalLicense', 'replypalCount', 'explainExpanded', 'replypalBonusRewrites', 'replypalUsageUsed', 'replypalUsageLimit', 'replypalUsageLeft', 'replypalRewritesLimit', 'replypalMonthlyBaseLimit', 'replypalPlan'], function (s) {
       toneMemory = s.toneMemory || {};
       autoImprove = s.replypalAutoImprove || false;
       licenseKey = s.replypalLicense || null;
@@ -82,6 +84,7 @@ try {
       }
       if (typeof s.replypalUsageLeft === 'number') replypalUsageLeft = s.replypalUsageLeft;
       if (typeof s.replypalRewritesLimit === 'number') replypalRewritesLimit = s.replypalRewritesLimit;
+      if (typeof s.replypalPlan === 'string') replypalPlan = s.replypalPlan;
       window.explainExpanded = s.explainExpanded || false;
       var host = window.location.hostname;
       if (toneMemory[host]) selectedTone = toneMemory[host];
@@ -111,7 +114,7 @@ try {
     }
 
     function rpHydrateQuotaFromStorage(cb) {
-      safeStorageGet(['replypalLicense', 'replypalUsageUsed', 'replypalUsageLimit', 'replypalCount', 'replypalBonusRewrites', 'replypalUsageLeft', 'replypalRewritesLimit', 'replypalMonthlyBaseLimit'], function (s) {
+      safeStorageGet(['replypalLicense', 'replypalUsageUsed', 'replypalUsageLimit', 'replypalCount', 'replypalBonusRewrites', 'replypalUsageLeft', 'replypalRewritesLimit', 'replypalMonthlyBaseLimit', 'replypalPlan'], function (s) {
         licenseKey = s.replypalLicense || licenseKey || null;
         if (typeof s.replypalUsageUsed === 'number') {
           freeCount = s.replypalUsageUsed;
@@ -129,6 +132,7 @@ try {
         }
         if (typeof s.replypalUsageLeft === 'number') replypalUsageLeft = s.replypalUsageLeft;
         if (typeof s.replypalRewritesLimit === 'number') replypalRewritesLimit = s.replypalRewritesLimit;
+        if (typeof s.replypalPlan === 'string') replypalPlan = s.replypalPlan;
         if (cb) cb();
       });
     }
@@ -148,6 +152,11 @@ try {
 
     function rpApplyQuotaFromApi(data) {
       if (!data) return;
+      if (typeof data.plan === 'string') {
+        replypalPlan = data.plan;
+        safeStorageSet({ replypalPlan: data.plan });
+        if (data.plan === 'anon') bonusRewrites = 0;
+      }
       if (typeof data.rewrites_left === 'number') {
         replypalUsageLeft = data.rewrites_left;
         safeStorageSet({ replypalUsageLeft: data.rewrites_left });
@@ -166,7 +175,17 @@ try {
       }
       if (typeof data.rewrites_used === 'number' && !licenseKey) {
         freeCount = data.rewrites_used;
-        safeStorageSet({ replypalCount: data.rewrites_used, replypalUsageUsed: data.rewrites_used });
+        var usedPatch = {
+          replypalCount: data.rewrites_used,
+          replypalUsageUsed: data.rewrites_used
+        };
+        if (typeof data.rewrites_limit === 'number') usedPatch.replypalUsageLimit = data.rewrites_limit;
+        safeStorageSet(usedPatch);
+      }
+      if (typeof data.rewrites_used === 'number' && typeof data.rewrites_limit === 'number' && typeof data.rewrites_left !== 'number') {
+        var impliedLeft = Math.max(0, data.rewrites_limit - data.rewrites_used);
+        replypalUsageLeft = impliedLeft;
+        safeStorageSet({ replypalUsageLeft: impliedLeft });
       }
     }
 
@@ -191,6 +210,11 @@ try {
     }
 
     function rpOpenUpgradeForLimit(contextText) {
+      if (!licenseKey && replypalPlan === 'anon') {
+        showToast('You\'ve used all 3 free tries. Sign in for 10 free rewrites/month!', 'error');
+        try { window.open('https://replypals.in/login', '_blank', 'noopener'); } catch (_) { }
+        return;
+      }
       showToast('⚠️ You\'ve reached your plan limit. Subscribe or upgrade to continue.', 'error');
       var anchor = getWriteTarget(_activeEl || _rpMiniActive) || _activeEl || _rpMiniActive;
       var rect = anchor && anchor.getBoundingClientRect
@@ -1300,7 +1324,8 @@ try {
             return;
           }
           renderLoading(type, payload);
-          safeSendMessage({ type: type, payload: payload }, function (res) {
+          var sendPayload = Object.assign({}, payload, { event_id: crypto.randomUUID() });
+          safeSendMessage({ type: type, payload: sendPayload }, function (res) {
             clearInterval(_tipTimer);
             if (res && res.error === 'offline') {
               showToast('🔴 ReplyPals offline — check your connection', 'error');
@@ -1314,10 +1339,6 @@ try {
             }
             if (res && res.success && res.data) {
               rpApplyQuotaFromApi(res.data);
-              if (!licenseKey && typeof res.data.rewrites_used !== 'number') {
-                freeCount++;
-                safeStorageSet({ replypalCount: freeCount, replypalUsageUsed: freeCount });
-              }
               renderResult(res.data, type, payload);
             } else if (rpIsLimitReachedError(res)) {
               rpOpenUpgradeForLimit(text);
@@ -2442,7 +2463,13 @@ try {
         safeStorageGet(['replypalLanguage'], function(st) {
           var selectedLang = (st && st.replypalLanguage) ? String(st.replypalLanguage) : 'auto';
           safeSendMessage(
-            { type: 'selectionAction', payload: { text: text, mode: mode, tone: tone || null, language: selectedLang } },
+            { type: 'selectionAction', payload: {
+              text: text,
+              mode: mode,
+              tone: tone || null,
+              language: selectedLang,
+              event_id: crypto.randomUUID()
+            } },
             function(res) {
               var errMsg = (res && res.error) ? String(res.error)
                 : (!res ? 'No response from extension. Reload the page or check the extension.' : 'Action failed');
@@ -2673,6 +2700,7 @@ try {
               targetLang: cleanName,
               targetLangCode: targetLang ? targetLang.code : 'en',
               targetLangName: cleanName,
+              event_id: crypto.randomUUID()
             }
           },
           function(res) {

@@ -1,30 +1,51 @@
-# ─────────────────────────────────────────────────────────
-# ReplyPal API — Production Dockerfile
-# Build:  docker build -t replypal-api .
-# Run:    docker run --env-file api/.env -p 8150:8150 replypal-api
-# ─────────────────────────────────────────────────────────
+# ── Stage 1: Admin dashboard (Vite/React) ─────────────────────
+FROM node:20-alpine AS admin-builder
+WORKDIR /app/admin-dashboard
+COPY admin-dashboard/package*.json ./
+RUN npm ci
+COPY admin-dashboard/ ./
+ENV VITE_API_BASE=/api
+RUN npm run build
 
+# ── Stage 2: Marketing site (Astro) ───────────────────────────
+FROM node:20-alpine AS website-builder
+WORKDIR /app/website
+COPY website/package*.json ./
+RUN npm ci
+COPY website/ ./
+ENV PUBLIC_API_BASE=/api
+RUN npm run build
+
+# ── Stage 3: API + nginx + supervisor ───────────────────────
 FROM python:3.11-slim
 
-# Security: run as non-root
-RUN groupadd -r replypal && useradd -r -g replypal replypal
+RUN apt-get update && apt-get install -y \
+    nginx \
+    supervisor \
+    curl \
+  && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
-
-# Install deps first (layer cache)
-COPY api/requirements.txt .
+WORKDIR /app/api
+COPY api/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy app source
-COPY api/ .
-COPY website/ /website/
+COPY api/ ./
 
-# Non-root ownership
-RUN chown -R replypal:replypal /app /website
-USER replypal
+COPY --from=admin-builder /app/admin-dashboard/dist /var/www/admin
+COPY --from=website-builder /app/website/dist /var/www/website
 
-EXPOSE 8150
+COPY nginx.conf /etc/nginx/sites-available/default
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+COPY docker-healthcheck.sh /usr/local/bin/docker-healthcheck.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh /usr/local/bin/docker-healthcheck.sh
 
-# Production: no --reload, single worker per container (scale horizontally)
-# Use Railway-provided PORT when available.
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8150} --workers 1"]
+RUN rm -f /etc/nginx/sites-enabled/default && \
+    ln -s /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
+
+EXPOSE 80
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD /usr/local/bin/docker-healthcheck.sh
+
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]

@@ -1,0 +1,48 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro'
+import Header from '../components/Header.astro'
+import Footer from '../components/Footer.astro'
+
+const title = 'Privacy Policy — ReplyPals'
+const description = 'How ReplyPals collects, uses, and protects your data.'
+const canonicalUrl = 'https://replypals.in/privacy'
+---
+
+<BaseLayout title={title} description={description} canonicalUrl={canonicalUrl}>
+  <Header />
+  <main class="mx-auto max-w-3xl space-y-4 px-4 py-12 text-slate-700">
+    <h1 class="text-3xl font-bold text-slate-900">Privacy Policy</h1>
+    <p class="text-slate-600">Last updated: April 5, 2026</p>
+
+    <h2 class="mt-8 text-xl font-semibold">What we collect</h2>
+    <p>
+      We collect your email address when you create an account, usage counts to enforce plan limits, and an anonymous
+      identifier for users who try the product before signing up. Payment and billing information is processed by our
+      payment provider (Stripe) and is not stored on our servers in full.
+    </p>
+
+    <h2 class="mt-8 text-xl font-semibold">How we store data</h2>
+    <p>
+      Data is stored in Supabase (PostgreSQL) with encryption in transit (TLS) and at rest where supported by the
+      infrastructure provider. Access is restricted to operational needs.
+    </p>
+
+    <h2 class="mt-8 text-xl font-semibold">What we do not store</h2>
+    <p>
+      The full content of your rewrites is not logged permanently for product improvement. We may retain minimal metadata
+      (for example counts, timestamps, and error codes) to operate quotas and diagnose issues.
+    </p>
+
+    <h2 class="mt-8 text-xl font-semibold">Deleting your account</h2>
+    <p>
+      You can request deletion of your account and associated profile data by contacting us at the email below. We will
+      confirm identity and complete deletion within a reasonable period, subject to legal retention requirements.
+    </p>
+
+    <h2 class="mt-8 text-xl font-semibold">Contact</h2>
+    <p>
+      For privacy questions: <a href="mailto:privacy@replypals.in" class="text-indigo-700 hover:underline">privacy@replypals.in</a>
+    </p>
+  </main>
+  <Footer />
+</BaseLayout>

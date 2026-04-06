@@ -16,9 +16,9 @@ from email.mime.text import MIMEText
 from typing import Optional, Dict, Any, Literal
 
 import jwt
-from fastapi import APIRouter, Request, HTTPException, Header, Depends, BackgroundTasks
+from fastapi import APIRouter, Request, HTTPException, Header, Depends, BackgroundTasks, Query
 from fastapi.responses import FileResponse, HTMLResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 # ═══════════════════════════════════════════
 # CONFIG
@@ -99,8 +99,15 @@ def _mask_key(key: str) -> str:
 # MODELS
 # ═══════════════════════════════════════════
 class LoginRequest(BaseModel):
-    username: str
     password: str
+    username: Optional[str] = None
+    email: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _need_user(self):
+        if not self.username and not self.email:
+            raise ValueError("username or email required")
+        return self
 
 class CreateLicenseReq(BaseModel):
     email: str
@@ -218,8 +225,9 @@ async def admin_login(body: LoginRequest, request: Request):
 
     _check_ip_block(ip)
 
+    login_id = (body.email or body.username or "").strip()
     valid = (
-        secrets.compare_digest(body.username, ADMIN_USERNAME) and
+        secrets.compare_digest(login_id, ADMIN_USERNAME) and
         secrets.compare_digest(body.password, ADMIN_PASSWORD)
     )
 
@@ -234,7 +242,13 @@ async def admin_login(body: LoginRequest, request: Request):
     jti = uuid.uuid4().hex
     exp = datetime.now(timezone.utc) + timedelta(hours=8)
     token = jwt.encode(
-        {"role": "admin", "jti": jti, "exp": exp, "iat": datetime.now(timezone.utc)},
+        {
+            "role": "admin",
+            "email": login_id,
+            "jti": jti,
+            "exp": exp,
+            "iat": datetime.now(timezone.utc),
+        },
         ADMIN_SECRET_KEY,
         algorithm="HS256"
     )
@@ -243,7 +257,155 @@ async def admin_login(body: LoginRequest, request: Request):
         "expires": exp.isoformat(),
         "ip": ip
     }
-    return {"token": token, "expires_at": exp.isoformat()}
+    return {"token": token, "email": login_id, "expires_at": exp.isoformat()}
+
+
+@router.get("/me")
+async def admin_me(admin=Depends(require_admin)):
+    return {"email": admin.get("email") or ADMIN_USERNAME, "role": "admin"}
+
+
+@router.get("/stats")
+async def admin_dashboard_stats(admin=Depends(require_admin)):
+    """Aggregates for the React admin SPA — rewrite counts from ``llm_call_logs``."""
+    from main import supabase
+
+    empty = {
+        "total_users": 0,
+        "total_rewrites": 0,
+        "rewrites_today": 0,
+        "rewrites_this_month": 0,
+        "active_users_today": 0,
+        "pro_subscribers": 0,
+        "daily_rewrites": [],
+        "plan_breakdown": {"anon": 0, "free": 0, "pro": 0, "team": 0},
+    }
+    if not supabase:
+        return empty
+
+    now = datetime.now(timezone.utc)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
+    try:
+        tu = supabase.table("user_profiles").select("id", count="exact").execute()
+        total_users = int(tu.count or 0)
+    except Exception:
+        total_users = 0
+
+    try:
+        tr = (
+            supabase.table("llm_call_logs")
+            .select("id", count="exact")
+            .eq("status", "success")
+            .execute()
+        )
+        total_rewrites = int(tr.count or 0)
+    except Exception:
+        total_rewrites = 0
+
+    try:
+        rt = (
+            supabase.table("llm_call_logs")
+            .select("id", count="exact")
+            .eq("status", "success")
+            .gte("created_at", today_start)
+            .execute()
+        )
+        rewrites_today = int(rt.count or 0)
+    except Exception:
+        rewrites_today = 0
+
+    try:
+        rm = (
+            supabase.table("llm_call_logs")
+            .select("id", count="exact")
+            .eq("status", "success")
+            .gte("created_at", month_start)
+            .execute()
+        )
+        rewrites_this_month = int(rm.count or 0)
+    except Exception:
+        rewrites_this_month = 0
+
+    active_users_today = 0
+    try:
+        rows = (
+            supabase.table("llm_call_logs")
+            .select("email,user_id")
+            .eq("status", "success")
+            .gte("created_at", today_start)
+            .limit(50000)
+            .execute()
+        )
+        seen = set()
+        for r in rows.data or []:
+            key = (r.get("user_id") or "") or (r.get("email") or "").strip().lower()
+            if key:
+                seen.add(key)
+        active_users_today = len(seen)
+    except Exception:
+        active_users_today = 0
+
+    pro_subscribers = 0
+    try:
+        pr2 = supabase.table("licenses").select("plan,active").eq("active", True).limit(20000).execute()
+        pro_subscribers = sum(1 for row in (pr2.data or []) if str(row.get("plan", "")).lower() == "pro")
+    except Exception:
+        pro_subscribers = 0
+
+    daily_rewrites = []
+    for offset in range(29, -1, -1):
+        day = (now - timedelta(days=offset)).date()
+        d_start = datetime(day.year, day.month, day.day, tzinfo=timezone.utc).isoformat()
+        d_end = (datetime(day.year, day.month, day.day, tzinfo=timezone.utc) + timedelta(days=1)).isoformat()
+        try:
+            c = (
+                supabase.table("llm_call_logs")
+                .select("id", count="exact")
+                .eq("status", "success")
+                .gte("created_at", d_start)
+                .lt("created_at", d_end)
+                .execute()
+            )
+            cnt = int(c.count or 0)
+        except Exception:
+            cnt = 0
+        daily_rewrites.append({"date": day.isoformat(), "count": cnt})
+
+    plan_breakdown = {"anon": 0, "free": 0, "pro": 0, "team": 0}
+    try:
+        pr_res = supabase.table("user_profiles").select("email,id").limit(20000).execute()
+        lic_res = supabase.table("licenses").select("email,user_id,plan,active").eq("active", True).limit(20000).execute()
+        lic_by_uid = {l["user_id"]: l for l in (lic_res.data or []) if l.get("user_id")}
+        lic_by_email = {l["email"]: l for l in (lic_res.data or []) if l.get("email")}
+        for p in pr_res.data or []:
+            email = (p.get("email") or "").strip().lower()
+            uid = p.get("id")
+            is_anon = email.startswith("anon_") and email.endswith("@replypal.internal")
+            if is_anon:
+                plan_breakdown["anon"] += 1
+                continue
+            lic = lic_by_uid.get(uid) or lic_by_email.get(p.get("email"))
+            pl = str((lic or {}).get("plan", "free")).lower()
+            if pl == "pro":
+                plan_breakdown["pro"] += 1
+            elif pl == "team":
+                plan_breakdown["team"] += 1
+            else:
+                plan_breakdown["free"] += 1
+    except Exception:
+        pass
+
+    return {
+        "total_users": total_users,
+        "total_rewrites": total_rewrites,
+        "rewrites_today": rewrites_today,
+        "rewrites_this_month": rewrites_this_month,
+        "active_users_today": active_users_today,
+        "pro_subscribers": pro_subscribers,
+        "daily_rewrites": daily_rewrites,
+        "plan_breakdown": plan_breakdown,
+    }
 
 
 # ═══════════════════════════════════════════
@@ -393,7 +555,8 @@ async def list_users(
     page: int = 1, limit: int = 50,
     search: str = "", sort: str = "created_at",
     filter: str = "all",
-    admin=Depends(require_admin)
+    plan: Optional[str] = Query(None),
+    admin=Depends(require_admin),
 ):
     from main import supabase, _free_monthly_cap_from_db
     if not supabase:
@@ -467,7 +630,8 @@ async def list_users(
             "reset_date": reset_date,
             "total_rewrites_alltime": p.get("total_rewrites", 0),
             "avg_score": p.get("avg_score", 0),
-            "last_seen": p.get("last_seen", p.get("created_at"))
+            "last_seen": p.get("last_seen", p.get("created_at")),
+            "created_at": p.get("created_at"),
         })
         if email:
             processed_emails.add(email)
@@ -502,9 +666,122 @@ async def list_users(
                 "reset_date": reset_date,
                 "total_rewrites_alltime": f.get("total_rewrites", 0),
                 "avg_score": f.get("avg_score", 0),
-                "last_seen": f.get("last_active", f.get("created_at"))
+                "last_seen": f.get("last_active", f.get("created_at")),
+                "created_at": f.get("created_at"),
             })
             processed_emails.add(email)
+
+    # ── React admin SPA: paginated user list with plan buckets ──
+    if plan is not None:
+
+        def _dash_bucket(u):
+            email_l = (u.get("email") or "").strip().lower()
+            if email_l.startswith("anon_") and email_l.endswith("@replypal.internal"):
+                return "anon"
+            pl = str(u.get("plan") or "free").lower()
+            if pl == "pro":
+                return "pro"
+            if pl == "team":
+                return "team"
+            return "free"
+
+        dash_filtered = []
+        for u in merged_users:
+            if search and search.lower() not in (u.get("email") or "").lower():
+                continue
+            b = _dash_bucket(u)
+            if plan != "all" and b != plan:
+                continue
+            dash_filtered.append(u)
+        dash_filtered.sort(key=lambda x: (x.get("email") or "").lower())
+        total_d = len(dash_filtered)
+        pages_d = max(1, (total_d + limit - 1) // limit) if limit else 1
+        offset_d = (page - 1) * limit
+        page_data_d = dash_filtered[offset_d : offset_d + limit]
+
+        month_start_d = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
+        out_rows = []
+        for u in page_data_d:
+            uid = u.get("user_id")
+            em = (u.get("email") or "").strip().lower()
+            total_ct = 0
+            month_ct = 0
+            try:
+                seen_ids = set()
+                if uid:
+                    r_uid = (
+                        supabase.table("llm_call_logs")
+                        .select("id")
+                        .eq("status", "success")
+                        .eq("user_id", uid)
+                        .limit(8000)
+                        .execute()
+                    )
+                    for row in r_uid.data or []:
+                        rid = row.get("id")
+                        if rid is not None:
+                            seen_ids.add(rid)
+                if em:
+                    r_em = (
+                        supabase.table("llm_call_logs")
+                        .select("id")
+                        .eq("status", "success")
+                        .eq("email", em)
+                        .limit(8000)
+                        .execute()
+                    )
+                    for row in r_em.data or []:
+                        rid = row.get("id")
+                        if rid is not None:
+                            seen_ids.add(rid)
+                total_ct = len(seen_ids)
+                seen_m = set()
+                if uid:
+                    r_uid = (
+                        supabase.table("llm_call_logs")
+                        .select("id")
+                        .eq("status", "success")
+                        .eq("user_id", uid)
+                        .gte("created_at", month_start_d)
+                        .limit(8000)
+                        .execute()
+                    )
+                    for row in r_uid.data or []:
+                        rid = row.get("id")
+                        if rid is not None:
+                            seen_m.add(rid)
+                if em:
+                    r_em = (
+                        supabase.table("llm_call_logs")
+                        .select("id")
+                        .eq("status", "success")
+                        .eq("email", em)
+                        .gte("created_at", month_start_d)
+                        .limit(8000)
+                        .execute()
+                    )
+                    for row in r_em.data or []:
+                        rid = row.get("id")
+                        if rid is not None:
+                            seen_m.add(rid)
+                month_ct = len(seen_m)
+            except Exception:
+                pass
+            st = "active" if u.get("active", True) else "inactive"
+            out_rows.append(
+                {
+                    "user_id": uid,
+                    "email": u.get("email") or "",
+                    "plan": _dash_bucket(u),
+                    "rewrites_this_month": month_ct,
+                    "total_rewrites": total_ct,
+                    "joined_date": u.get("created_at") or u.get("last_seen") or "",
+                    "last_active": u.get("last_seen") or "",
+                    "status": st,
+                }
+            )
+
+        return {"users": out_rows, "total": total_d, "page": page, "pages": pages_d}
 
     # Filtering logic mapping
     filtered = []
@@ -1204,18 +1481,90 @@ async def get_settings(request: Request, admin=Depends(require_admin)):
             except Exception:
                 result["db_stats"][table] = -1
 
+    apps = result.get("app_settings") or {}
+
+    def _parse_int(v, default):
+        try:
+            return int(v)
+        except Exception:
+            return default
+
+    result["free_monthly_limit"] = _parse_int(apps.get("free_monthly_limit"), 10)
+    result["anon_limit"] = _parse_int(apps.get("anon_limit"), 3)
+    result["model"] = apps.get("active_model") or "gemini::gemini-1.5-flash"
+    mv = apps.get("maintenance_mode")
+    result["maintenance_mode"] = str(mv).lower() in ("1", "true", "yes") if mv is not None else False
+
     return result
 
 
 @router.patch("/settings")
-async def update_settings(body: UpdateSettingsReq, request: Request, admin=Depends(require_admin)):
+async def update_settings(request: Request, admin=Depends(require_admin)):
     from main import supabase
     if not supabase:
         raise HTTPException(500, "DB not configured")
-    for key, value in body.settings.items():
-        supabase.table("app_settings").upsert({"key": key, "value": str(value), "updated_at": datetime.now(timezone.utc).isoformat()}).execute()
-    _audit("settings_updated", {"keys": list(body.settings.keys())}, request.client.host, supabase)
-    return {"updated": True}
+    raw = await request.json()
+    if not isinstance(raw, dict):
+        raise HTTPException(400, "Invalid JSON body")
+
+    # Legacy admin UI: { "settings": { ... } }
+    if "settings" in raw:
+        body = UpdateSettingsReq.model_validate(raw)
+        for key, value in body.settings.items():
+            supabase.table("app_settings").upsert(
+                {"key": key, "value": str(value), "updated_at": datetime.now(timezone.utc).isoformat()}
+            ).execute()
+        _audit("settings_updated", {"keys": list(body.settings.keys())}, request.client.host, supabase)
+        return {"updated": True}
+
+    # React admin dashboard: flat keys
+    ts = datetime.now(timezone.utc).isoformat()
+    touched = []
+    if "free_monthly_limit" in raw:
+        supabase.table("app_settings").upsert(
+            {"key": "free_monthly_limit", "value": str(raw["free_monthly_limit"]), "updated_at": ts}
+        ).execute()
+        touched.append("free_monthly_limit")
+    if "anon_limit" in raw:
+        supabase.table("app_settings").upsert(
+            {"key": "anon_limit", "value": str(raw["anon_limit"]), "updated_at": ts}
+        ).execute()
+        touched.append("anon_limit")
+    if "model" in raw:
+        supabase.table("app_settings").upsert(
+            {"key": "active_model", "value": str(raw["model"]), "updated_at": ts}
+        ).execute()
+        touched.append("active_model")
+    if "maintenance_mode" in raw:
+        mv = raw["maintenance_mode"]
+        supabase.table("app_settings").upsert(
+            {
+                "key": "maintenance_mode",
+                "value": "true" if mv else "false",
+                "updated_at": ts,
+            }
+        ).execute()
+        touched.append("maintenance_mode")
+
+    _audit("settings_updated", {"keys": touched}, request.client.host, supabase)
+
+    s = supabase.table("app_settings").select("*").execute()
+    apps = {r["key"]: r["value"] for r in (s.data or [])}
+
+    def _parse_int(v, default):
+        try:
+            return int(v)
+        except Exception:
+            return default
+
+    return {
+        "free_monthly_limit": _parse_int(apps.get("free_monthly_limit"), 10),
+        "anon_limit": _parse_int(apps.get("anon_limit"), 3),
+        "model": apps.get("active_model") or "gemini::gemini-1.5-flash",
+        "maintenance_mode": str(apps.get("maintenance_mode")).lower() in ("1", "true", "yes")
+        if apps.get("maintenance_mode") is not None
+        else False,
+    }
 
 
 @router.get("/plan-limits")
@@ -1552,10 +1901,58 @@ async def announcement_status(task_id: str, admin=Depends(require_admin)):
 # LOGS
 # ═══════════════════════════════════════════
 @router.get("/logs")
-async def api_logs(request: Request, filter: str = "all", limit: int = 200, admin=Depends(require_admin)):
+async def api_logs(
+    request: Request,
+    filter: str = "all",
+    limit: int = 200,
+    page: Optional[int] = Query(None),
+    mode: str = "",
+    status: str = "",
+    from_: Optional[str] = Query(None, alias="from"),
+    to: Optional[str] = Query(None),
+    admin=Depends(require_admin),
+):
     from main import supabase
     if not supabase:
-        return {"logs": [], "stats": {}}
+        return {"logs": [], "stats": {}} if page is None else {"logs": [], "total": 0, "page": 1, "pages": 1}
+
+    # React admin: LLM rewrite logs with pagination
+    if page is not None:
+        try:
+            q = (
+                supabase.table("llm_call_logs")
+                .select("id,created_at,email,action,tone,score,status,latency_ms", count="exact")
+                .order("created_at", desc=True)
+            )
+            if mode:
+                q = q.eq("action", mode)
+            if status in ("success", "error"):
+                q = q.eq("status", status)
+            if from_:
+                q = q.gte("created_at", from_)
+            if to:
+                q = q.lte("created_at", f"{to}T23:59:59.999999+00:00")
+            offset = (page - 1) * limit
+            r = q.range(offset, offset + max(limit - 1, 0)).execute()
+            total = int(r.count or 0)
+            pages = max(1, (total + limit - 1) // limit) if limit else 1
+            logs = []
+            for row in r.data or []:
+                logs.append(
+                    {
+                        "timestamp": row.get("created_at"),
+                        "email": row.get("email") or "",
+                        "mode": row.get("action"),
+                        "tone": row.get("tone") or "",
+                        "score": row.get("score") if row.get("score") is not None else 0,
+                        "status": row.get("status"),
+                        "duration_ms": row.get("latency_ms"),
+                    }
+                )
+            return {"logs": logs, "total": total, "page": page, "pages": pages}
+        except Exception:
+            return {"logs": [], "total": 0, "page": page, "pages": 1}
+
     try:
         query = supabase.table("api_logs").select("*").order("created_at", desc=True).limit(limit)
         if filter == "errors":

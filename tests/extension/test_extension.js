@@ -442,9 +442,9 @@ section('Build Constants');
 
 if (bgSrc) {
   assertNotContains(bgSrc, 'YOUR_MIXPANEL_TOKEN', 'No placeholder Mixpanel token');
+  assertContains(bgSrc, "const API_BASE = 'https://replypals.in'", 'API_BASE is https://replypals.in');
+  assertNotContains(bgSrc, 'localhost:8150', 'No dev API port in background.js');
   assertContains(bgSrc, 'replypals.in', 'Production domain present in API_BASE');
-  assertContains(bgSrc, 'PROD_API_BASE', 'PROD_API_BASE for production API URL');
-  assertContains(bgSrc, 'https://www.replypals.in', 'Production API host in background.js');
 }
 
 // ── 13. Manifest validation ───────────────────────────────────────────────────

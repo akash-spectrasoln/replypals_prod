@@ -95,10 +95,15 @@
   /** Same semantics as content script: finite limit + zero left ⇒ block all actions. */
   let replypalUsageLeft = null;
   let replypalRewritesLimit = null;
+  let replypalPlan = null;
 
   /** Derive bonus from API fields so it stays correct when monthly base cap is not 10. */
   function applyFreeTierBonusFromApiPayload(payload) {
     if (!payload || licenseKey) return;
+    if (payload.plan === 'anon') {
+      bonusRewrites = 0;
+      return;
+    }
     const lim = Number(payload.rewrites_limit != null ? payload.rewrites_limit : FREE_LIMIT_BASE);
     if (typeof payload.bonus_rewrites === 'number') {
       bonusRewrites = Math.max(0, payload.bonus_rewrites);
@@ -123,8 +128,12 @@
     return false;
   }
 
+  /**
+   * Merges server snapshot without decreasing displayed usage (stale /free-usage lag).
+   * @returns {number|null} merged useCount after refresh, or null if skipped/failed
+   */
   async function refreshFreeUsageFromServer() {
-    if (licenseKey) return;
+    if (licenseKey) return null;
     try {
       const { replypalEmail, replypalAnonId } = await chrome.storage.local.get(['replypalEmail', 'replypalAnonId']);
       anonId = replypalAnonId || anonId;
@@ -138,23 +147,29 @@
       });
       if (freeResp && freeResp.success !== false) {
         const serverUsed = Number(freeResp.rewrites_used || 0);
-        // Prevent stale async snapshots from rolling UI backward (e.g. 4 -> 5 left).
         useCount = Math.max(useCount, serverUsed);
         const serverLimit = Number(freeResp.rewrites_limit || FREE_LIMIT_BASE);
+        if (typeof freeResp.plan === 'string') replypalPlan = freeResp.plan;
         applyFreeTierBonusFromApiPayload(freeResp);
         replypalRewritesLimit = serverLimit;
+        replypalUsageLeft = Math.max(0, serverLimit - useCount);
         serverRewriteCount = useCount;
-        await chrome.storage.local.set({
+        const st = {
           replypalCount: useCount,
+          replypalUsageUsed: useCount,
           replypalBonusRewrites: bonusRewrites,
           replypalUsageLimit: serverLimit,
           replypalRewritesLimit: serverLimit,
+          replypalUsageLeft: replypalUsageLeft,
           replypalMonthlyBaseLimit: typeof freeResp.monthly_base_limit === 'number' ? freeResp.monthly_base_limit : undefined
-        });
+        };
+        if (typeof freeResp.plan === 'string') st.replypalPlan = freeResp.plan;
+        await chrome.storage.local.set(st);
+        return useCount;
       }
-      return true;
+      return null;
     } catch (e) {
-      return false;
+      return null;
     }
   }
 
@@ -193,7 +208,8 @@
       'replypalUsageLimit',
       'replypalUsageLeft',
       'replypalRewritesLimit',
-      'replypalMonthlyBaseLimit'
+      'replypalMonthlyBaseLimit',
+      'replypalPlan'
     ]);
 
     useCount = stored.replypalCount || 0;
@@ -212,6 +228,7 @@
     }
     if (typeof stored.replypalUsageLeft === 'number') replypalUsageLeft = stored.replypalUsageLeft;
     if (typeof stored.replypalRewritesLimit === 'number') replypalRewritesLimit = stored.replypalRewritesLimit;
+    if (typeof stored.replypalPlan === 'string') replypalPlan = stored.replypalPlan;
     anonId = stored.replypalAnonId || null;
     if (!anonId) {
       const idResp = await safeSendMessage({ type: 'getAnonId' });
@@ -381,6 +398,14 @@
     } else if (licenseKey) {
       usageText.textContent = 'PRO';
       usageBadge.classList.add('pro');
+    } else if (replypalPlan === 'anon') {
+      const lim = (typeof replypalRewritesLimit === 'number' && replypalRewritesLimit > 0) ? replypalRewritesLimit : 3;
+      usageText.textContent = `${useCount} of ${lim} tries — sign in for 10/month`;
+      usageBadge.classList.remove('pro');
+    } else if (replypalPlan === 'free') {
+      const lim = (typeof replypalRewritesLimit === 'number' && replypalRewritesLimit > 0) ? replypalRewritesLimit : FREE_LIMIT_BASE;
+      usageText.textContent = `${useCount} / ${lim} free this month`;
+      usageBadge.classList.remove('pro');
     } else {
       const effectiveLimit = (typeof replypalRewritesLimit === 'number' && replypalRewritesLimit > 0)
         ? replypalRewritesLimit
@@ -489,6 +514,14 @@
     if (isLoading) return;
 
     if (shouldCount && isPopupQuotaBlockedSync()) {
+      if (!licenseKey && replypalPlan === 'anon') {
+        showToast('You\'ve used all 3 free tries. Sign in for 10 free rewrites/month!', 'error');
+        try {
+          window.open('https://replypals.in/login', '_blank', 'noopener');
+        } catch (e) { /* ignore */ }
+        sendTrack('upgrade_shown', { trigger: 'anon_limit_signin' });
+        return;
+      }
       showUpgradeOverlay(true);
       sendTrack('upgrade_shown', { trigger: 'limit_reached' }); // no personal data
       return;
@@ -553,44 +586,64 @@
 
         if (shouldCount) {
           if (!licenseKey) {
-            // Use quota numbers returned directly in API response.
-            // These come from rate_ctx (pre-log-write) so they are always correct.
-            // Never call free-usage immediately — it reads llm_call_logs which has
-            // an async write lag and will return stale (old) count, resetting the display.
-            const apiUsed  = response.data?.rewrites_used;
+            const apiUsed = response.data?.rewrites_used;
             const apiLimit = response.data?.rewrites_limit;
-            if (typeof apiUsed === 'number' && typeof apiLimit === 'number') {
+            const apiLeft = response.data?.rewrites_left;
+            if (typeof apiUsed === 'number') {
               useCount = apiUsed;
-              applyFreeTierBonusFromApiPayload({
-                rewrites_limit: apiLimit,
-                monthly_base_limit: response.data?.monthly_base_limit,
-                bonus_rewrites: response.data?.bonus_rewrites
-              });
-              replypalRewritesLimit = apiLimit;
               serverRewriteCount = useCount;
-              await chrome.storage.local.set({
+              if (typeof apiLimit === 'number') {
+                applyFreeTierBonusFromApiPayload({
+                  plan: response.data?.plan,
+                  rewrites_limit: apiLimit,
+                  monthly_base_limit: response.data?.monthly_base_limit,
+                  bonus_rewrites: response.data?.bonus_rewrites
+                });
+                replypalRewritesLimit = apiLimit;
+              }
+              if (typeof response.data?.plan === 'string') replypalPlan = response.data.plan;
+              if (typeof apiLeft === 'number') {
+                replypalUsageLeft = apiLeft;
+              } else if (typeof apiLimit === 'number') {
+                replypalUsageLeft = Math.max(0, apiLimit - apiUsed);
+              }
+              const storagePatch = {
                 replypalCount: useCount,
+                replypalUsageUsed: useCount,
                 replypalBonusRewrites: bonusRewrites,
-                replypalUsageLimit: apiLimit,
-                replypalRewritesLimit: apiLimit,
                 replypalMonthlyBaseLimit: response.data?.monthly_base_limit
-              });
+              };
+              if (typeof apiLimit === 'number') {
+                storagePatch.replypalUsageLimit = apiLimit;
+                storagePatch.replypalRewritesLimit = apiLimit;
+              }
+              if (typeof apiLeft === 'number') {
+                storagePatch.replypalUsageLeft = apiLeft;
+              } else if (typeof apiLimit === 'number') {
+                storagePatch.replypalUsageLeft = Math.max(0, apiLimit - apiUsed);
+              }
+              if (typeof response.data?.plan === 'string') storagePatch.replypalPlan = response.data.plan;
+              await chrome.storage.local.set(storagePatch);
             } else {
-              useCount++;
-              serverRewriteCount = useCount;
-              await chrome.storage.local.set({ replypalCount: useCount });
+              const { replypalSupabaseToken, replypalEmail } = await chrome.storage.local.get([
+                'replypalSupabaseToken',
+                'replypalEmail'
+              ]);
+              const fullyAnonymous = !replypalSupabaseToken && !replypalEmail;
+              if (fullyAnonymous) {
+                useCount++;
+                serverRewriteCount = useCount;
+                await chrome.storage.local.set({ replypalCount: useCount, replypalUsageUsed: useCount });
+              }
             }
             updateUsageDisplay();
 
-            // Only sync from server AFTER log write has had time to settle (~2s).
-            setTimeout(async () => {
+            const runDeferredRefresh = async () => {
               await refreshFreeUsageFromServer();
               updateUsageDisplay();
-            }, 2000);
-            setTimeout(async () => {
-              await refreshFreeUsageFromServer();
-              updateUsageDisplay();
-            }, 5000);
+            };
+            setTimeout(runDeferredRefresh, 2000);
+            setTimeout(runDeferredRefresh, 5000);
           } else if (licenseKey) {
             const apiLeft = response.data?.rewrites_left;
             const apiLim = response.data?.rewrites_limit;
@@ -1216,7 +1269,13 @@
       try {
         const response = await safeSendMessage({
           type: 'generate',
-          payload: { prompt, tone: templateFormTone, license_key: licenseKey }
+          payload: {
+            prompt,
+            tone: templateFormTone,
+            license_key: licenseKey,
+            event_id: crypto.randomUUID(),
+            anon_id: anonId || null
+          }
         });
 
         if (response?.error === 'offline') {
@@ -1243,8 +1302,58 @@
           updateCharCount();
           showResult(response.data);
 
-          useCount++;
-          await chrome.storage.local.set({ replypalCount: useCount });
+          if (!licenseKey) {
+            const apiUsed = response.data?.rewrites_used;
+            const apiLimit = response.data?.rewrites_limit;
+            const apiLeft = response.data?.rewrites_left;
+            if (typeof apiUsed === 'number') {
+              useCount = apiUsed;
+              serverRewriteCount = useCount;
+              if (typeof apiLimit === 'number') {
+                applyFreeTierBonusFromApiPayload({
+                  plan: response.data?.plan,
+                  rewrites_limit: apiLimit,
+                  monthly_base_limit: response.data?.monthly_base_limit,
+                  bonus_rewrites: response.data?.bonus_rewrites
+                });
+                replypalRewritesLimit = apiLimit;
+              }
+              if (typeof response.data?.plan === 'string') replypalPlan = response.data.plan;
+              if (typeof apiLeft === 'number') {
+                replypalUsageLeft = apiLeft;
+              } else if (typeof apiLimit === 'number') {
+                replypalUsageLeft = Math.max(0, apiLimit - apiUsed);
+              }
+              const storagePatch = {
+                replypalCount: useCount,
+                replypalUsageUsed: useCount,
+                replypalBonusRewrites: bonusRewrites,
+                replypalMonthlyBaseLimit: response.data?.monthly_base_limit
+              };
+              if (typeof apiLimit === 'number') {
+                storagePatch.replypalUsageLimit = apiLimit;
+                storagePatch.replypalRewritesLimit = apiLimit;
+              }
+              if (typeof apiLeft === 'number') {
+                storagePatch.replypalUsageLeft = apiLeft;
+              } else if (typeof apiLimit === 'number') {
+                storagePatch.replypalUsageLeft = Math.max(0, apiLimit - apiUsed);
+              }
+              if (typeof response.data?.plan === 'string') storagePatch.replypalPlan = response.data.plan;
+              await chrome.storage.local.set(storagePatch);
+            } else {
+              const { replypalSupabaseToken, replypalEmail } = await chrome.storage.local.get([
+                'replypalSupabaseToken',
+                'replypalEmail'
+              ]);
+              const fullyAnonymous = !replypalSupabaseToken && !replypalEmail;
+              if (fullyAnonymous) {
+                useCount++;
+                serverRewriteCount = useCount;
+                await chrome.storage.local.set({ replypalCount: useCount, replypalUsageUsed: useCount });
+              }
+            }
+          }
           updateUsageDisplay();
         } else {
           showToast('⚠️ ' + (response?.error || 'Failed to generate'), 'error');
