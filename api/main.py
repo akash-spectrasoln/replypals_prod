@@ -4262,8 +4262,14 @@ _website_candidates = [
 _website_dir = next((p for p in _website_candidates if p.exists()), _website_candidates[0])
 
 # Serve built static assets when present (Astro build output).
-_astro_dir = _website_dir / "_astro"
-if _astro_dir.exists():
+_asset_dir_candidates = [
+    _website_dir / "_astro",
+    _website_dir / "dist" / "_astro",
+    _website_dir / "assets",
+    _website_dir / "dist" / "assets",
+]
+_astro_dir = next((p for p in _asset_dir_candidates if p.name == "_astro" and p.exists()), None)
+if _astro_dir:
     app.mount("/_astro", StaticFiles(directory=str(_astro_dir)), name="website-astro")
 
 # Serve individual HTML pages at clean paths
@@ -4289,6 +4295,30 @@ async def serve_favicon():
     for name in ("favicon.ico", "favicon.svg"):
         f = _website_dir / name
         if f.exists():
+            return FileResponse(str(f))
+    raise HTTPException(404, "Page not found")
+
+
+@app.get("/_astro/{asset_path:path}", include_in_schema=False)
+async def serve_astro_asset(asset_path: str):
+    candidates = [
+        _website_dir / "_astro" / asset_path,
+        _website_dir / "dist" / "_astro" / asset_path,
+    ]
+    for f in candidates:
+        if f.exists() and f.is_file():
+            return FileResponse(str(f))
+    raise HTTPException(404, "Page not found")
+
+
+@app.get("/assets/{asset_path:path}", include_in_schema=False)
+async def serve_site_asset(asset_path: str):
+    candidates = [
+        _website_dir / "assets" / asset_path,
+        _website_dir / "dist" / "assets" / asset_path,
+    ]
+    for f in candidates:
+        if f.exists() and f.is_file():
             return FileResponse(str(f))
     raise HTTPException(404, "Page not found")
 
