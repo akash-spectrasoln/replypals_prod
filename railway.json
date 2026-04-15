@@ -6,7 +6,7 @@
   },
   "deploy": {
     "startCommand": "/usr/local/bin/docker-entrypoint.sh",
-    "healthcheckPath": "/healthz",
+    "healthcheckPath": "/health",
     "healthcheckTimeout": 120,
     "restartPolicyType": "always"
   }
