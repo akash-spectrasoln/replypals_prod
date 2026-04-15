@@ -4254,7 +4254,17 @@ async def account_resend_license_by_session(body: ResendBySessionRequest):
 # ═══════════════════════════════════════════
 from fastapi.responses import FileResponse
 
-_website_dir = pathlib.Path(__file__).parent.parent / "website"
+_website_candidates = [
+    pathlib.Path("/var/www/website"),  # Docker/Railway runtime
+    pathlib.Path(__file__).parent.parent / "website_static_backup",  # local static pages
+    pathlib.Path(__file__).parent.parent / "website",  # fallback (dev)
+]
+_website_dir = next((p for p in _website_candidates if p.exists()), _website_candidates[0])
+
+# Serve built static assets when present (Astro build output).
+_astro_dir = _website_dir / "_astro"
+if _astro_dir.exists():
+    app.mount("/_astro", StaticFiles(directory=str(_astro_dir)), name="website-astro")
 
 # Serve individual HTML pages at clean paths
 @app.get("/", include_in_schema=False)
@@ -4272,6 +4282,15 @@ async def serve_robots():
         return FileResponse(str(f), media_type="text/plain")
     # Safe default if file is absent.
     return PlainTextResponse(content="User-agent: *\nAllow: /\n")
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def serve_favicon():
+    for name in ("favicon.ico", "favicon.svg"):
+        f = _website_dir / name
+        if f.exists():
+            return FileResponse(str(f))
+    raise HTTPException(404, "Page not found")
 
 # Map all website pages
 _WEBSITE_PAGES = [
