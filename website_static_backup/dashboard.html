@@ -740,9 +740,9 @@
           <!-- Starter -->
           <div class="plan-card-opt" data-plan="starter" onclick="selectPlan('starter')">
             <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;color:#0F2544;margin-bottom:4px;">Starter</div>
-            <div class="price">$2<small>/mo</small></div>
+            <div class="price" id="dashPlanPriceStarter">$2<small>/mo</small></div>
             <div class="plan-features">
-              <span id="dashPlanRewriteStarter">✅ 50 rewrites/month</span><br>
+              <span id="dashPlanRewriteStarter">✅ 25 rewrites/mo</span><br>
               ✅ All tones & modes<br>
               ✅ Gmail, WhatsApp, LinkedIn<br>
               ❌ Voice input<br>
@@ -754,7 +754,7 @@
           <div class="plan-card-opt is-selected" data-plan="pro" onclick="selectPlan('pro')">
             <div class="plan-tag">⭐ MOST POPULAR</div>
             <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;color:#0F2544;margin-bottom:4px;">Pro</div>
-            <div class="price">$9<small>/mo</small></div>
+            <div class="price" id="dashPlanPricePro">$9<small>/mo</small></div>
             <div class="plan-features">
               <span id="dashPlanRewritePro">✅ <strong>Unlimited</strong> rewrites</span><br>
               ✅ Voice in 8 languages<br>
@@ -767,9 +767,9 @@
           <!-- Team -->
           <div class="plan-card-opt" data-plan="team" onclick="selectPlan('team')">
             <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;color:#0F2544;margin-bottom:4px;">Team</div>
-            <div class="price">$25<small>/mo</small></div>
+            <div class="price" id="dashPlanPriceTeam">$25<small>/mo</small></div>
             <div class="plan-features">
-              ✅ Up to 5 team members<br>
+              <span id="dashPlanRewriteTeam">✅ Up to 5 team members · 150/mo · 15/day</span><br>
               ✅ Shared brand voice<br>
               ✅ Team usage dashboard<br>
               ✅ All Pro features<br>
@@ -889,11 +889,14 @@
       console.log('[dashboard-debug]', ...args);
     }
 
-    function applyDashboardPlanLabels(cfg) {
-      const labels = cfg && cfg.plan_limit_labels;
+    let dashboardPlanLabels = {};
+    function applyDashboardPlanLabels(payload) {
+      const labels = payload && payload.plan_limit_labels;
       if (!labels) return;
+      dashboardPlanLabels = labels;
       const st = document.getElementById('dashPlanRewriteStarter');
       const pr = document.getElementById('dashPlanRewritePro');
+      const tm = document.getElementById('dashPlanRewriteTeam');
       if (st && labels.starter) st.textContent = '✅ ' + labels.starter;
       if (pr && labels.pro) {
         if (/^unlimited$/i.test(String(labels.pro).trim())) {
@@ -901,6 +904,25 @@
         } else {
           pr.textContent = '✅ ' + labels.pro;
         }
+      }
+      if (tm && labels.team) {
+        tm.textContent = '✅ Up to 5 team members · ' + labels.team;
+      }
+    }
+
+    function applyDashboardPlanPricing(payload) {
+      if (!payload || !payload.plans) return;
+      const starterPrice = document.getElementById('dashPlanPriceStarter');
+      const proPrice = document.getElementById('dashPlanPricePro');
+      const teamPrice = document.getElementById('dashPlanPriceTeam');
+      if (starterPrice && payload.plans.starter) {
+        starterPrice.innerHTML = `${payload.plans.starter.display}<small>${payload.plans.starter.per || '/mo'}</small>`;
+      }
+      if (proPrice && payload.plans.pro) {
+        proPrice.innerHTML = `${payload.plans.pro.display}<small>${payload.plans.pro.per || '/mo'}</small>`;
+      }
+      if (teamPrice && payload.plans.team) {
+        teamPrice.innerHTML = `${payload.plans.team.display}<small>${payload.plans.team.per || '/mo'}</small>`;
       }
     }
 
@@ -915,6 +937,14 @@
           url = cfg.supabase_url || url;
           anon = cfg.supabase_anon_key || '';
           applyDashboardPlanLabels(cfg);
+        }
+      } catch (_) {}
+      try {
+        const pr = await fetch(API_BASE + '/pricing', { cache: 'no-store' });
+        if (pr.ok) {
+          const pricing = await pr.json();
+          applyDashboardPlanLabels(pricing);
+          applyDashboardPlanPricing(pricing);
         }
       } catch (_) {}
       if (!url || !anon) return null;
@@ -1294,10 +1324,17 @@
 
         } else {
           // ── PAID PLAN ──
-          const planNames = { starter: 'Starter', pro: 'Pro 🚀', team: 'Team 👥' };
+          const planNames = { starter: 'Starter', pro: 'Pro 🚀', team: 'Team 👥', growth: 'Growth 📈' };
           const renews = data.renews_at
             ? new Date(data.renews_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
             : null;
+          const planKey = String(data.plan || '').toLowerCase();
+          const dynamicLabel = dashboardPlanLabels[planKey] || '';
+          const paidDetail = renews
+            ? `Renews on: ${renews}`
+            : (dynamicLabel
+              ? `${dynamicLabel} · All features unlocked`
+              : 'All features unlocked');
 
           el.innerHTML = `
             <div class="plan-card" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
@@ -1305,7 +1342,7 @@
                 <div class="plan-name">🟠 ${planNames[data.plan] || data.plan.toUpperCase()} Plan
                   <span class="plan-badge">${data.active ? 'ACTIVE' : 'INACTIVE'}</span>
                 </div>
-                ${renews ? `<div class="plan-detail">Renews on: ${renews}</div>` : '<div class="plan-detail">Unlimited rewrites · All features unlocked</div>'}
+                <div class="plan-detail">${paidDetail}</div>
               </div>
               <button class="btn-outline" id="manageBillingBtn">⚙️ Manage Billing</button>
             </div>`;

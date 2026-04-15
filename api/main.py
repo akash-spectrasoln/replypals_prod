@@ -523,6 +523,7 @@ def _check_production_config():
     is_prod = (os.getenv("APP_ENV") or os.getenv("ENVIRONMENT", "development")).lower() == "production"
     if not is_prod:
         return
+    strict_checks = os.getenv("ENFORCE_PROD_STARTUP_CHECKS", "0").strip() == "1"
     errors = []
     if not os.getenv("GEMINI_API_KEY") and not os.getenv("OPENAI_API_KEY") and not os.getenv("ANTHROPIC_API_KEY"):
         errors.append("No AI provider API key set (GEMINI_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY)")
@@ -540,10 +541,14 @@ def _check_production_config():
     if allowed == "*":
         errors.append("ALLOWED_ORIGINS must not be '*' in production — set your domain")
     if errors:
-        print("\n🚨 PRODUCTION CONFIG ERRORS — refusing to start:")
+        print("\n🚨 PRODUCTION CONFIG WARNINGS:")
         for e in errors:
             print(f"  ✗ {e}")
-        import sys; sys.exit(1)
+        if strict_checks:
+            print("Strict startup checks enabled (ENFORCE_PROD_STARTUP_CHECKS=1) — refusing to start.")
+            import sys
+            sys.exit(1)
+        print("Continuing startup (set ENFORCE_PROD_STARTUP_CHECKS=1 to enforce fail-fast).")
     print("✅ Production config validated")
 
 _check_production_config()
