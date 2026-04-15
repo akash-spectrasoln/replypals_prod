@@ -1,0 +1,25 @@
+<section id="features" class="scroll-mt-20 border-b border-slate-200 py-16 md:py-20">
+  <div class="mx-auto max-w-6xl px-4">
+    <h2 class="text-center text-3xl font-bold text-slate-900">Everything you need</h2>
+    <div class="mt-12 grid gap-8 sm:grid-cols-2 md:grid-cols-3">
+      {
+        [
+          { t: 'Rewrite in any tone', d: 'Match formal, friendly, or concise styles instantly.' },
+          { t: 'Summarize selected text', d: 'Turn long threads into short bullet updates.' },
+          { t: 'Fix grammar instantly', d: 'Clean mistakes before you hit send.' },
+          { t: 'Reply to messages', d: 'Draft replies that match the conversation.' },
+          { t: 'Works everywhere', d: 'Gmail, LinkedIn, Twitter, WhatsApp Web, and more.' },
+          { t: 'Voice to text rewrite', d: 'Speak your idea, get polished text back.' },
+        ].map((f) => (
+          <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div class="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-100 text-indigo-700">
+              ✦
+            </div>
+            <h3 class="font-semibold text-slate-900">{f.t}</h3>
+            <p class="mt-2 text-sm text-slate-600">{f.d}</p>
+          </div>
+        ))
+      }
+    </div>
+  </div>
+</section>

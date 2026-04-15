@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Welcome to ReplyPals</title>
+    <meta name="description"
+        content="Set up ReplyPals — the AI writing assistant built for non-native English speakers." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Syne:wght@500;600;700;800&family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap"
+        rel="stylesheet" />
+    <link rel="stylesheet" href="onboarding.css" />
+</head>
+
+<body>
+    <div class="onboarding-container">
+        <div class="onboarding-card" id="onboardingCard">
+            <!-- Logo -->
+            <div class="ob-logo">
+                <div class="ob-logo-circle">R</div>
+                <span class="ob-logo-text">ReplyPals</span>
+            </div>
+
+            <!-- Progress dots -->
+            <div class="ob-progress" id="obProgress">
+                <div class="ob-dot active" data-step="1"></div>
+                <div class="ob-dot" data-step="2"></div>
+                <div class="ob-dot" data-step="3"></div>
+            </div>
+
+            <!-- Steps container -->
+            <div class="ob-steps-wrapper" id="obStepsWrapper">
+                <!-- Step 1: Welcome -->
+                <div class="ob-step active" id="obStep1">
+                    <div class="ob-gradient-header">
+                        <h2>Welcome to ReplyPals 👋</h2>
+                        <p>The AI writing assistant built for you — not just native English speakers.</p>
+                    </div>
+                    <div class="ob-animation-area">
+                        <div class="ob-text-animation">
+                            <div class="ob-text-before" id="obTextBefore">
+                                <span class="ob-text-label">Before</span>
+                                <p>"Please do the needful and revert back at earliest"</p>
+                            </div>
+                            <div class="ob-arrow-down">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#FF6B35"
+                                    stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                                    <polyline points="19 12 12 19 5 12"></polyline>
+                                </svg>
+                            </div>
+                            <div class="ob-text-after" id="obTextAfter">
+                                <span class="ob-text-label ob-text-label-green">After</span>
+                                <p>"Please handle this and get back to me as soon as possible"</p>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="ob-btn ob-btn-primary" id="obBtnStep1">Get Started →</button>
+                </div>
+
+                <!-- Step 2: Where do you write -->
+                <div class="ob-step" id="obStep2">
+                    <h2 class="ob-step-title">Where do you write most?</h2>
+                    <p class="ob-step-sub">ReplyPals will remember your preferred tone for each app.</p>
+                    <div class="ob-sites-grid" id="obSitesGrid">
+                        <div class="ob-site-card" data-site="gmail">
+                            <span class="ob-site-icon">📧</span>
+                            <span class="ob-site-name">Gmail</span>
+                        </div>
+                        <div class="ob-site-card" data-site="linkedin">
+                            <span class="ob-site-icon">💼</span>
+                            <span class="ob-site-name">LinkedIn</span>
+                        </div>
+                        <div class="ob-site-card" data-site="whatsapp">
+                            <span class="ob-site-icon">💬</span>
+                            <span class="ob-site-name">WhatsApp</span>
+                        </div>
+                        <div class="ob-site-card" data-site="twitter">
+                            <span class="ob-site-icon">🐦</span>
+                            <span class="ob-site-name">Twitter / X</span>
+                        </div>
+                        <div class="ob-site-card" data-site="slack">
+                            <span class="ob-site-icon">💬</span>
+                            <span class="ob-site-name">Slack</span>
+                        </div>
+                        <div class="ob-site-card" data-site="other">
+                            <span class="ob-site-icon">📝</span>
+                            <span class="ob-site-name">Other sites</span>
+                        </div>
+                    </div>
+                    <button class="ob-btn ob-btn-primary" id="obBtnStep2">Continue →</button>
+                </div>
+
+                <!-- Step 3: Goal -->
+                <div class="ob-step" id="obStep3">
+                    <h2 class="ob-step-title">What brings you to ReplyPals?</h2>
+                    <p class="ob-step-sub">We'll customize your experience.</p>
+                    <div class="ob-goals-list" id="obGoalsList">
+                        <label class="ob-goal-option" data-goal="professional">
+                            <input type="radio" name="goal" value="professional" />
+                            <div class="ob-goal-radio"></div>
+                            <span class="ob-goal-icon">💼</span>
+                            <span class="ob-goal-text">Sound more professional at work</span>
+                        </label>
+                        <label class="ob-goal-option" data-goal="emails">
+                            <input type="radio" name="goal" value="emails" />
+                            <div class="ob-goal-radio"></div>
+                            <span class="ob-goal-icon">✉️</span>
+                            <span class="ob-goal-text">Write better emails in English</span>
+                        </label>
+                        <label class="ob-goal-option" data-goal="nonnative">
+                            <input type="radio" name="goal" value="nonnative" />
+                            <div class="ob-goal-radio"></div>
+                            <span class="ob-goal-icon">🌍</span>
+                            <span class="ob-goal-text">Fix non-native English patterns</span>
+                        </label>
+                        <label class="ob-goal-option" data-goal="improve">
+                            <input type="radio" name="goal" value="improve" />
+                            <div class="ob-goal-radio"></div>
+                            <span class="ob-goal-icon">📈</span>
+                            <span class="ob-goal-text">Improve my writing over time</span>
+                        </label>
+                        <label class="ob-goal-option" data-goal="all">
+                            <input type="radio" name="goal" value="all" />
+                            <div class="ob-goal-radio"></div>
+                            <span class="ob-goal-icon">✅</span>
+                            <span class="ob-goal-text">All of the above</span>
+                        </label>
+                    </div>
+                    <button class="ob-btn ob-btn-primary" id="obBtnStep3">Finish Setup →</button>
+                </div>
+            </div>
+
+            <!-- Success state -->
+            <div class="ob-success" id="obSuccess" style="display:none;">
+                <div class="ob-check-animation" id="obCheckAnim">
+                    <svg viewBox="0 0 100 100" width="80" height="80">
+                        <circle class="ob-check-circle" cx="50" cy="50" r="45" fill="none" stroke="#10B981"
+                            stroke-width="4" />
+                        <polyline class="ob-check-mark" points="30,52 44,66 70,38" fill="none" stroke="#10B981"
+                            stroke-width="5" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                </div>
+                <h2 class="ob-success-text">You're all set!</h2>
+                <p class="ob-success-sub">Try ReplyPals on any website.</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="onboarding.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+    <title>ReplyPals Admin</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        @keyframes shake {
+
+            0%,
+            100% {
+                transform: translateX(0)
+            }
+
+            25% {
+                transform: translateX(-6px)
+            }
+
+            75% {
+                transform: translateX(6px)
+            }
+        }
+
+        .shake {
+            animation: shake .3s ease-in-out
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(8px)
+            }
+
+            to {
+                opacity: 1;
+                transform: none
+            }
+        }
+
+        .fade-in {
+            animation: fadeIn .3s ease
+        }
+
+        .sidebar-item {
+            transition: all .15s ease
+        }
+
+        .sidebar-item:hover {
+            background: rgba(255, 255, 255, .08)
+        }
+
+        .sidebar-item.active {
+            background: #FF6B35;
+            color: #fff
+        }
+
+        .stat-card {
+            transition: transform .15s ease
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px)
+        }
+
+        .modal-bg {
+            background: rgba(0, 0, 0, .5);
+            backdrop-filter: blur(4px)
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 3px
+        }
+
+        input:focus,
+        textarea:focus,
+        select:focus {
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(255, 107, 53, 0.3);
+            border-color: #FF6B35
+        }
+
+        .badge {
+            padding: 2px 8px;
+            border-radius: 9999px;
+            font-size: 11px;
+            font-weight: 600
+        }
+
+        .badge-green {
+            background: #ECFDF5;
+            color: #065F46
+        }
+
+        .badge-red {
+            background: #FEF2F2;
+            color: #991B1B
+        }
+
+        .badge-orange {
+            background: #FFF7ED;
+            color: #9A3412
+        }
+
+        .badge-blue {
+            background: #EFF6FF;
+            color: #1E40AF
+        }
+
+        .badge-gray {
+            background: #F3F4F6;
+            color: #374151
+        }
+
+        .toggle {
+            width: 44px;
+            height: 24px;
+            border-radius: 12px;
+            position: relative;
+            cursor: pointer;
+            transition: .2s
+        }
+
+        .toggle.on {
+            background: #FF6B35
+        }
+
+        .toggle.off {
+            background: #D1D5DB
+        }
+
+        .toggle::after {
+            content: '';
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #fff;
+            top: 2px;
+            transition: .2s
+        }
+
+        .toggle.on::after {
+            left: 22px
+        }
+
+        .toggle.off::after {
+            left: 2px
+        }
+    </style>
+    <script>tailwind.config = { theme: { extend: { colors: { rp: '#FF6B35', navy: '#0F2544', 'navy-light': '#1A3A6B' } } } }</script>
+</head>
+
+<body class="bg-gray-50 text-gray-900 font-[system-ui]">
+
+    <!-- LOGIN SCREEN -->
+    <div id="loginScreen"
+        class="min-h-screen flex items-center justify-center bg-gradient-to-br from-navy to-slate-900">
+        <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm fade-in">
+            <div class="flex items-center justify-center gap-2 mb-1">
+                <div class="w-10 h-10 rounded-full bg-rp flex items-center justify-center text-white font-bold text-lg">
+                    R</div>
+                <span class="text-xl font-bold text-navy">ReplyPals</span>
+            </div>
+            <p class="text-center text-gray-400 text-sm mb-6">Admin Dashboard</p>
+            <div id="loginError" class="hidden text-red-600 text-sm text-center mb-3 bg-red-50 rounded-lg p-2"></div>
+            <input id="loginUser" type="text" placeholder="Username"
+                class="w-full border rounded-lg px-4 py-2.5 mb-3 text-sm" autocomplete="username" />
+            <div class="relative mb-4">
+                <input id="loginPass" type="password" placeholder="Password"
+                    class="w-full border rounded-lg px-4 py-2.5 text-sm pr-10" autocomplete="current-password" />
+                <button onclick="togglePassVis()" class="absolute right-3 top-2.5 text-gray-400 text-sm">👁</button>
+            </div>
+            <button id="loginBtn" onclick="doLogin()"
+                class="w-full bg-rp hover:bg-orange-600 text-white font-semibold py-2.5 rounded-lg transition">Sign
+                In</button>
+        </div>
+    </div>
+
+    <!-- MAIN LAYOUT -->
+    <div id="mainLayout" class="hidden h-screen flex">
+        <!-- SIDEBAR -->
+        <aside id="sidebar"
+            class="w-60 bg-navy flex flex-col flex-shrink-0 transition-all lg:translate-x-0 -translate-x-full lg:relative fixed z-50 h-full">
+            <div class="p-5 flex items-center gap-2 border-b border-white/10">
+                <div class="w-8 h-8 rounded-full bg-rp flex items-center justify-center text-white font-bold text-sm">R
+                </div>
+                <span class="text-white font-bold">ReplyPals</span>
+                <span class="badge badge-orange text-[10px] ml-1">Admin</span>
+            </div>
+            <nav class="flex-1 py-3 px-3 space-y-1 overflow-y-auto" id="sidebarNav">
+                <button data-page="dashboard"
+                    class="sidebar-item active w-full text-left px-3 py-2 rounded-lg text-sm text-white/90 flex items-center gap-2">📊
+                    Dashboard</button>
+                <button data-page="users"
+                    class="sidebar-item w-full text-left px-3 py-2 rounded-lg text-sm text-white/90 flex items-center gap-2">👥
+                    Users</button>
+                <button data-page="licenses"
+                    class="sidebar-item w-full text-left px-3 py-2 rounded-lg text-sm text-white/90 flex items-center gap-2">🔑
+                    Licenses</button>
+                <button data-page="teams"
+                    class="sidebar-item w-full text-left px-3 py-2 rounded-lg text-sm text-white/90 flex items-center gap-2">👔
+                    Teams</button>
+                <button data-page="analytics"
+                    class="sidebar-item w-full text-left px-3 py-2 rounded-lg text-sm text-white/90 flex items-center gap-2">📈
+                    Analytics</button>
+                <button data-page="emails"
+                    class="sidebar-item w-full text-left px-3 py-2 rounded-lg text-sm text-white/90 flex items-center gap-2">📧
+                    Emails</button>
+                <button data-page="logs"
+                    class="sidebar-item w-full text-left px-3 py-2 rounded-lg text-sm text-white/90 flex items-center gap-2">📋
+                    Logs</button>
+                <button data-page="settings"
+                    class="sidebar-item w-full text-left px-3 py-2 rounded-lg text-sm text-white/90 flex items-center gap-2">⚙️
+                    Settings</button>
+                <button data-page="commerce"
+                    class="sidebar-item w-full text-left px-3 py-2 rounded-lg text-sm text-white/90 flex items-center gap-2">💳
+                    Commerce</button>
+                <button data-page="pricing"
+                    class="sidebar-item w-full text-left px-3 py-2 rounded-lg text-sm text-white/90 flex items-center gap-2">🏷️
+                    Pricing</button>
+                <button data-page="security"
+                    class="sidebar-item w-full text-left px-3 py-2 rounded-lg text-sm text-white/90 flex items-center gap-2">🔒
+                    Security</button>
+            </nav>
+            <div class="p-4 border-t border-white/10 text-white/60 text-xs">
+                Logged in as: <span class="text-white/90">admin</span>
+                <button onclick="doLogout()" class="block mt-2 text-red-400 hover:text-red-300">Sign Out</button>
+            </div>
+        </aside>
+        <!-- MOBILE HAMBURGER -->
+        <button id="hamburger" onclick="document.getElementById('sidebar').classList.toggle('-translate-x-full')"
+            class="lg:hidden fixed top-3 left-3 z-[60] bg-navy text-white p-2 rounded-lg">☰</button>
+
+        <!-- CONTENT -->
+        <main class="flex-1 flex flex-col overflow-hidden">
+            <header class="bg-white border-b px-6 py-3 flex items-center justify-between flex-shrink-0">
+                <h1 id="pageTitle" class="text-lg font-bold text-navy">Dashboard</h1>
+                <div class="flex items-center gap-3 text-sm">
+                    <button onclick="refreshPage()" class="text-gray-500 hover:text-rp">🔄 Refresh</button>
+                    <span id="lastRefresh" class="text-gray-400 text-xs hidden sm:inline"></span>
+                    <span id="envBadge" class="badge"></span>
+                </div>
+            </header>
+            <div id="pageContent" class="flex-1 overflow-y-auto p-6 bg-gray-50"></div>
+        </main>
+    </div>
+
+    <!-- MODAL CONTAINER -->
+    <div id="modalOverlay" class="hidden fixed inset-0 z-[100] modal-bg flex items-center justify-center p-4">
+        <div id="modalBox"
+            class="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 fade-in"></div>
+    </div>
+    
+    <script src="/admin/static/admin.js?v=9"></script>
+    <script src="/admin/static/admin_pages.js?v=10"></script>
+</body>
+
+</html>
