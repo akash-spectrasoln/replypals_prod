@@ -4255,6 +4255,7 @@ async def account_resend_license_by_session(body: ResendBySessionRequest):
 from fastapi.responses import FileResponse
 
 _website_candidates = [
+    pathlib.Path("/var/www/website_static_backup"),  # Docker/Railway stable static backup
     pathlib.Path("/var/www/website"),  # Docker/Railway runtime
     pathlib.Path(__file__).parent.parent / "website_static_backup",  # local static pages
     pathlib.Path(__file__).parent.parent / "website",  # fallback (dev)

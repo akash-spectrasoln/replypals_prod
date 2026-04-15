@@ -33,6 +33,7 @@ COPY api/ ./
 
 COPY --from=admin-builder /app/admin-dashboard/dist /var/www/admin
 COPY --from=website-builder /app/website/dist /var/www/website
+COPY website_static_backup/ /var/www/website_static_backup
 
 COPY nginx.conf /etc/nginx/sites-available/default
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
