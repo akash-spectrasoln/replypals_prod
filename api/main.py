@@ -1786,8 +1786,11 @@ async def health():
         db = "not_configured"
     else:
         try:
-            await asyncio.to_thread(
-                lambda: supabase.table("user_profiles").select("id").limit(1).execute()
+            # Keep health checks fast and bounded so platform probes don't fail
+            # during transient DB/network slowness.
+            await _sb_execute(
+                supabase.table("user_profiles").select("id").limit(1),
+                timeout_sec=2.0,
             )
         except Exception as e:
             db = str(e)
