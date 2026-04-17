@@ -735,49 +735,7 @@
         <div class="section-title">💳 Choose Your Plan</div>
         <p style="font-size:14px;color:#6B7280;margin-bottom:20px;">All plans include a 7-day money-back guarantee. Cancel anytime.</p>
 
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:24px;" id="planCardsGrid">
-
-          <!-- Starter -->
-          <div class="plan-card-opt" data-plan="starter" onclick="selectPlan('starter')">
-            <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;color:#0F2544;margin-bottom:4px;">Starter</div>
-            <div class="price" id="dashPlanPriceStarter">$2<small>/mo</small></div>
-            <div class="plan-features">
-              <span id="dashPlanRewriteStarter">✅ 25 rewrites/mo</span><br>
-              ✅ All tones & modes<br>
-              ✅ Gmail, WhatsApp, LinkedIn<br>
-              ❌ Voice input<br>
-              ❌ Tone Memory
-            </div>
-          </div>
-
-          <!-- Pro (Popular) -->
-          <div class="plan-card-opt is-selected" data-plan="pro" onclick="selectPlan('pro')">
-            <div class="plan-tag">⭐ MOST POPULAR</div>
-            <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;color:#0F2544;margin-bottom:4px;">Pro</div>
-            <div class="price" id="dashPlanPricePro">$9<small>/mo</small></div>
-            <div class="plan-features">
-              <span id="dashPlanRewritePro">✅ <strong>Unlimited</strong> rewrites</span><br>
-              ✅ Voice in 8 languages<br>
-              ✅ Tone Memory<br>
-              ✅ 25+ Email Templates<br>
-              ✅ Priority support
-            </div>
-          </div>
-
-          <!-- Team -->
-          <div class="plan-card-opt" data-plan="team" onclick="selectPlan('team')">
-            <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;color:#0F2544;margin-bottom:4px;">Team</div>
-            <div class="price" id="dashPlanPriceTeam">$25<small>/mo</small></div>
-            <div class="plan-features">
-              <span id="dashPlanRewriteTeam">✅ Up to 5 team members · 150/mo · 15/day</span><br>
-              ✅ Shared brand voice<br>
-              ✅ Team usage dashboard<br>
-              ✅ All Pro features<br>
-              ✅ Priority support
-            </div>
-          </div>
-
-        </div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px;" id="planCardsGrid"></div>
 
         <!-- CTA -->
         <div style="text-align:center;">
@@ -894,36 +852,56 @@
       const labels = payload && payload.plan_limit_labels;
       if (!labels) return;
       dashboardPlanLabels = labels;
-      const st = document.getElementById('dashPlanRewriteStarter');
-      const pr = document.getElementById('dashPlanRewritePro');
-      const tm = document.getElementById('dashPlanRewriteTeam');
-      if (st && labels.starter) st.textContent = '✅ ' + labels.starter;
-      if (pr && labels.pro) {
-        if (/^unlimited$/i.test(String(labels.pro).trim())) {
-          pr.innerHTML = '✅ <strong>Unlimited</strong> rewrites';
-        } else {
-          pr.textContent = '✅ ' + labels.pro;
-        }
-      }
-      if (tm && labels.team) {
-        tm.textContent = '✅ Up to 5 team members · ' + labels.team;
-      }
+    }
+
+    function escapeHtml(s) {
+      return String(s || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
     }
 
     function applyDashboardPlanPricing(payload) {
       if (!payload || !payload.plans) return;
-      const starterPrice = document.getElementById('dashPlanPriceStarter');
-      const proPrice = document.getElementById('dashPlanPricePro');
-      const teamPrice = document.getElementById('dashPlanPriceTeam');
-      if (starterPrice && payload.plans.starter) {
-        starterPrice.innerHTML = `${payload.plans.starter.display}<small>${payload.plans.starter.per || '/mo'}</small>`;
+      const grid = document.getElementById('planCardsGrid');
+      if (!grid) return;
+      const plans = payload.plans || {};
+      const labels = payload.plan_limit_labels || {};
+      const order = ['starter', 'pro', 'growth', 'team'].filter((k) => plans[k]);
+      const titleByPlan = { starter: 'Starter', pro: 'Pro', growth: 'Growth', team: 'Team' };
+      const featureByPlan = {
+        starter: ['All tones & modes', 'Works everywhere', 'Native Sound Score'],
+        pro: ['Voice in 8 languages', 'Tone Memory', '25+ Email Templates', 'Priority support'],
+        growth: ['Higher monthly limits', 'Everything in Pro', 'Priority throughput'],
+        team: ['Shared brand voice', 'Team usage dashboard', 'Priority support', 'Onboarding call'],
+      };
+      grid.innerHTML = order.map((k) => {
+        const p = plans[k];
+        const per = p.per || '/mo';
+        const isPro = k === 'pro';
+        const isSelected = selectedPlan === k || (!selectedPlan && isPro);
+        const limitText = labels[k] || '';
+        const formattedLimit = (k === 'team')
+          ? `Up to 5 team members · ${escapeHtml(limitText || '150/mo · 15/day')}`
+          : escapeHtml(limitText || '');
+        const featureLines = (featureByPlan[k] || []).map((line) => `✅ ${escapeHtml(line)}`).join('<br>');
+        return `
+          <div class="plan-card-opt${isSelected ? ' is-selected' : ''}" data-plan="${k}" onclick="selectPlan('${k}')">
+            ${isPro ? '<div class="plan-tag">⭐ MOST POPULAR</div>' : ''}
+            <div style="font-family:\'Syne\',sans-serif;font-weight:700;font-size:16px;color:#0F2544;margin-bottom:4px;">${titleByPlan[k] || k}</div>
+            <div class="price">${escapeHtml(p.display)}<small>${escapeHtml(per)}</small></div>
+            <div class="plan-features">
+              ${formattedLimit ? `✅ ${formattedLimit}<br>` : ''}
+              ${featureLines}
+            </div>
+          </div>
+        `;
+      }).join('');
+      if (!order.includes(selectedPlan)) {
+        selectedPlan = order.includes('pro') ? 'pro' : (order[0] || 'pro');
       }
-      if (proPrice && payload.plans.pro) {
-        proPrice.innerHTML = `${payload.plans.pro.display}<small>${payload.plans.pro.per || '/mo'}</small>`;
-      }
-      if (teamPrice && payload.plans.team) {
-        teamPrice.innerHTML = `${payload.plans.team.display}<small>${payload.plans.team.per || '/mo'}</small>`;
-      }
+      selectPlan(selectedPlan);
     }
 
     async function initSupabaseClient() {
@@ -1257,7 +1235,7 @@
           el.classList.remove('is-selected');
         }
       });
-      const labels = { starter: 'Starter', pro: 'Pro', team: 'Team' };
+      const labels = { starter: 'Starter', pro: 'Pro', growth: 'Growth', team: 'Team' };
       document.getElementById('selectedPlanLabel').textContent = labels[plan] || 'Pro';
     }
 
