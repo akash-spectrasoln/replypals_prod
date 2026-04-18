@@ -830,7 +830,15 @@
     // ── Config ─────────────────────────────────────────────
     const FALLBACK_SUPABASE_URL = 'https://nutchvfpcmowrlqjwkns.supabase.co';
     const apiBaseOverride = new URLSearchParams(window.location.search).get('api_base');
-    const API_BASE = apiBaseOverride || window.location.origin;
+    /** Match extension + nginx: production API lives under https://www.replypals.in/api */
+    const API_BASE = (function () {
+      if (apiBaseOverride) return apiBaseOverride.replace(/\/$/, '');
+      const h = window.location.hostname;
+      if (h === 'replypals.in' || h === 'www.replypals.in') {
+        return 'https://www.replypals.in/api';
+      }
+      return window.location.origin.replace(/\/$/, '');
+    })();
     const DASH_DEBUG = new URLSearchParams(window.location.search).get('debug') === '1';
 
     const { createClient } = supabase;
@@ -934,6 +942,9 @@
           url = cfg.supabase_url || url;
           anon = cfg.supabase_anon_key || '';
           applyDashboardPlanLabels(cfg);
+          if (cfg.chrome_extension_id && /^[a-p]{32}$/.test(String(cfg.chrome_extension_id))) {
+            window.REPLYPAL_EXTENSION_ID = String(cfg.chrome_extension_id).trim();
+          }
         }
       } catch (_) {}
       try {
@@ -1113,7 +1124,9 @@
       const EXTENSION_ID = (window.REPLYPAL_EXTENSION_ID || '').trim();
       const isLikelyValidId = /^[a-p]{32}$/.test(EXTENSION_ID);
       if (!isLikelyValidId) {
-        // Website should work even when extension ID is not configured.
+        console.warn(
+          '[ReplyPals] Dashboard cannot sync sign-in to the extension: set REPLYPAL_CHROME_EXTENSION_ID in API env to your Chrome extension id (32 letters a–p).'
+        );
         return;
       }
 

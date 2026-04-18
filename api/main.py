@@ -581,6 +581,21 @@ except Exception:
     SUPABASE_JWT_SECRET = _raw_jwt   # use as-is if not base64
 SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "")
 
+
+def _validated_chrome_extension_id() -> str:
+    """32-char Chrome Web Store / unpacked id uses only a–p (see externally_connectable)."""
+    raw = (
+        os.getenv("REPLYPAL_CHROME_EXTENSION_ID")
+        or os.getenv("CHROME_EXTENSION_ID")
+        or ""
+    ).strip().lower()
+    if len(raw) == 32 and all("a" <= c <= "p" for c in raw):
+        return raw
+    return ""
+
+
+REPLYPAL_CHROME_EXTENSION_ID = _validated_chrome_extension_id()
+
 _raw_allowed_origins = os.getenv("ALLOWED_ORIGINS", "*")
 _origins = [o.strip() for o in _raw_allowed_origins.split(",") if o.strip()]
 if not _origins:
@@ -1950,13 +1965,16 @@ async def track_event(request: Request, body: TrackRequest):
 @app.get("/public-config")
 async def public_config():
     """Public frontend config (safe values only). Includes live free-tier monthly cap from DB."""
-    return {
+    payload = {
         "supabase_url": SUPABASE_URL or "",
         "supabase_anon_key": SUPABASE_ANON_KEY or "",
         "app_base_url": os.getenv("APP_BASE_URL", "").strip(),
         "free_monthly_rewrites": _free_monthly_cap_from_db(),
         **_public_plan_limits_payload(),
     }
+    if REPLYPAL_CHROME_EXTENSION_ID:
+        payload["chrome_extension_id"] = REPLYPAL_CHROME_EXTENSION_ID
+    return payload
 
 
 @app.post("/contact-us")
