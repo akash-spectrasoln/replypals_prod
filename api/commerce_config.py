@@ -411,6 +411,51 @@ def format_pricing_display(
     return disp, "usd", eff, eff
 
 
+def resolve_checkout_country(country_code: Optional[str], currency_code: Optional[str]) -> str:
+    """
+    Normalize ISO-3166 alpha-2 for Stripe ``price_data``.
+
+    Some clients (e.g. web dashboard) omit ``country_code`` and default to ``US`` even when
+    ``GET /pricing`` showed local currency. When country is still ``US`` but the client sends the
+    pricing response's ``currency_code`` (e.g. ``inr``), infer a representative country so PPP+FX
+    matches what the user saw.
+    """
+    cc = (country_code or "US").strip().upper()
+    if len(cc) != 2:
+        cc = "US"
+    if cc != "US":
+        return cc
+    cur = (currency_code or "").strip().lower()
+    if not cur or cur == "usd":
+        return cc
+    inferred = {
+        "inr": "IN",
+        "gbp": "GB",
+        "eur": "DE",
+        "php": "PH",
+        "ngn": "NG",
+        "cad": "CA",
+        "aud": "AU",
+        "brl": "BR",
+        "mxn": "MX",
+        "jpy": "JP",
+        "krw": "KR",
+        "zar": "ZA",
+        "sgd": "SG",
+        "aed": "AE",
+        "sar": "SA",
+        "idr": "ID",
+        "myr": "MY",
+        "thb": "TH",
+        "vnd": "VN",
+        "pkr": "PK",
+        "bdt": "BD",
+        "lkr": "LK",
+        "npr": "NP",
+    }.get(cur)
+    return inferred or cc
+
+
 def resolve_country_row(snap: CommerceSnapshot, country_code: str) -> tuple[CountryPricingRow, float]:
     """
     Active country row or synthetic default (full USD price).

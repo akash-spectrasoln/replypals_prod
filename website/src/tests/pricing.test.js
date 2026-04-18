@@ -29,18 +29,18 @@ describe('PricingTable', () => {
     expect(pricing).toContain("'$7/mo'")
   })
 
-  test('Get Pro CTA links to Stripe checkout', () => {
-    expect(pricing).toContain('buy.stripe.com')
+  test('Get Pro CTA links to in-app dashboard upgrade', () => {
+    expect(pricing).toContain('www.replypals.in/dashboard')
     expect(pricing).toContain('Get Pro')
   })
 
-  test('Get Team CTA links to Stripe checkout', () => {
+  test('Get Team CTA links to in-app dashboard upgrade', () => {
     expect(pricing).toContain('Get Team')
-    expect(pricing).toContain('STRIPE_TEAM')
+    expect(pricing).toContain('www.replypals.in/dashboard')
   })
 
   test('Free plan CTA links to sign up', () => {
-    expect(pricing).toContain('replypals.in/signup')
+    expect(pricing).toContain('www.replypals.in/signup')
     expect(pricing).toContain('Sign Up Free')
   })
 })

@@ -841,6 +841,24 @@
 
     let chartInstance = null;
     let referralUrlCache = '';
+    /** Last successful ``GET /pricing`` payload — used so checkout country matches shown prices. */
+    let dashboardPricingSnapshot = null;
+
+    function checkoutCountryFromPricingDash(pricing) {
+      const c = pricing && pricing.country;
+      if (typeof c === 'string' && /^[a-zA-Z]{2}/.test(c)) {
+        return c.slice(0, 2).toUpperCase();
+      }
+      const cur = (pricing && pricing.currency_code) ? String(pricing.currency_code).toLowerCase() : '';
+      if (cur === 'inr') return 'IN';
+      if (cur === 'gbp') return 'GB';
+      if (cur === 'usd') return 'US';
+      if (cur === 'cad') return 'CA';
+      if (cur === 'aud') return 'AU';
+      if (cur === 'php') return 'PH';
+      if (cur === 'ngn') return 'NG';
+      return 'US';
+    }
 
     function dlog(...args) {
       if (!DASH_DEBUG) return;
@@ -864,6 +882,7 @@
 
     function applyDashboardPlanPricing(payload) {
       if (!payload || !payload.plans) return;
+      dashboardPricingSnapshot = payload;
       const grid = document.getElementById('planCardsGrid');
       if (!grid) return;
       const plans = payload.plans || {};
@@ -1250,10 +1269,20 @@
       btn.disabled = true;
       try {
         const { data: { session } } = await sb.auth.getSession();
+        const snap = dashboardPricingSnapshot || {};
+        const countryCode = checkoutCountryFromPricingDash(snap);
+        const currencyCode = snap.currency_code ? String(snap.currency_code).toLowerCase() : '';
+        const uid = session?.user?.id || null;
         const res = await fetch(API_BASE + '/create-checkout', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session?.access_token },
-          body: JSON.stringify({ plan: selectedPlan, email: session?.user?.email })
+          body: JSON.stringify({
+            plan: selectedPlan,
+            email: session?.user?.email,
+            user_id: uid,
+            country_code: countryCode,
+            currency_code: currencyCode || undefined,
+          })
         });
         const data = await res.json();
         if (data.url) {

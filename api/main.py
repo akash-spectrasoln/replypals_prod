@@ -126,6 +126,7 @@ from commerce_config import (
     localize_usd_price,
     plan_monthly_cap,
     plan_key_from_stripe_price_id,
+    resolve_checkout_country,
     resolve_country_row,
     resolve_stripe_price_id_for_bundle,
     resolve_stripe_price_id_for_plan,
@@ -1234,6 +1235,7 @@ class CreditsCheckoutRequest(BaseModel):
     country_code: str = Field(default="US", min_length=2, max_length=2)
     email: Optional[str] = None
     user_id: str = Field(..., min_length=10)
+    currency_code: Optional[str] = None
 
 
 class SubscriptionCheckoutRequest(BaseModel):
@@ -1241,6 +1243,7 @@ class SubscriptionCheckoutRequest(BaseModel):
     plan_key: str = Field(default="pro")
     country_code: str = Field(default="US", min_length=2, max_length=2)
     user_id: Optional[str] = None
+    currency_code: Optional[str] = None
 
 
 class CheckoutRequest(BaseModel):
@@ -1251,7 +1254,7 @@ class CheckoutRequest(BaseModel):
     tier: str = Field(default="tier1")
     user_id: Optional[str] = None
     country_code: str = Field(default="US", min_length=2, max_length=2)
-    currency_code: Optional[str] = Field(default=None, min_length=3, max_length=3)
+    currency_code: Optional[str] = None
 
 
 class TrackRequest(BaseModel):
@@ -2329,7 +2332,7 @@ async def checkout_subscription(body: SubscriptionCheckoutRequest):
     if prow.base_price_usd is None:
         raise HTTPException(status_code=400, detail="This plan is not available for subscription checkout")
 
-    cc = body.country_code.strip().upper()
+    cc = resolve_checkout_country(body.country_code, body.currency_code)
     crow, mult = resolve_country_row(snap, cc)
 
     try:
@@ -2392,7 +2395,7 @@ async def checkout_credits(body: CreditsCheckoutRequest):
     if not brow or not brow.is_active:
         raise HTTPException(status_code=400, detail="Unknown or inactive bundle_key")
 
-    cc = body.country_code.strip().upper()
+    cc = resolve_checkout_country(body.country_code, body.currency_code)
     crow, mult = resolve_country_row(snap, cc)
     eff_usd = localize_usd_price(float(brow.base_price_usd), mult)
     unit_cents = max(50, int(round(eff_usd * 100)))
@@ -2443,25 +2446,14 @@ async def checkout_credits(body: CreditsCheckoutRequest):
 @app.post("/create-checkout")
 async def create_checkout(body: CheckoutRequest):
     """Legacy: map tier/plan to ``/checkout/subscription`` using DB ``plan_config`` only (tier ignored)."""
-    cc = (body.country_code or "US").strip().upper()
-    if cc == "US":
-        cc_from_currency = {
-            "inr": "IN",
-            "gbp": "GB",
-            "eur": "DE",
-            "php": "PH",
-            "ngn": "NG",
-            "cad": "CA",
-            "aud": "AU",
-        }.get((body.currency_code or "").strip().lower())
-        if cc_from_currency:
-            cc = cc_from_currency
+    cc = resolve_checkout_country(body.country_code, body.currency_code)
     return await checkout_subscription(
         SubscriptionCheckoutRequest(
             email=body.email,
             plan_key=body.plan,
             country_code=cc,
             user_id=body.user_id,
+            currency_code=body.currency_code,
         )
     )
 

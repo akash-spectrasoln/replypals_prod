@@ -1,17 +1,15 @@
 import { useState } from 'react'
 
 const CHROME_URL = 'https://chrome.google.com/webstore/detail/replypals/jipgphhkpgkjjfpjbjjnbdikjkgmnnkp'
-const SIGNUP_URL = 'https://replypals.in/signup'
-const STRIPE_PRO_MONTHLY = 'https://buy.stripe.com/test_pro_monthly_replypals'
-const STRIPE_PRO_ANNUAL = 'https://buy.stripe.com/test_pro_annual_replypals'
-const STRIPE_TEAM_MONTHLY = 'https://buy.stripe.com/test_team_monthly_replypals'
-const STRIPE_TEAM_ANNUAL = 'https://buy.stripe.com/test_team_annual_replypals'
+const SIGNUP_URL = 'https://www.replypals.in/signup'
+/** Regional PPP checkout lives in the app (same as extension) — avoids static USD Payment Links. */
+const DASHBOARD_UPGRADE_URL = 'https://www.replypals.in/dashboard'
 
 export default function PricingTable() {
   const [annual, setAnnual] = useState(false)
 
-  const proHref = annual ? STRIPE_PRO_ANNUAL : STRIPE_PRO_MONTHLY
-  const teamHref = annual ? STRIPE_TEAM_ANNUAL : STRIPE_TEAM_MONTHLY
+  const proHref = DASHBOARD_UPGRADE_URL
+  const teamHref = DASHBOARD_UPGRADE_URL
 
   return (
     <section className="border-b border-slate-200 py-16 md:py-20">

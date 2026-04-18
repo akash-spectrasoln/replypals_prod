@@ -617,15 +617,19 @@ async function handleCreateCreditsCheckout(payload) {
     ? String(payload.country_code || payload.country).trim().slice(0, 2).toUpperCase()
     : 'US';
   try {
+    const body = {
+      bundle_key: bk,
+      country_code: cc || 'US',
+      email: email.trim(),
+      user_id: userId,
+    };
+    if (payload && payload.currency_code) {
+      body.currency_code = String(payload.currency_code).trim().toLowerCase();
+    }
     const res = await fetch(`${API_BASE}/checkout/credits`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        bundle_key: bk,
-        country_code: cc || 'US',
-        email: email.trim(),
-        user_id: userId,
-      }),
+      body: JSON.stringify(body),
       cache: 'no-store',
     });
     if (!res.ok) {

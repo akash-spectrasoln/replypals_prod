@@ -547,7 +547,7 @@ async function renderPricing() {
     </div>
 
     <div class="bg-slate-50 rounded-xl p-5 text-xs text-gray-600 space-y-2">
-      <p><strong>Checkout:</strong> <code class="bg-white px-1 rounded">POST /checkout/subscription</code> · <code class="bg-white px-1 rounded">POST /checkout/credits</code> — pass <code class="bg-white px-1 rounded">country_code</code> to match displayed prices.</p>
+      <p><strong>Checkout:</strong> <code class="bg-white px-1 rounded">POST /checkout/subscription</code> · <code class="bg-white px-1 rounded">POST /checkout/credits</code> — pass <code class="bg-white px-1 rounded">country_code</code> (and optional <code class="bg-white px-1 rounded">currency_code</code> from <code class="bg-white px-1 rounded">GET /pricing</code>) so Stripe matches shown prices.</p>
       <p><strong>Stripe:</strong> Webhook <code class="bg-white px-1 rounded">/stripe/webhook</code> for subscriptions and credit purchases.</p>
     </div>
   </div>`;
@@ -569,7 +569,7 @@ async function renderCommerce() {
         <li>Run Supabase migration <code class="bg-white/10 px-1 rounded text-xs">20260330_commerce_config_ppp.sql</code> (plans, bundles, PPP, system keys).</li>
         <li>In <strong>Plans</strong>, set each paid plan’s <strong>Stripe Price ID</strong> (from Stripe Dashboard) — checkout requires this.</li>
         <li>Configure <strong>Countries</strong> multipliers; saving creates/updates Stripe PPP coupons when Stripe is configured.</li>
-        <li>Point the site/extension to <code class="bg-white/10 px-1 rounded text-xs">POST /checkout/subscription</code> and <code class="bg-white/10 px-1 rounded text-xs">POST /checkout/credits</code> with <code class="bg-white/10 px-1 rounded text-xs">country_code</code>.</li>
+        <li>Point the site/extension to <code class="bg-white/10 px-1 rounded text-xs">POST /checkout/subscription</code> and <code class="bg-white/10 px-1 rounded text-xs">POST /checkout/credits</code> with <code class="bg-white/10 px-1 rounded text-xs">country_code</code> (+ optional <code class="bg-white/10 px-1 rounded text-xs">currency_code</code>).</li>
         <li>Stripe webhook URL: <code class="bg-white/10 px-1 rounded text-xs">/stripe/webhook</code> — must handle subscription + credit checkouts.</li>
         <li>After edits here, use <strong>Refresh config cache</strong> (or wait up to TTL, default 5 min).</li>
         <li>Open the <button type="button" class="text-white underline font-semibold" onclick="navigate('pricing')">Pricing</button> page for a live <code class="bg-white/10 px-1 rounded text-xs">GET /pricing</code> snapshot and country preview.</li>

@@ -1557,7 +1557,12 @@
       try {
         const resp = await safeSendMessage({
           type: 'createCreditsCheckout',
-          payload: { bundle_key: bk, country_code: countryCode, email },
+          payload: {
+            bundle_key: bk,
+            country_code: countryCode,
+            email,
+            currency_code: pricing && pricing.currency_code ? String(pricing.currency_code).toLowerCase() : '',
+          },
         });
         if (resp && resp.success && resp.url) {
           chrome.tabs.create({ url: resp.url });

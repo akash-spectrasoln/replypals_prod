@@ -5,6 +5,23 @@ try {
     window.__replypalInjected = true;
     var SITE_ORIGIN = 'https://www.replypals.in';
 
+    /** Align with popup.js — must match GET /pricing for Stripe country resolution. */
+    function checkoutCountryFromPricing(pricing) {
+      var c = pricing && pricing.country;
+      if (typeof c === 'string' && /^[a-zA-Z]{2}/.test(c)) {
+        return c.slice(0, 2).toUpperCase();
+      }
+      var cur = (pricing && pricing.currency_code) ? String(pricing.currency_code).toLowerCase() : '';
+      if (cur === 'inr') return 'IN';
+      if (cur === 'gbp') return 'GB';
+      if (cur === 'usd') return 'US';
+      if (cur === 'cad') return 'CA';
+      if (cur === 'aud') return 'AU';
+      if (cur === 'php') return 'PH';
+      if (cur === 'ngn') return 'NG';
+      return 'US';
+    }
+
     // ── Context safety guards ──
     function isChromeValid() {
       try { return !!(chrome && chrome.runtime && chrome.runtime.id); } catch (e) { return false; }
@@ -1521,6 +1538,7 @@ try {
 
         var selectedUpgPlan = 'pro';
         var selectedTier = 'tier1';
+        var lastUpgPricing = null;
 
         // Fetch pricing dynamically
         safeSendMessage({ type: 'fetchPricing' }, function (pricing) {
@@ -1531,9 +1549,11 @@ try {
 
           var plans;
           if (pricing && pricing.plans) {
+            lastUpgPricing = pricing;
             plans = pricing.plans;
             selectedTier = pricing.tier || 'tier1';
           } else {
+            lastUpgPricing = null;
             plans = {
               starter: { display: '$2', per: '/mo' },
               pro: { display: '$9', per: '/mo' },
@@ -1585,8 +1605,10 @@ try {
             var email = v.querySelector('#rp-upg-email').value.trim();
             if (!email || !email.includes('@')) { v.querySelector('#rp-upg-email').style.borderColor = '#EF4444'; setTimeout(function () { v.querySelector('#rp-upg-email').style.borderColor = ''; }, 1500); return; }
             checkoutBtn.textContent = 'Opening…';
-            var cc = (pricing && pricing.country) ? String(pricing.country).slice(0, 2).toUpperCase() : 'US';
-            safeSendMessage({ type: 'createCheckout', payload: { email: email, plan: selectedUpgPlan, tier: selectedTier, country_code: cc } }, function (res) {
+            var p = lastUpgPricing;
+            var cc = checkoutCountryFromPricing(p);
+            var cur = (p && p.currency_code) ? String(p.currency_code).toLowerCase() : '';
+            safeSendMessage({ type: 'createCheckout', payload: { email: email, plan: selectedUpgPlan, tier: selectedTier, country_code: cc, currency_code: cur } }, function (res) {
               var label = selectedUpgPlan.charAt(0).toUpperCase() + selectedUpgPlan.slice(1);
               checkoutBtn.textContent = '⚡ Get ' + label + ' Access';
               if (res && res.success && res.url) {
