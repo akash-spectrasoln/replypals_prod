@@ -1,6 +1,10 @@
 import { useAuthStore } from '../store/authStore'
 
-const RAW = import.meta.env.VITE_API_BASE || '/api'
+// Dev (Vite): use VITE_API_BASE=/api with proxy so requests hit the FastAPI app.
+// Production: empty base so calls go to same-origin /admin/* (not /api/admin/*).
+const RAW =
+  import.meta.env.VITE_API_BASE ??
+  (import.meta.env.DEV ? '/api' : '')
 const BASE = RAW.endsWith('/') ? RAW.slice(0, -1) : RAW
 
 function adminBasePath() {
@@ -10,7 +14,8 @@ function adminBasePath() {
 }
 
 function adminLoginPath() {
-  return `${adminBasePath()}/login`
+  // HashRouter: only the hash changes for in-app routes; avoids GET /admin/users vs API conflicts.
+  return `${adminBasePath()}/#/login`
 }
 
 export async function apiRequest(path, options = {}) {

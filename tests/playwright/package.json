@@ -7,7 +7,8 @@
     "test": "playwright test",
     "test:frontend": "playwright test frontend-smoke.spec.js",
     "test:extension-ui": "playwright test extension-ui.spec.js",
-    "test:core-e2e": "playwright test frontend-smoke.spec.js extension-ui.spec.js"
+    "test:core-e2e": "playwright test frontend-smoke.spec.js extension-ui.spec.js",
+    "test:full-stack": "playwright test full-stack-e2e.spec.js frontend-smoke.spec.js e2e.spec.js localhost-auth.spec.js extension-ui.spec.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.0"

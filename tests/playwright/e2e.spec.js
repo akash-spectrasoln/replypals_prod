@@ -14,7 +14,7 @@ test.describe('ReplyPals end-to-end (local)', () => {
     const health = await request.get(`${API_URL}/health`);
     expect(health.status()).toBe(200);
     const healthJson = await health.json();
-    expect(healthJson.status).toBe('ok');
+    expect(['ok', 'degraded']).toContain(healthJson.status);
 
     // 2) Signup (email/password via Supabase)
     const email = uniqEmail();

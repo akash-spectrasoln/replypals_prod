@@ -4,7 +4,7 @@ WORKDIR /app/admin-dashboard
 COPY admin-dashboard/package*.json ./
 RUN npm ci
 COPY admin-dashboard/ ./
-ENV VITE_API_BASE=/api
+# Production build: same-origin /admin/* API (see admin-dashboard/.env.production)
 RUN npm run build
 
 # ── Stage 2: Marketing site (Astro) ───────────────────────────

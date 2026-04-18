@@ -204,11 +204,22 @@ class TestKeyReq(BaseModel):
 # ═══════════════════════════════════════════
 # SERVE ADMIN PAGE
 # ═══════════════════════════════════════════
+def _admin_index_html_path() -> Optional[str]:
+    """Prefer Vite/React build (Docker: /var/www/admin), else legacy api/admin/index.html."""
+    react_path = "/var/www/admin/index.html"
+    if os.path.isfile(react_path):
+        return react_path
+    legacy = os.path.join(os.path.dirname(__file__), "admin", "index.html")
+    if os.path.isfile(legacy):
+        return legacy
+    return None
+
+
 @router.get("", response_class=HTMLResponse, include_in_schema=False)
 @router.get("/", response_class=HTMLResponse, include_in_schema=False)
 async def admin_page():
-    admin_path = os.path.join(os.path.dirname(__file__), "admin", "index.html")
-    if os.path.exists(admin_path):
+    admin_path = _admin_index_html_path()
+    if admin_path:
         return FileResponse(admin_path)
     raise HTTPException(404, "Admin panel not found")
 

@@ -38,7 +38,7 @@ describe('apiRequest', () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('', { status: 401 }))
     await expect(apiRequest('/admin/me')).rejects.toThrow('Session expired')
     expect(useAuthStore.getState().token).toBeNull()
-    expect(loc.href).toBe('/admin/login')
+    expect(loc.href).toBe('/admin/#/login')
     vi.unstubAllGlobals()
   })
 

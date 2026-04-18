@@ -1118,6 +1118,15 @@ _admin_dir = pathlib.Path(__file__).parent / "admin"
 if _admin_dir.exists():
     app.mount("/admin/static", StaticFiles(directory=str(_admin_dir)), name="admin-static")
 
+# React admin SPA assets (Docker: Vite build copied to /var/www/admin/assets)
+_admin_spa_assets = pathlib.Path("/var/www/admin/assets")
+if _admin_spa_assets.is_dir():
+    app.mount(
+        "/admin/assets",
+        StaticFiles(directory=str(_admin_spa_assets)),
+        name="admin-spa-assets",
+    )
+
 
 # ─── Request Logging Middleware ───
 # Request logging removed — llm_call_logs written inside call_ai_model() covers all AI calls.

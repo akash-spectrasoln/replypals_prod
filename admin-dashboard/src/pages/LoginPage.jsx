@@ -55,7 +55,8 @@ export function LoginPage() {
             </label>
             <input
               id="email"
-              type="email"
+              type="text"
+              inputMode="email"
               autoComplete="username"
               className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
               value={email}
