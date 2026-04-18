@@ -582,19 +582,19 @@ except Exception:
 SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "")
 
 
-def _validated_chrome_extension_id() -> str:
-    """32-char Chrome Web Store / unpacked id uses only a–p (see externally_connectable)."""
-    raw = (
-        os.getenv("REPLYPAL_CHROME_EXTENSION_ID")
-        or os.getenv("CHROME_EXTENSION_ID")
-        or ""
-    ).strip().lower()
-    if len(raw) == 32 and all("a" <= c <= "p" for c in raw):
-        return raw
-    return ""
+def _validated_chrome_extension_ids() -> List[str]:
+    """32-char Chrome ids (Web Store or unpacked) use only a–p. Comma/semicolon-separated for prod + dev builds."""
+    raw = os.getenv("REPLYPAL_CHROME_EXTENSION_ID") or os.getenv("CHROME_EXTENSION_ID") or ""
+    out: List[str] = []
+    for part in raw.replace(";", ",").split(","):
+        s = part.strip().lower()
+        if len(s) == 32 and all("a" <= c <= "p" for c in s) and s not in out:
+            out.append(s)
+    return out
 
 
-REPLYPAL_CHROME_EXTENSION_ID = _validated_chrome_extension_id()
+REPLYPAL_CHROME_EXTENSION_IDS = _validated_chrome_extension_ids()
+REPLYPAL_CHROME_EXTENSION_ID = REPLYPAL_CHROME_EXTENSION_IDS[0] if REPLYPAL_CHROME_EXTENSION_IDS else ""
 
 _raw_allowed_origins = os.getenv("ALLOWED_ORIGINS", "*")
 _origins = [o.strip() for o in _raw_allowed_origins.split(",") if o.strip()]
@@ -1972,8 +1972,9 @@ async def public_config():
         "free_monthly_rewrites": _free_monthly_cap_from_db(),
         **_public_plan_limits_payload(),
     }
-    if REPLYPAL_CHROME_EXTENSION_ID:
-        payload["chrome_extension_id"] = REPLYPAL_CHROME_EXTENSION_ID
+    if REPLYPAL_CHROME_EXTENSION_IDS:
+        payload["chrome_extension_ids"] = list(REPLYPAL_CHROME_EXTENSION_IDS)
+        payload["chrome_extension_id"] = REPLYPAL_CHROME_EXTENSION_IDS[0]
     return payload
 
 

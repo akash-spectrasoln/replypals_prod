@@ -942,9 +942,26 @@
           url = cfg.supabase_url || url;
           anon = cfg.supabase_anon_key || '';
           applyDashboardPlanLabels(cfg);
-          if (cfg.chrome_extension_id && /^[a-p]{32}$/.test(String(cfg.chrome_extension_id))) {
-            window.REPLYPAL_EXTENSION_ID = String(cfg.chrome_extension_id).trim();
+          const ids = [];
+          if (Array.isArray(cfg.chrome_extension_ids)) {
+            for (const x of cfg.chrome_extension_ids) {
+              const s = String(x || '').trim().toLowerCase();
+              if (/^[a-p]{32}$/.test(s) && !ids.includes(s)) ids.push(s);
+            }
+          } else if (cfg.chrome_extension_id && /^[a-p]{32}$/.test(String(cfg.chrome_extension_id))) {
+            ids.push(String(cfg.chrome_extension_id).trim().toLowerCase());
           }
+          try {
+            const devId = (localStorage.getItem('replypals_dev_extension_id') || '').trim().toLowerCase();
+            if (devId && /^[a-p]{32}$/.test(devId)) {
+              window.REPLYPAL_EXTENSION_IDS = [devId, ...ids.filter((i) => i !== devId)];
+            } else {
+              window.REPLYPAL_EXTENSION_IDS = ids;
+            }
+          } catch (_) {
+            window.REPLYPAL_EXTENSION_IDS = ids;
+          }
+          window.REPLYPAL_EXTENSION_ID = (window.REPLYPAL_EXTENSION_IDS && window.REPLYPAL_EXTENSION_IDS[0]) || '';
         }
       } catch (_) {}
       try {
@@ -1121,32 +1138,44 @@
 
     // ── Sync to Extension ──────────────────────────────────
     function syncSessionToExtension(token, email) {
-      const EXTENSION_ID = (window.REPLYPAL_EXTENSION_ID || '').trim();
-      const isLikelyValidId = /^[a-p]{32}$/.test(EXTENSION_ID);
-      if (!isLikelyValidId) {
+      const rawList = window.REPLYPAL_EXTENSION_IDS && window.REPLYPAL_EXTENSION_IDS.length
+        ? window.REPLYPAL_EXTENSION_IDS
+        : ((window.REPLYPAL_EXTENSION_ID || '').trim() ? [String(window.REPLYPAL_EXTENSION_ID).trim().toLowerCase()] : []);
+      const idList = rawList.filter((id) => /^[a-p]{32}$/.test(String(id || '').trim().toLowerCase()))
+        .map((id) => String(id).trim().toLowerCase());
+      if (!idList.length) {
         console.warn(
-          '[ReplyPals] Dashboard cannot sync sign-in to the extension: set REPLYPAL_CHROME_EXTENSION_ID in API env to your Chrome extension id (32 letters a–p).'
+          '[ReplyPals] Cannot sync sign-in to the extension: add REPLYPAL_CHROME_EXTENSION_ID on the API (comma-separated for Web Store + unpacked), or set localStorage replypals_dev_extension_id to your unpacked id (chrome://extensions).'
         );
         return;
       }
 
-      if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
+      if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.sendMessage) return;
+
+      let attempt = 0;
+      function tryNextExtensionId() {
+        if (attempt >= idList.length) {
+          console.warn('[ReplyPals] Session sync failed for all extension ids — install this build or fix replypals_dev_extension_id / API env.');
+          return;
+        }
+        const EXTENSION_ID = idList[attempt++];
         try {
           chrome.runtime.sendMessage(
             EXTENSION_ID,
             { type: 'setSupabaseSession', token: token, email: email || '' },
-            (response) => {
+            () => {
               if (chrome.runtime.lastError) {
-                console.log('Extension not installed or not listening');
-              } else {
-                console.log('Session synced to extension:', response);
+                tryNextExtensionId();
+                return;
               }
+              console.log('Session synced to extension:', EXTENSION_ID);
             }
           );
         } catch (_) {
-          // Ignore sync failures; do not break dashboard UX.
+          tryNextExtensionId();
         }
       }
+      tryNextExtensionId();
     }
 
     // ── UI Helpers ─────────────────────────────────────────
