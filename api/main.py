@@ -2974,7 +2974,7 @@ async def save_email(body: SaveEmailRequest):
     try:
         if _supabase_in_backoff():
             # DB fallback path for network DNS issues with Supabase REST.
-            ref_code = uuid.uuid4().hex[:8]
+            ref_code = uuid.uuid4().hex[:8].upper()
             if _pg_fallback_save_email(body.email, body.goal, body.sites, ref_code):
                 return {"saved": True, "message": "Saved via DB fallback", "persisted": True, "mode": "db_fallback"}
             return {"saved": True, "message": "Saved in degraded mode", "persisted": False, "mode": "degraded"}
@@ -2987,8 +2987,8 @@ async def save_email(body: SaveEmailRequest):
         if existing.data and len(existing.data) > 0:
             return {"saved": True, "message": "Email already registered", "persisted": True, "mode": "supabase"}
 
-        # Generate ref code
-        ref_code = uuid.uuid4().hex[:8]
+        # Generate ref code (uppercase for consistent referral_use lookups)
+        ref_code = uuid.uuid4().hex[:8].upper()
 
         await _sb_execute(supabase.table("free_users").insert({
             "email": body.email,
@@ -3003,10 +3003,37 @@ async def save_email(body: SaveEmailRequest):
         return {"saved": True, "persisted": True, "mode": "supabase"}
     except Exception as e:
         _mark_supabase_down(e)
-        ref_code = uuid.uuid4().hex[:8]
+        ref_code = uuid.uuid4().hex[:8].upper()
         if _pg_fallback_save_email(body.email, body.goal, body.sites, ref_code):
             return {"saved": True, "message": "Saved via DB fallback", "persisted": True, "mode": "db_fallback"}
         return {"saved": True, "message": "Saved in degraded mode", "persisted": False, "mode": "degraded"}
+
+
+def _ref_code_lookup_variants(ref_raw: str) -> list[str]:
+    """8-char hex codes only; return distinct variants for case-safe DB lookup."""
+    import re
+
+    s = (ref_raw or "").strip()
+    if not re.fullmatch(r"[a-fA-F0-9]{8}", s):
+        return []
+    return list(dict.fromkeys([s, s.lower(), s.upper()]))
+
+
+async def _sb_find_referrer_row_by_ref(ref_raw: str):
+    """Return Supabase response row for first free_users match on ref_code (case-insensitive)."""
+    if not supabase:
+        return None
+    variants = _ref_code_lookup_variants(ref_raw)
+    if not variants:
+        return None
+    orf = ",".join(f"ref_code.eq.{v}" for v in variants)
+    try:
+        return await _sb_execute(
+            supabase.table("free_users").select("id,email,bonus_rewrites,ref_code").or_(orf).limit(1),
+            timeout_sec=3.0,
+        )
+    except Exception:
+        return None
 
 
 # ═══════════════════════════════════════════
@@ -3023,12 +3050,9 @@ async def register_referral(body: RegisterReferralRequest):
         if _supabase_in_backoff():
             # Keep behavior deterministic for invalid codes while DB is degraded.
             raise HTTPException(status_code=404, detail="Referral code not found")
-        # Find referrer
-        referrer = await _sb_execute(
-            supabase.table("free_users").select("*").eq("ref_code", body.ref_code),
-            timeout_sec=3.0
-        )
-        if not referrer.data or len(referrer.data) == 0:
+        # Find referrer (case-insensitive ref_code; codes may be stored upper or lower)
+        referrer = await _sb_find_referrer_row_by_ref(body.ref_code)
+        if not referrer or not referrer.data:
             raise HTTPException(status_code=404, detail="Referral code not found")
 
         referrer_row = referrer.data[0]
@@ -3881,29 +3905,42 @@ async def account_referral(authorization: str = Header(None)):
             _dash_dbg("account_referral degraded_backoff", ref_code=ref_code)
             return {"ref_code": ref_code, "referral_url": referral_url, "bonus_rewrites": 0, "degraded": True}
 
-        # Find existing row
+        # Find existing row (must persist ref_code — UPDATE alone misses users with no free_users row yet)
+        email_key = (email or "").lower().strip()
         res = await _sb_execute(
-            supabase.table("free_users").select("ref_code,bonus_rewrites").or_(
-                f"user_id.eq.{user_id},email.eq.{email}"
+            supabase.table("free_users").select("id,ref_code,bonus_rewrites").or_(
+                f"user_id.eq.{user_id},email.eq.{email_key}"
             ).limit(1),
             timeout_sec=3.0,
         )
 
         if res.data and res.data[0].get("ref_code"):
-            ref_code = res.data[0]["ref_code"]
-            bonus    = res.data[0].get("bonus_rewrites", 0)
+            ref_code = str(res.data[0]["ref_code"]).strip()
+            bonus = int(res.data[0].get("bonus_rewrites") or 0)
         else:
-            # Generate a unique short code from email
             import hashlib
-            ref_code = hashlib.md5(email.lower().encode()).hexdigest()[:8].upper()
-            # Upsert it
-            await _sb_execute(
-                supabase.table("free_users").update({"ref_code": ref_code}).or_(
-                    f"user_id.eq.{user_id},email.eq.{email}"
-                ),
-                timeout_sec=3.0,
-            )
-            bonus = 0
+
+            ref_code = hashlib.md5(email_key.encode()).hexdigest()[:8].upper()
+            bonus = int(res.data[0].get("bonus_rewrites") or 0) if res.data else 0
+            if res.data:
+                await _sb_execute(
+                    supabase.table("free_users").update({"ref_code": ref_code}).eq("id", res.data[0]["id"]),
+                    timeout_sec=3.0,
+                )
+            else:
+                await _sb_execute(
+                    supabase.table("free_users").insert(
+                        {
+                            "email": email_key,
+                            "user_id": user_id,
+                            "ref_code": ref_code,
+                            "goal": "",
+                            "sites": [],
+                            "bonus_rewrites": 0,
+                        }
+                    ),
+                    timeout_sec=3.0,
+                )
 
         referral_url = f"{os.getenv('APP_BASE_URL', 'https://replypals.in')}/signup?ref={ref_code}"
         _dash_dbg("account_referral ok", ref_code=ref_code, bonus=bonus)
@@ -3924,28 +3961,39 @@ async def account_referral(authorization: str = Header(None)):
 @app.post("/referral/use")
 async def referral_use(request: Request):
     """Called when a new user signs up via a referral link."""
-    body     = await request.json()
-    ref_code = (body.get("ref_code") or "").strip().upper()
+    body = await request.json()
+    ref_raw = (body.get("ref_code") or "").strip()
     new_email = (body.get("email") or "").strip().lower()
 
-    if not ref_code or not new_email:
+    if not ref_raw or not new_email:
         return {"ok": False, "error": "Missing ref_code or email"}
 
+    if not supabase:
+        return {"ok": False, "error": "Database not configured"}
+
     try:
-        # Find referrer
-        referrer = supabase.table("free_users").select("id,email,bonus_rewrites").eq("ref_code", ref_code).limit(1).execute()
-        if not referrer.data:
+        referrer = await _sb_find_referrer_row_by_ref(ref_raw)
+        if not referrer or not referrer.data:
             return {"ok": False, "error": "Invalid referral code"}
 
-        referrer_row   = referrer.data[0]
+        referrer_row = referrer.data[0]
         referrer_email = referrer_row["email"]
+        canonical_ref = str(referrer_row.get("ref_code") or ref_raw).strip().upper()
 
         # Credit referrer +5
         new_bonus = (referrer_row.get("bonus_rewrites") or 0) + 5
-        supabase.table("free_users").update({"bonus_rewrites": new_bonus}).eq("id", referrer_row["id"]).execute()
+        await _sb_execute(
+            supabase.table("free_users").update({"bonus_rewrites": new_bonus}).eq("id", referrer_row["id"]),
+            timeout_sec=3.0,
+        )
 
-        # Credit new user +5 bonus if their row exists
-        supabase.table("free_users").update({"bonus_rewrites": 5, "referred_by": ref_code}).eq("email", new_email).execute()
+        # Credit new user +5 bonus if their row exists (same canonical ref for referred_by)
+        await _sb_execute(
+            supabase.table("free_users").update({"bonus_rewrites": 5, "referred_by": canonical_ref}).eq(
+                "email", new_email
+            ),
+            timeout_sec=3.0,
+        )
 
         return {"ok": True, "referrer": referrer_email}
     except Exception as e:
