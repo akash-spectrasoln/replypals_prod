@@ -967,6 +967,7 @@ async function handleSelectionAction(payload) {
   // Default tone per mode; if tone param is explicitly passed (Change Tone), use it
   const toneMap = {
     rewrite:   'Confident',
+    write:     'Confident',
     reply:     'Friendly',
     summary:   'Formal',
     meaning:   'Friendly',

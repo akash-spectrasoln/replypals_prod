@@ -664,12 +664,27 @@ try {
         target.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, key: ' ' }));
       }
     }
+    function isTextLikeInput(el) {
+      if (!el || el.tagName !== 'INPUT') return false;
+      var t = (el.getAttribute('type') || el.type || 'text').toLowerCase();
+      if (t === 'password' || t === 'checkbox' || t === 'radio' || t === 'file' ||
+          t === 'hidden' || t === 'button' || t === 'submit' || t === 'reset' ||
+          t === 'image' || t === 'color' || t === 'range' ||
+          t === 'date' || t === 'time' || t === 'datetime-local' || t === 'month' || t === 'week') {
+        return false;
+      }
+      return true;
+    }
+
     function getEditableRoot(el) {
       if (!el || !el.nodeType) return null;
-      var t = (el.type || '').toLowerCase();
-      if (t === 'password') return null;
-      if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') return el;
+      if (el.tagName === 'INPUT' && !isTextLikeInput(el)) return null;
+      if (el.tagName === 'TEXTAREA') return el;
+      if (el.tagName === 'INPUT') return el;
       if (el.isContentEditable || el.getAttribute('role') === 'textbox') {
+        if (el.closest && el.closest('[role="checkbox"],[role="radio"],input[type="checkbox"],input[type="radio"]')) {
+          return null;
+        }
         var parent = el;
         while (parent.parentElement && (parent.parentElement.isContentEditable || parent.parentElement.getAttribute('role') === 'textbox')) {
           parent = parent.parentElement;
@@ -677,6 +692,25 @@ try {
         return parent;
       }
       return null;
+    }
+
+    function rpIsSelectionInsideExcludedInput(sel) {
+      if (!sel || sel.rangeCount < 1) return false;
+      try {
+        var node = sel.anchorNode;
+        if (node && node.nodeType === 3) node = node.parentElement;
+        while (node && node.nodeType === 1) {
+          if (node.tagName === 'INPUT') {
+            var t = (node.type || '').toLowerCase();
+            if (t === 'checkbox' || t === 'radio' || t === 'password' || t === 'hidden') return true;
+          }
+          if (node.getAttribute && (node.getAttribute('role') === 'checkbox' || node.getAttribute('role') === 'radio')) {
+            return true;
+          }
+          node = node.parentElement;
+        }
+      } catch (_) {}
+      return false;
     }
 
     function isEditable(el) {
@@ -1735,6 +1769,8 @@ try {
           transform: scale(1.18) !important;
           box-shadow: 0 4px 14px rgba(255,107,53,0.55), 0 0 0 3px rgba(255,107,53,0.22) !important;
         }
+        #rp-input-badge { cursor: grab !important; }
+        #rp-input-badge:active { cursor: grabbing !important; }
 
         /* ═══ A2. INPUT PILL (expands on badge hover) ═══ */
         #rp-input-pill {
@@ -1905,6 +1941,64 @@ try {
     // ── Grammarly-style input badge: always-on dot near focused field ──
     var _rpMiniActive = null;
     var _rpMiniHideTimer = null;
+    var _rpBadgeNudge = { x: 0, y: 0 };
+    var _rpBadgeDrag = { active: false, moved: false, sx: 0, sy: 0, nx: 0, ny: 0 };
+
+    function rpLoadBadgeNudge() {
+      try {
+        var j = localStorage.getItem('replypal_badge_nudge');
+        var o = j ? JSON.parse(j) : null;
+        _rpBadgeNudge.x = Math.round(Number(o && o.x) || 0);
+        _rpBadgeNudge.y = Math.round(Number(o && o.y) || 0);
+      } catch (_) {
+        _rpBadgeNudge.x = _rpBadgeNudge.y = 0;
+      }
+    }
+
+    function rpSaveBadgeNudge() {
+      try {
+        localStorage.setItem('replypal_badge_nudge', JSON.stringify(_rpBadgeNudge));
+      } catch (_) { /* ignore */ }
+    }
+
+    function rpWireBadgeDragOnce() {
+      var badge = document.getElementById('rp-input-badge');
+      if (!badge || badge._rpDragWired) return;
+      badge._rpDragWired = true;
+      badge.title = 'ReplyPals — drag to move · double-click to reset position';
+      badge.addEventListener('mousedown', function (e) {
+        if (e.button !== 0) return;
+        _rpBadgeDrag.active = true;
+        _rpBadgeDrag.moved = false;
+        _rpBadgeDrag.sx = e.clientX;
+        _rpBadgeDrag.sy = e.clientY;
+        rpLoadBadgeNudge();
+        _rpBadgeDrag.nx = _rpBadgeNudge.x;
+        _rpBadgeDrag.ny = _rpBadgeNudge.y;
+        e.preventDefault();
+      });
+      document.addEventListener('mousemove', function (e) {
+        if (!_rpBadgeDrag.active) return;
+        var dx = e.clientX - _rpBadgeDrag.sx;
+        var dy = e.clientY - _rpBadgeDrag.sy;
+        if (Math.abs(dx) + Math.abs(dy) > 5) _rpBadgeDrag.moved = true;
+        _rpBadgeNudge.x = _rpBadgeDrag.nx + dx;
+        _rpBadgeNudge.y = _rpBadgeDrag.ny + dy;
+        if (_rpMiniActive) rpPositionBadge(_rpMiniActive);
+      });
+      document.addEventListener('mouseup', function () {
+        if (!_rpBadgeDrag.active) return;
+        _rpBadgeDrag.active = false;
+        if (_rpBadgeDrag.moved) rpSaveBadgeNudge();
+      });
+      badge.addEventListener('dblclick', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        _rpBadgeNudge.x = _rpBadgeNudge.y = 0;
+        rpSaveBadgeNudge();
+        if (_rpMiniActive) rpPositionBadge(_rpMiniActive);
+      });
+    }
 
     function rpEnsureBadgeAndPill() {
       // Badge dot
@@ -1913,6 +2007,7 @@ try {
         badge.id = 'rp-input-badge';
         badge.innerHTML = RP_SVG.logo;
         document.documentElement.appendChild(badge);
+        rpWireBadgeDragOnce();
       }
       // Input pill (expanded view)
       if (document.getElementById('rp-input-pill')) return;
@@ -1962,6 +2057,8 @@ try {
       var badge = document.getElementById('rp-input-badge');
       var pill  = document.getElementById('rp-input-pill');
       if (!badge || !el) return;
+      rpLoadBadgeNudge();
+      rpWireBadgeDragOnce();
       var anchor = rpResolveAnchorElement(el) || el;
       var r = anchor.getBoundingClientRect();
       if (r.width === 0 && r.height === 0) return;
@@ -1969,14 +2066,18 @@ try {
       // Badge sits at bottom-right corner of the field (like Grammarly)
       var bLeft = Math.min(r.right - 12, window.innerWidth - 28);
       var bTop  = Math.min(r.bottom - 12, window.innerHeight - 28);
-      badge.style.left = Math.max(4, bLeft) + 'px';
-      badge.style.top  = Math.max(4, bTop)  + 'px';
+      bLeft = Math.max(4, Math.min(window.innerWidth - 26, bLeft + _rpBadgeNudge.x));
+      bTop  = Math.max(4, Math.min(window.innerHeight - 26, bTop + _rpBadgeNudge.y));
+      badge.style.left = bLeft + 'px';
+      badge.style.top  = bTop + 'px';
 
       // Pill appears just above the badge
       if (pill) {
         var pillW = 190;
-        var pLeft = Math.max(4, Math.min(bLeft - pillW + 22, window.innerWidth - pillW - 4));
-        var pTop  = Math.max(4, bTop - 46);
+        var baseLeft = Math.min(r.right - 12, window.innerWidth - 28);
+        var baseTop  = Math.min(r.bottom - 12, window.innerHeight - 28);
+        var pLeft = Math.max(4, Math.min(baseLeft - pillW + 22, window.innerWidth - pillW - 4) + _rpBadgeNudge.x);
+        var pTop  = Math.max(4, baseTop - 46 + _rpBadgeNudge.y);
         pill.style.left = pLeft + 'px';
         pill.style.top  = pTop  + 'px';
       }
@@ -2195,6 +2296,80 @@ try {
     // B. SELECTION TOOLBAR — Grammarly-style compact icon row
     // ══════════════════════════════════════════════════════════════════════
 
+    var _rpSelTbNudge = { x: 0, y: 0 };
+    function rpLoadSelTbNudge() {
+      try {
+        var j = localStorage.getItem('replypal_sel_toolbar_nudge');
+        var o = j ? JSON.parse(j) : null;
+        _rpSelTbNudge.x = Math.round(Number(o && o.x) || 0);
+        _rpSelTbNudge.y = Math.round(Number(o && o.y) || 0);
+      } catch (_) {
+        _rpSelTbNudge.x = _rpSelTbNudge.y = 0;
+      }
+    }
+    function rpSaveSelTbNudge() {
+      try {
+        localStorage.setItem('replypal_sel_toolbar_nudge', JSON.stringify(_rpSelTbNudge));
+      } catch (_) { /* ignore */ }
+    }
+
+    var _rpSelTbDrag = null;
+    function rpInitSelToolbarDragOnce() {
+      if (rpInitSelToolbarDragOnce._done) return;
+      rpInitSelToolbarDragOnce._done = true;
+      document.addEventListener('mousedown', function (e) {
+        if (e.button !== 0) return;
+        var t = e.target;
+        if (!t || t.id !== 'rp-sel-toolbar-logo') return;
+        var tb = document.getElementById(RP_SEL_ID);
+        if (!tb) return;
+        rpLoadSelTbNudge();
+        _rpSelTbDrag = {
+          mx: e.clientX,
+          my: e.clientY,
+          n0x: _rpSelTbNudge.x,
+          n0y: _rpSelTbNudge.y,
+          tb: tb,
+        };
+        e.preventDefault();
+        e.stopPropagation();
+      }, true);
+      document.addEventListener('mousemove', function (e) {
+        if (!_rpSelTbDrag || !_rpSelTbDrag.tb) return;
+        _rpSelTbNudge.x = _rpSelTbDrag.n0x + (e.clientX - _rpSelTbDrag.mx);
+        _rpSelTbNudge.y = _rpSelTbDrag.n0y + (e.clientY - _rpSelTbDrag.my);
+        var tb = _rpSelTbDrag.tb;
+        var bl = typeof tb._rpBaseLeft === 'number' ? tb._rpBaseLeft : 0;
+        var bt = typeof tb._rpBaseTop === 'number' ? tb._rpBaseTop : 0;
+        var tw = tb.offsetWidth || 300;
+        var th = tb.offsetHeight || 44;
+        var nl = bl + _rpSelTbNudge.x;
+        var nt = bt + _rpSelTbNudge.y;
+        nl = Math.max(4, Math.min(nl, window.innerWidth - tw - 4));
+        nt = Math.max(4, Math.min(nt, window.innerHeight - th - 4));
+        tb.style.left = nl + 'px';
+        tb.style.top = nt + 'px';
+      });
+      document.addEventListener('mouseup', function () {
+        if (_rpSelTbDrag) {
+          rpSaveSelTbNudge();
+          _rpSelTbDrag = null;
+        }
+      });
+      document.addEventListener('dblclick', function (e) {
+        if (!e.target || e.target.id !== 'rp-sel-toolbar-logo') return;
+        e.preventDefault();
+        e.stopPropagation();
+        _rpSelTbNudge.x = _rpSelTbNudge.y = 0;
+        rpSaveSelTbNudge();
+        var tb = document.getElementById(RP_SEL_ID);
+        if (tb && typeof tb._rpBaseLeft === 'number') {
+          tb.style.left = (tb._rpBaseLeft + _rpSelTbNudge.x) + 'px';
+          tb.style.top = (tb._rpBaseTop + _rpSelTbNudge.y) + 'px';
+        }
+      }, true);
+    }
+
     var SEL_BTNS = [
       {
         // index 0 — Rewrite: rewrites/improves the selected text
@@ -2280,8 +2455,12 @@ try {
         'display:flex;align-items:center;justify-content:center;' +
         'font-size:10px;line-height:1;color:#fff;font-weight:700;' +
         'margin-right:4px;flex-shrink:0;box-sizing:border-box;');
+      logo.id = 'rp-sel-toolbar-logo';
       logo.textContent = 'R';
+      logo.style.cursor = 'grab';
+      logo.title = 'ReplyPals — drag to move toolbar · double-click to reset';
       tb.appendChild(logo);
+      rpInitSelToolbarDragOnce();
 
       // Divider after logo
       var d0 = document.createElement('div');
@@ -2432,19 +2611,22 @@ try {
     }
 
     function rpShowSelToolbar(rect) {
+      rpInitSelToolbarDragOnce();
       var tb = _rpSelToolbar || rpCreateSelToolbar();
-      var toolbarW = 286;
-      var toolbarH = 42;
+      var toolbarW = 300;
+      var toolbarH = 44;
 
       var left = rect.left + (rect.width / 2) - (toolbarW / 2);
       var top  = rect.top - toolbarH - 10;
       if (top < 8) top = rect.bottom + 10;
 
-      left = Math.max(8, Math.min(left, window.innerWidth - toolbarW - 8));
-      top  = Math.max(8, top);
-
-      tb.style.left    = left + 'px';
-      tb.style.top     = top  + 'px';
+      var baseLeft = Math.max(8, Math.min(left, window.innerWidth - toolbarW - 8));
+      var baseTop = Math.max(8, top);
+      tb._rpBaseLeft = baseLeft;
+      tb._rpBaseTop = baseTop;
+      rpLoadSelTbNudge();
+      tb.style.left = (baseLeft + _rpSelTbNudge.x) + 'px';
+      tb.style.top = (baseTop + _rpSelTbNudge.y) + 'px';
       tb.style.display = 'flex';
     }
 
@@ -2588,10 +2770,12 @@ try {
         var sel  = window.getSelection();
         var text = sel ? sel.toString().trim() : '';
 
-        if (text && text.length > 15 && sel.rangeCount > 0) {
+        if (text && text.length >= 5 && sel.rangeCount > 0 && !rpIsSelectionInsideExcludedInput(sel)) {
           try {
             var rect = sel.getRangeAt(0).getBoundingClientRect();
-            rpShowSelToolbar(rect);
+            if (rect.width >= 0 && rect.height >= 0) {
+              rpShowSelToolbar(rect);
+            }
           } catch(ex) {}
         } else {
           rpHideSelToolbar();
