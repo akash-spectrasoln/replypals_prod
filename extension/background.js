@@ -1,4 +1,5 @@
 // ─── ReplyPals Background Service Worker ───
+// Paths are /api/... — FastAPI strips the /api prefix when running without nginx (Railway).
 const API_BASE = 'https://replypals.in/api';
 if (!API_BASE || !API_BASE.startsWith('https://')) {
   console.error('[ReplyPals] API_BASE is misconfigured:', API_BASE);
@@ -738,6 +739,10 @@ async function handleSaveEmail(payload) {
 }
 
 async function handleRegisterReferral(payload) {
+  const online = await checkOnline();
+  if (!online) {
+    return { success: false, error: 'offline', message: 'ReplyPals is offline. Check your connection.' };
+  }
   try {
     const res = await fetch(`${API_BASE}/register-referral`, {
       method: 'POST',
@@ -746,7 +751,8 @@ async function handleRegisterReferral(payload) {
     });
     if (!res.ok) {
       const errorData = await res.json().catch(() => ({}));
-      throw new Error(errorData.detail || `Server error: ${res.status}`);
+      const msg = formatFastApiDetail(errorData) || errorData.detail || `Server error: ${res.status}`;
+      throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
     }
     const data = await res.json();
     return { success: true, ...data };

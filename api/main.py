@@ -827,6 +827,21 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 
+
+@app.middleware("http")
+async def strip_api_path_prefix(request: Request, call_next):
+    """
+    Chrome extension uses https://replypals.in/api/... Nginx strips /api when proxying to uvicorn.
+    Direct uvicorn (e.g. Railway) still sees /api/health — rewrite to /health so the same client works.
+    """
+    path = request.scope.get("path") or ""
+    if path == "/api":
+        request.scope["path"] = "/"
+    elif path.startswith("/api/"):
+        request.scope["path"] = path[4:] if path[4:].startswith("/") else "/" + path[4:]
+    return await call_next(request)
+
+
 # ─── Body Caching Middleware (fixes double-read in check_rate_limit) ───
 # Body caching is handled by storing bytes in request.state.
 # check_rate_limit reads request.state._body_cache instead of re-reading the stream.
