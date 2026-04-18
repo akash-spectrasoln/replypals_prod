@@ -837,8 +837,17 @@ async def strip_api_path_prefix(request: Request, call_next):
     path = request.scope.get("path") or ""
     if path == "/api":
         request.scope["path"] = "/"
-    elif path.startswith("/api/"):
-        request.scope["path"] = path[4:] if path[4:].startswith("/") else "/" + path[4:]
+        rp = request.scope.get("raw_path")
+        if isinstance(rp, bytes) and rp.startswith(b"/api"):
+            request.scope["raw_path"] = b"/" if rp in (b"/api", b"/api/") else rp[4:]
+        return await call_next(request)
+    if path.startswith("/api/"):
+        new_path = path[4:] if path[4:].startswith("/") else "/" + path[4:]
+        request.scope["path"] = new_path
+        rp = request.scope.get("raw_path")
+        if isinstance(rp, bytes) and rp.startswith(b"/api/"):
+            request.scope["raw_path"] = new_path.encode("utf-8")
+        return await call_next(request)
     return await call_next(request)
 
 

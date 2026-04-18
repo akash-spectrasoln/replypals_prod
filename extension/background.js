@@ -1,6 +1,16 @@
 // ─── ReplyPals Background Service Worker ───
 // Paths are /api/... — FastAPI strips the /api prefix when running without nginx (Railway).
 const API_BASE = 'https://replypals.in/api';
+/** Origin without trailing /api (for health fallbacks when /api/* is not routed). */
+const API_ORIGIN = (() => {
+  const b = String(API_BASE || '').replace(/\/$/, '');
+  if (b.endsWith('/api')) return b.slice(0, -4);
+  try {
+    return new URL(b).origin;
+  } catch {
+    return 'https://replypals.in';
+  }
+})();
 if (!API_BASE || !API_BASE.startsWith('https://')) {
   console.error('[ReplyPals] API_BASE is misconfigured:', API_BASE);
 }
@@ -99,15 +109,26 @@ chrome.action.onClicked.addListener(async (tab) => {
 
 // ─── Online Check ───
 async function checkOnline() {
-  try {
-    const r = await fetch(API_BASE + '/health', {
-      method: 'GET',
-      signal: AbortSignal.timeout(3000)
-    });
-    return r.ok;
-  } catch {
-    return false;
+  const timeoutMs = 12000;
+  const urls = [
+    `${API_BASE}/health`,
+    `${API_ORIGIN}/health`,
+    'https://www.replypals.in/api/health',
+    'https://www.replypals.in/health',
+  ];
+  for (const url of urls) {
+    try {
+      const r = await fetch(url, {
+        method: 'GET',
+        cache: 'no-store',
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (r.ok) return true;
+    } catch (_) {
+      /* try next URL */
+    }
   }
+  return false;
 }
 
 let _cachedAnonId = null;
