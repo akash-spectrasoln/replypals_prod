@@ -1855,6 +1855,11 @@
         });
       } catch (_) { }
     }
+    if (area === 'local' && (changes.replypalSupabaseToken || changes.replypalEmail)) {
+      void refreshFreeUsageFromServer().then(() => {
+        try { updateUsageDisplay(); } catch (_) { /* ignore */ }
+      });
+    }
   });
 
   // ═══════════════════════════════════════════

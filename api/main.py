@@ -4104,13 +4104,24 @@ async def track_rewrite_anonymous(request: Request):
 
 
 @app.post("/free-usage")
-async def free_usage_status(body: FreeUsageRequest):
+async def free_usage_status(
+    body: FreeUsageRequest,
+    authorization: Optional[str] = Header(None),
+):
     """
     Return usage without incrementing counters.
     - Real email (signed-in / saved email): free tier, calendar month, cap from plan_config (10/mo default).
     - anon_id only (or synthetic @replypal.internal): lifetime anon cap (3), plan ``anon``.
+    - If ``email`` is omitted but ``Authorization: Bearer`` is a valid Supabase session, use the JWT email
+      so the extension still upgrades from anon → free after signup without relying on localStorage email.
     """
     raw_email = (body.email or "").strip().lower()
+    if not raw_email:
+        u = get_user_from_token(authorization or "")
+        if u:
+            em = (u.get("email") or "").strip().lower()
+            if em and not em.endswith("@replypal.internal"):
+                raw_email = em
     anon_id = (body.anon_id or "").strip()
 
     if raw_email and not raw_email.endswith("@replypal.internal"):

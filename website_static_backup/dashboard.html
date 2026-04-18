@@ -955,9 +955,9 @@
       authListenerBound = true;
       sb.auth.onAuthStateChange((event, session) => {
         if (event === 'SIGNED_IN' && session) {
-          syncSessionToExtension(session.access_token);
+          syncSessionToExtension(session.access_token, session.user?.email || '');
         } else if (event === 'SIGNED_OUT') {
-          syncSessionToExtension(null);
+          syncSessionToExtension(null, null);
           window.location.href = '/login';
         }
       });
@@ -1030,7 +1030,7 @@
       dlog('token ready', { hasToken: !!tokenRef.value });
 
       // 2. Sync token to extension immediately
-      syncSessionToExtension(tokenRef.value);
+      syncSessionToExtension(tokenRef.value, user.email || '');
 
       if (tokenRef.value) {
         // Load all sections in parallel for faster dashboard rendering.
@@ -1109,7 +1109,7 @@
     }
 
     // ── Sync to Extension ──────────────────────────────────
-    function syncSessionToExtension(token) {
+    function syncSessionToExtension(token, email) {
       const EXTENSION_ID = (window.REPLYPAL_EXTENSION_ID || '').trim();
       const isLikelyValidId = /^[a-p]{32}$/.test(EXTENSION_ID);
       if (!isLikelyValidId) {
@@ -1121,7 +1121,7 @@
         try {
           chrome.runtime.sendMessage(
             EXTENSION_ID,
-            { type: 'setSupabaseSession', token: token },
+            { type: 'setSupabaseSession', token: token, email: email || '' },
             (response) => {
               if (chrome.runtime.lastError) {
                 console.log('Extension not installed or not listening');

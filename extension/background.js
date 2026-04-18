@@ -415,9 +415,22 @@ chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => 
     return false;
   }
   if (message.type === 'setSupabaseSession') {
-    chrome.storage.local.set({ replypalSupabaseToken: message.token })
-      .then(() => sendResponse({ success: true }))
-      .catch(err => sendResponse({ success: false, error: err.message }));
+    const t = message.token;
+    const patch = {};
+    if (t) {
+      patch.replypalSupabaseToken = t;
+      const fromPage = (message.email && String(message.email).trim().toLowerCase()) || '';
+      const fromJwt = parseJwtEmail(t);
+      if (fromPage && fromPage.includes('@')) patch.replypalEmail = fromPage;
+      else if (fromJwt) patch.replypalEmail = fromJwt;
+      chrome.storage.local.set(patch)
+        .then(() => sendResponse({ success: true }))
+        .catch((err) => sendResponse({ success: false, error: err.message }));
+    } else {
+      chrome.storage.local.remove(['replypalSupabaseToken'])
+        .then(() => sendResponse({ success: true }))
+        .catch((err) => sendResponse({ success: false, error: err.message }));
+    }
     return true; // Keep channel open for async
   }
 });
@@ -584,6 +597,20 @@ function parseJwtSub(token) {
   }
 }
 
+function parseJwtEmail(token) {
+  try {
+    const parts = String(token || '').split('.');
+    if (parts.length < 2) return '';
+    let b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    while (b64.length % 4) b64 += '=';
+    const json = JSON.parse(atob(b64));
+    const em = json.email;
+    return typeof em === 'string' && em.includes('@') ? em.trim().toLowerCase() : '';
+  } catch {
+    return '';
+  }
+}
+
 async function handleCreateCreditsCheckout(payload) {
   const online = await checkOnline();
   if (!online) {
@@ -735,9 +762,14 @@ async function handleCheckFreeUsage(payload) {
     return { success: false, error: 'offline', message: 'ReplyPals is offline. Check your connection.' };
   }
   try {
+    const { replypalSupabaseToken } = await chrome.storage.local.get(['replypalSupabaseToken']);
+    const headers = { 'Content-Type': 'application/json' };
+    if (replypalSupabaseToken) {
+      headers.Authorization = 'Bearer ' + replypalSupabaseToken;
+    }
     const res = await fetch(`${API_BASE}/free-usage`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(payload || {})
     });
     if (!res.ok) {
