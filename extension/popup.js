@@ -1716,7 +1716,13 @@
     try {
       const response = await safeSendMessage({
         type: 'createCheckout',
-        payload: { email, plan: selectedPlan, tier, country_code: countryCode }
+        payload: {
+          email,
+          plan: selectedPlan,
+          tier,
+          country_code: countryCode,
+          currency_code: pricing && pricing.currency_code ? String(pricing.currency_code).toLowerCase() : '',
+        }
       });
 
       if (response?.error === 'offline') {

@@ -1251,6 +1251,7 @@ class CheckoutRequest(BaseModel):
     tier: str = Field(default="tier1")
     user_id: Optional[str] = None
     country_code: str = Field(default="US", min_length=2, max_length=2)
+    currency_code: Optional[str] = Field(default=None, min_length=3, max_length=3)
 
 
 class TrackRequest(BaseModel):
@@ -2443,6 +2444,18 @@ async def checkout_credits(body: CreditsCheckoutRequest):
 async def create_checkout(body: CheckoutRequest):
     """Legacy: map tier/plan to ``/checkout/subscription`` using DB ``plan_config`` only (tier ignored)."""
     cc = (body.country_code or "US").strip().upper()
+    if cc == "US":
+        cc_from_currency = {
+            "inr": "IN",
+            "gbp": "GB",
+            "eur": "DE",
+            "php": "PH",
+            "ngn": "NG",
+            "cad": "CA",
+            "aud": "AU",
+        }.get((body.currency_code or "").strip().lower())
+        if cc_from_currency:
+            cc = cc_from_currency
     return await checkout_subscription(
         SubscriptionCheckoutRequest(
             email=body.email,

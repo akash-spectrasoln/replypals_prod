@@ -656,6 +656,9 @@ async function handleCreateCheckout(payload) {
       tier: payload.tier || 'tier1',
       country_code: (payload.country_code || payload.country || 'US').toString().trim().slice(0, 2).toUpperCase() || 'US',
     };
+    if (payload.currency_code) {
+      body.currency_code = String(payload.currency_code).trim().toLowerCase();
+    }
     if (payload.user_id) {
       body.user_id = payload.user_id;
     } else if (sessionUserId) {
