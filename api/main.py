@@ -605,8 +605,8 @@ ALLOW_ORIGIN_REGEX = os.getenv("ALLOW_ORIGIN_REGEX", "").strip() or (
 )
 ALLOW_CREDENTIALS = "*" not in ALLOWED_ORIGINS
 
-FRONTEND_SUCCESS_URL = os.getenv("FRONTEND_SUCCESS_URL", "https://replypals.in/success.html")
-FRONTEND_CANCEL_URL = os.getenv("FRONTEND_CANCEL_URL", "https://replypals.in/dashboard.html")
+FRONTEND_SUCCESS_URL = os.getenv("FRONTEND_SUCCESS_URL", "https://www.replypals.in/success.html")
+FRONTEND_CANCEL_URL = os.getenv("FRONTEND_CANCEL_URL", "https://www.replypals.in/dashboard.html")
 
 # DB resilience knobs: keep request paths responsive during transient DNS/network failures.
 _SUPABASE_BACKOFF_UNTIL = 0.0
@@ -831,7 +831,7 @@ app.add_middleware(
 @app.middleware("http")
 async def strip_api_path_prefix(request: Request, call_next):
     """
-    Chrome extension uses https://replypals.in/api/... Nginx strips /api when proxying to uvicorn.
+    Chrome extension uses https://www.replypals.in/api/... Nginx strips /api when proxying to uvicorn.
     Direct uvicorn (e.g. Railway) still sees /api/health — rewrite to /health so the same client works.
     """
     path = request.scope.get("path") or ""
@@ -1757,7 +1757,7 @@ async def check_rate_limit(
                         "plan": "anon",
                         "used": used_d,
                         "limit": limit_d,
-                        "upgrade_url": "https://replypals.in/login",
+                        "upgrade_url": "https://www.replypals.in/login",
                         "message": (
                             "You've used all 3 free tries. Sign in for 10 free rewrites per month!"
                         ),
@@ -1775,7 +1775,7 @@ async def check_rate_limit(
                 "plan": "free",
                 "used": used_d,
                 "limit": limit_d,
-                "upgrade_url": "https://replypals.in/#pricing",
+                "upgrade_url": "https://www.replypals.in/#pricing",
                 "resets_in": "30 days rolling",
                 "degraded": True,
             })
@@ -3291,7 +3291,7 @@ def _send_license_email(to_email: str, license_key: str, plan: str):
         <li>Click <strong>"Already have a key?"</strong></li>
         <li>Paste your key above and click <strong>Activate</strong></li>
       </ol>
-      <a href="{os.getenv('APP_BASE_URL', 'https://replypals.in')}/dashboard.html" style="display:inline-block;background:linear-gradient(135deg,#FF6B35,#FF8C42);color:#fff;text-decoration:none;font-weight:700;font-size:15px;padding:14px 32px;border-radius:12px;">Open Dashboard →</a>
+      <a href="{os.getenv('APP_BASE_URL', 'https://www.replypals.in')}/dashboard.html" style="display:inline-block;background:linear-gradient(135deg,#FF6B35,#FF8C42);color:#fff;text-decoration:none;font-weight:700;font-size:15px;padding:14px 32px;border-radius:12px;">Open Dashboard →</a>
     """)
     _send_email(to_email, subject, plain, email_type="license", body_html=html)
 
@@ -3318,7 +3318,7 @@ def _send_welcome_email(to_email: str, name: str = ""):
           <p style="color:#6B7280;font-size:13px;margin:4px 0 0;">(Pro) ReplyPals learns your preferred writing style</p>
         </div>
       </div>
-      <a href="{os.getenv('APP_BASE_URL', 'https://replypals.in')}/dashboard" style="display:inline-block;background:linear-gradient(135deg,#FF6B35,#FF8C42);color:#fff;text-decoration:none;font-weight:700;font-size:15px;padding:14px 32px;border-radius:12px;">Go to Dashboard →</a>
+      <a href="{os.getenv('APP_BASE_URL', 'https://www.replypals.in')}/dashboard" style="display:inline-block;background:linear-gradient(135deg,#FF6B35,#FF8C42);color:#fff;text-decoration:none;font-weight:700;font-size:15px;padding:14px 32px;border-radius:12px;">Go to Dashboard →</a>
       <p style="color:#9CA3AF;font-size:12px;margin:20px 0 0;">You'll receive a weekly writing progress report every Sunday.</p>
     """)
     _send_email(to_email, subject, plain, email_type="welcome", body_html=html)
@@ -3344,7 +3344,7 @@ def _send_weekly_report_email(to_email: str, avg_score: float, total_rewrites: i
         <p style="color:#0F2544;font-size:16px;font-weight:700;margin:0;">✍️ {total_rewrites} rewrites completed</p>
       </div>
       {common_html}
-      <a href="{os.getenv('APP_BASE_URL', 'https://replypals.in')}/dashboard.html" style="display:inline-block;background:linear-gradient(135deg,#FF6B35,#FF8C42);color:#fff;text-decoration:none;font-weight:700;font-size:15px;padding:14px 32px;border-radius:12px;margin-top:8px;">View Full Dashboard →</a>
+      <a href="{os.getenv('APP_BASE_URL', 'https://www.replypals.in')}/dashboard.html" style="display:inline-block;background:linear-gradient(135deg,#FF6B35,#FF8C42);color:#fff;text-decoration:none;font-weight:700;font-size:15px;padding:14px 32px;border-radius:12px;margin-top:8px;">View Full Dashboard →</a>
     """)
     _send_email(to_email, subject, plain, email_type="weekly_report", body_html=html)
 
@@ -3425,7 +3425,7 @@ def _make_html_email(title: str, preheader: str, body_html: str) -> str:
             <!-- Footer -->
             <p style="color:#9CA3AF;font-size:12px;text-align:center;margin:0;line-height:1.8;">
               © 2025 ReplyPals · Built for non-native English speakers worldwide 🌍<br>
-              <a href="https://replypals.in" style="color:#FF6B35;text-decoration:none;">replypals.in</a>
+              <a href="https://www.replypals.in/" style="color:#FF6B35;text-decoration:none;">replypals.in</a>
             </p>
           </td>
         </tr>
@@ -3925,7 +3925,7 @@ async def account_referral(authorization: str = Header(None)):
         if _supabase_in_backoff():
             import hashlib
             ref_code = hashlib.md5(email.lower().encode()).hexdigest()[:8].upper()
-            referral_url = f"{os.getenv('APP_BASE_URL', 'https://replypals.in')}/signup?ref={ref_code}"
+            referral_url = f"{os.getenv('APP_BASE_URL', 'https://www.replypals.in')}/signup?ref={ref_code}"
             _dash_dbg("account_referral degraded_backoff", ref_code=ref_code)
             return {"ref_code": ref_code, "referral_url": referral_url, "bonus_rewrites": 0, "degraded": True}
 
@@ -3966,7 +3966,7 @@ async def account_referral(authorization: str = Header(None)):
                     timeout_sec=3.0,
                 )
 
-        referral_url = f"{os.getenv('APP_BASE_URL', 'https://replypals.in')}/signup?ref={ref_code}"
+        referral_url = f"{os.getenv('APP_BASE_URL', 'https://www.replypals.in')}/signup?ref={ref_code}"
         _dash_dbg("account_referral ok", ref_code=ref_code, bonus=bonus)
         return {
             "ref_code":     ref_code,
@@ -3977,7 +3977,7 @@ async def account_referral(authorization: str = Header(None)):
         _mark_supabase_down(e)
         import hashlib
         ref_code = hashlib.md5(email.lower().encode()).hexdigest()[:8].upper()
-        referral_url = f"{os.getenv('APP_BASE_URL', 'https://replypals.in')}/signup?ref={ref_code}"
+        referral_url = f"{os.getenv('APP_BASE_URL', 'https://www.replypals.in')}/signup?ref={ref_code}"
         _dash_dbg("account_referral fallback_error", error=str(e), ref_code=ref_code)
         return {"ref_code": ref_code, "referral_url": referral_url, "bonus_rewrites": 0, "degraded": True}
 

@@ -179,7 +179,7 @@ function parseRateLimit(responseData) {
     plan: detail.plan || 'free',
     used: detail.used || 0,
     limit: detail.limit || 0,
-    upgradeUrl: detail.upgrade_url || 'https://replypals.in/#pricing',
+    upgradeUrl: detail.upgrade_url || 'https://www.replypals.in/#pricing',
     resetDate: detail.reset_date || detail.resets_in || null,
   };
 }
@@ -187,7 +187,7 @@ function parseRateLimit(responseData) {
 // Free user limit shape
 const freeLimit = parseRateLimit({
   detail: { error: 'limit_reached', plan: 'free', used: 5, limit: 5,
-            upgrade_url: 'https://replypals.in/#pricing', resets_in: '30 days rolling' }
+            upgrade_url: 'https://www.replypals.in/#pricing', resets_in: '30 days rolling' }
 });
 assert(freeLimit !== null, 'Free limit parsed');
 assertEqual(freeLimit.plan, 'free', 'Free limit: correct plan');
@@ -442,7 +442,7 @@ section('Build Constants');
 
 if (bgSrc) {
   assertNotContains(bgSrc, 'YOUR_MIXPANEL_TOKEN', 'No placeholder Mixpanel token');
-  assertContains(bgSrc, "const API_BASE = 'https://replypals.in'", 'API_BASE is https://replypals.in');
+  assertContains(bgSrc, "const API_BASE = 'https://www.replypals.in/api'", 'API_BASE is production www /api');
   assertNotContains(bgSrc, 'localhost:8150', 'No dev API port in background.js');
   assertContains(bgSrc, 'replypals.in', 'Production domain present in API_BASE');
 }

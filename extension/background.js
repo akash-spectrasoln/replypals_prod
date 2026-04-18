@@ -1,6 +1,7 @@
 // ─── ReplyPals Background Service Worker ───
 // Paths are /api/... — FastAPI strips the /api prefix when running without nginx (Railway).
-const API_BASE = 'https://replypals.in/api';
+// Use www — apex replypals.in does not proxy /api/* to FastAPI (POSTs get 405, /api/health 404).
+const API_BASE = 'https://www.replypals.in/api';
 /** Origin without trailing /api (for health fallbacks when /api/* is not routed). */
 const API_ORIGIN = (() => {
   const b = String(API_BASE || '').replace(/\/$/, '');
@@ -8,7 +9,7 @@ const API_ORIGIN = (() => {
   try {
     return new URL(b).origin;
   } catch {
-    return 'https://replypals.in';
+    return 'https://www.replypals.in';
   }
 })();
 if (!API_BASE || !API_BASE.startsWith('https://')) {
@@ -889,7 +890,7 @@ async function handleGetReferralLink() {
   const code = (replypalRefCode || 'XXXXXXXX').toString().trim();
   return {
     success: true,
-    referral_url: `https://replypals.in/signup?ref=${encodeURIComponent(code)}`,
+    referral_url: `${API_ORIGIN}/signup?ref=${encodeURIComponent(code)}`,
     ref_code: code,
     source: 'local',
     warning: 'Sign in on dashboard to sync referral rewards.',

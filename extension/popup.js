@@ -22,6 +22,8 @@
   }
   /** Fallback only until /free-usage returns; keep aligned with API default free monthly cap */
   const FREE_LIMIT_BASE = 10;
+  /** Canonical site host (apex replypals.in does not serve /login, /privacy, etc.). */
+  const SITE_ORIGIN = 'https://www.replypals.in';
 
   // ─── DOM Elements ───
   const inputText = document.getElementById('inputText');
@@ -449,7 +451,7 @@
 
   // ─── Privacy Bar ───
   privacyBar.addEventListener('click', () => {
-    chrome.tabs.create({ url: 'https://replypals.in/privacy' });
+    chrome.tabs.create({ url: `${SITE_ORIGIN}/privacy` });
   });
 
   // ─── Mode Switching & Quick Prompts ───
@@ -517,7 +519,7 @@
       if (!licenseKey && replypalPlan === 'anon') {
         showToast('You\'ve used all 3 free tries. Sign in for 10 free rewrites/month!', 'error');
         try {
-          window.open('https://replypals.in/login', '_blank', 'noopener');
+          window.open(`${SITE_ORIGIN}/login`, '_blank', 'noopener');
         } catch (e) { /* ignore */ }
         sendTrack('upgrade_shown', { trigger: 'anon_limit_signin' });
         return;
@@ -998,7 +1000,7 @@
     const refResp = await safeSendMessage({ type: 'getReferralLink' });
     const link = (refResp && refResp.success && refResp.referral_url)
       ? refResp.referral_url
-      : 'https://replypals.in/signup';
+      : `${SITE_ORIGIN}/signup`;
     await navigator.clipboard.writeText(link);
     referralCopyBtn.textContent = '✅ Copied!';
     if (refResp && refResp.warning) showToast(refResp.warning, 'error');
@@ -1010,7 +1012,7 @@
     const refResp = await safeSendMessage({ type: 'getReferralLink' });
     const link = (refResp && refResp.success && refResp.referral_url)
       ? refResp.referral_url
-      : 'https://replypals.in/signup';
+      : `${SITE_ORIGIN}/signup`;
     const waURL = `https://wa.me/?text=I%20use%20ReplyPals%20to%20write%20better%20English%20emails%20in%20seconds.%20Try%20it%20free%3A%20${encodeURIComponent(link)}`;
     chrome.tabs.create({ url: waURL });
     if (refResp && refResp.warning) showToast(refResp.warning, 'error');

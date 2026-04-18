@@ -1040,7 +1040,7 @@ async def check_rate_limit_impl(
                         "message": (
                             "You've used all 3 free tries. Sign in for 10 free rewrites per month!"
                         ),
-                        "upgrade_url": "https://replypals.in/login",
+                        "upgrade_url": "https://www.replypals.in/login",
                     },
                 )
             syn_em = (_synthetic_email_from_anon_id(aid) or "").strip().lower()

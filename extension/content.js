@@ -3,6 +3,7 @@ try {
     'use strict';
     if (window.__replypalInjected) return;
     window.__replypalInjected = true;
+    var SITE_ORIGIN = 'https://www.replypals.in';
 
     // ── Context safety guards ──
     function isChromeValid() {
@@ -212,7 +213,7 @@ try {
     function rpOpenUpgradeForLimit(contextText) {
       if (!licenseKey && replypalPlan === 'anon') {
         showToast('You\'ve used all 3 free tries. Sign in for 10 free rewrites/month!', 'error');
-        try { window.open('https://replypals.in/login', '_blank', 'noopener'); } catch (_) { }
+        try { window.open(SITE_ORIGIN + '/login', '_blank', 'noopener'); } catch (_) { }
         return;
       }
       showToast('⚠️ You\'ve reached your plan limit. Subscribe or upgrade to continue.', 'error');
