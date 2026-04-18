@@ -208,9 +208,13 @@ async function syncFreeUsageSnapshot(emailHint = null, anonHint = null) {
     if (snap && snap.success !== false) {
       const currentUsed = Number(replypalUsageUsed || 0);
       const serverUsed = Number(snap.rewrites_used || 0);
-      const mergedUsed = Math.max(currentUsed, serverUsed);
       const limit = Number(snap.rewrites_limit || replypalUsageLimit || 10);
-      const mergedLeft = Math.max(0, limit - mergedUsed);
+      const mergedUsed = snap.plan === 'anon'
+        ? Math.max(currentUsed, serverUsed)
+        : serverUsed;
+      const mergedLeft = typeof snap.rewrites_left === 'number'
+        ? Math.max(0, snap.rewrites_left)
+        : Math.max(0, limit - mergedUsed);
       let bonus = 0;
       if (snap.plan === 'anon') {
         bonus = 0;
@@ -424,7 +428,12 @@ chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => 
       if (fromPage && fromPage.includes('@')) patch.replypalEmail = fromPage;
       else if (fromJwt) patch.replypalEmail = fromJwt;
       chrome.storage.local.set(patch)
-        .then(() => sendResponse({ success: true }))
+        .then(async () => {
+          try {
+            await syncFreeUsageSnapshot(patch.replypalEmail || null, null);
+          } catch (_) { /* ignore */ }
+          sendResponse({ success: true });
+        })
         .catch((err) => sendResponse({ success: false, error: err.message }));
     } else {
       chrome.storage.local.remove(['replypalSupabaseToken'])

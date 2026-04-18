@@ -166,12 +166,20 @@
       });
       if (freeResp && freeResp.success !== false) {
         const serverUsed = Number(freeResp.rewrites_used || 0);
-        useCount = Math.max(useCount, serverUsed);
         const serverLimit = Number(freeResp.rewrites_limit || FREE_LIMIT_BASE);
         if (typeof freeResp.plan === 'string') replypalPlan = freeResp.plan;
+        // Anon tier: max() avoids rolling back after a successful rewrite when /free-usage lags.
+        // Signed-in free (monthly): server counts are keyed by real email — replace local anon tally.
+        if (freeResp.plan === 'anon') {
+          useCount = Math.max(useCount, serverUsed);
+        } else {
+          useCount = serverUsed;
+        }
         applyFreeTierBonusFromApiPayload(freeResp);
         replypalRewritesLimit = serverLimit;
-        replypalUsageLeft = Math.max(0, serverLimit - useCount);
+        replypalUsageLeft = typeof freeResp.rewrites_left === 'number'
+          ? Math.max(0, freeResp.rewrites_left)
+          : Math.max(0, serverLimit - useCount);
         serverRewriteCount = useCount;
         const st = {
           replypalCount: useCount,
@@ -184,6 +192,9 @@
         };
         if (typeof freeResp.plan === 'string') st.replypalPlan = freeResp.plan;
         await chrome.storage.local.set(st);
+        if (!isPopupQuotaBlockedSync()) {
+          hideUpgradeOverlay(true);
+        }
         return useCount;
       }
       return null;
