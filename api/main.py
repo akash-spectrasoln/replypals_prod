@@ -1759,7 +1759,8 @@ async def check_rate_limit(
                         "limit": limit_d,
                         "upgrade_url": "https://www.replypals.in/login",
                         "message": (
-                            "You've used all 3 free tries. Sign in for 10 free rewrites per month!"
+                            "You've used all 3 tries without signing in. "
+                            "Create a free account on the site for the free plan (10 rewrites/month)."
                         ),
                         "degraded": True,
                     },
@@ -2282,8 +2283,9 @@ async def get_pricing(request: Request):
     pl = serialize_plan_limits_from_snapshot(snap)
     if crow.exchange_rate_per_usd:
         note = (
-            "Prices shown in your local currency (approximate). "
-            "Checkout may still settle in USD with your regional discount applied."
+            "Prices shown in your local currency (PPP). "
+            "Stripe Checkout uses the same basis; if you pick a different currency in Stripe, "
+            "your bank may add conversion on top."
         )
     else:
         note = None if mult >= 0.999 else "Pricing adjusted for your region (PPP)"
@@ -2317,7 +2319,8 @@ async def checkout_subscription(body: SubscriptionCheckoutRequest):
     if not stripe or not STRIPE_SECRET_KEY:
         raise HTTPException(status_code=500, detail="Stripe not configured")
 
-    snap = load_commerce_snapshot_sync(supabase)
+    # Same snapshot source as GET /pricing so displayed amounts match Checkout line_items.
+    snap = await get_commerce_snapshot(supabase, _sb_execute)
     pk = body.plan_key.strip().lower()
     prow = snap.plans.get(pk)
     if not prow or not prow.is_active:
@@ -2382,7 +2385,7 @@ async def checkout_credits(body: CreditsCheckoutRequest):
     if not stripe or not STRIPE_SECRET_KEY:
         raise HTTPException(status_code=500, detail="Stripe not configured")
 
-    snap = load_commerce_snapshot_sync(supabase)
+    snap = await get_commerce_snapshot(supabase, _sb_execute)
     bk = body.bundle_key.strip().lower()
     brow = snap.bundles.get(bk)
     if not brow or not brow.is_active:

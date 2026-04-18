@@ -648,13 +648,19 @@ async function handleCreateCheckout(payload) {
     return { success: false, error: 'offline', message: 'ReplyPals is offline. Check your connection.' };
   }
   try {
+    const { replypalSupabaseToken } = await chrome.storage.local.get(['replypalSupabaseToken']);
+    const sessionUserId = parseJwtSub(replypalSupabaseToken);
     const body = {
       email: payload.email,
       plan: payload.plan,
       tier: payload.tier || 'tier1',
-      user_id: payload.user_id,
       country_code: (payload.country_code || payload.country || 'US').toString().trim().slice(0, 2).toUpperCase() || 'US',
     };
+    if (payload.user_id) {
+      body.user_id = payload.user_id;
+    } else if (sessionUserId) {
+      body.user_id = sessionUserId;
+    }
     const res = await fetch(`${API_BASE}/create-checkout`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -841,7 +847,7 @@ async function handleFetchPricing() {
   };
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2000);
+    const timeout = setTimeout(() => controller.abort(), 10000);
     const res = await fetch(`${API_BASE}/pricing`, {
       method: 'GET',
       signal: controller.signal,

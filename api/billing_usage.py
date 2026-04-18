@@ -1038,7 +1038,8 @@ async def check_rate_limit_impl(
                         "used": used_a,
                         "limit": ANON_LIFETIME_LIMIT,
                         "message": (
-                            "You've used all 3 free tries. Sign in for 10 free rewrites per month!"
+                            "You've used all 3 tries without signing in. "
+                            "Create a free account on the site for the free plan (10 rewrites/month)."
                         ),
                         "upgrade_url": "https://www.replypals.in/login",
                     },

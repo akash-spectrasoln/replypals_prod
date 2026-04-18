@@ -25,6 +25,23 @@
   /** Canonical site host (apex replypals.in does not serve /login, /privacy, etc.). */
   const SITE_ORIGIN = 'https://www.replypals.in';
 
+  /** Must match GET /pricing geography or Checkout bills USD while UI shows PPP local prices. */
+  function checkoutCountryFromPricing(pricing) {
+    const c = pricing && pricing.country;
+    if (typeof c === 'string' && /^[a-zA-Z]{2}/.test(c)) {
+      return c.slice(0, 2).toUpperCase();
+    }
+    const cur = (pricing && pricing.currency_code) ? String(pricing.currency_code).toLowerCase() : '';
+    if (cur === 'inr') return 'IN';
+    if (cur === 'gbp') return 'GB';
+    if (cur === 'usd') return 'US';
+    if (cur === 'cad') return 'CA';
+    if (cur === 'aud') return 'AU';
+    if (cur === 'php') return 'PH';
+    if (cur === 'ngn') return 'NG';
+    return 'US';
+  }
+
   // ─── DOM Elements ───
   const inputText = document.getElementById('inputText');
   const charCount = document.getElementById('charCount');
@@ -517,7 +534,7 @@
 
     if (shouldCount && isPopupQuotaBlockedSync()) {
       if (!licenseKey && replypalPlan === 'anon') {
-        showToast('You\'ve used all 3 free tries. Sign in for 10 free rewrites/month!', 'error');
+        showToast('3 tries without an account. Sign up on the site for 10 free rewrites/month.', 'error');
         try {
           window.open(`${SITE_ORIGIN}/login`, '_blank', 'noopener');
         } catch (e) { /* ignore */ }
@@ -1528,7 +1545,7 @@
       const bk = btn.getAttribute('data-bundle-key');
       if (!bk) return;
       const pricing = cachedPricing || await fetchPricingData();
-      const countryCode = (pricing && pricing.country) ? String(pricing.country).slice(0, 2).toUpperCase() : 'US';
+      const countryCode = checkoutCountryFromPricing(pricing);
       let email = (checkoutEmail && checkoutEmail.value) ? checkoutEmail.value.trim() : '';
       if (!email) {
         const st = await chrome.storage.local.get('replypalEmail');
@@ -1601,6 +1618,13 @@
     upgradeOverlay.classList.add('visible');
     sendTrack('upgrade_shown', { trigger: blocking ? 'limit_blocked' : 'limit' });
 
+    try {
+      const st = await chrome.storage.local.get(['replypalEmail']);
+      if (checkoutEmail && st.replypalEmail) {
+        checkoutEmail.value = String(st.replypalEmail).trim();
+      }
+    } catch (e) { /* ignore */ }
+
     if (blocking) {
       upgradeOverlay.dataset.blocking = '1';
       closeOverlay.style.display = 'none';
@@ -1643,6 +1667,21 @@
 
   closeOverlay.addEventListener('click', () => hideUpgradeOverlay());
 
+  const upgradeLoginLink = document.getElementById('upgradeLoginLink');
+  const upgradeSignupLink = document.getElementById('upgradeSignupLink');
+  if (upgradeLoginLink) {
+    upgradeLoginLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      chrome.tabs.create({ url: `${SITE_ORIGIN}/login` });
+    });
+  }
+  if (upgradeSignupLink) {
+    upgradeSignupLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      chrome.tabs.create({ url: `${SITE_ORIGIN}/signup` });
+    });
+  }
+
   // ─── Plan Selection ───
   function selectPlan(plan) {
     selectedPlan = plan;
@@ -1666,9 +1705,13 @@
     checkoutBtn.textContent = 'Opening…';
     checkoutBtn.disabled = true;
 
-    const pricing = cachedPricing || await fetchPricingData();
+    cachedPricing = null;
+    try {
+      await chrome.storage.session.remove('replypalPricing');
+    } catch (e) { /* ignore */ }
+    const pricing = await fetchPricingData();
     const tier = pricing.tier || 'tier1';
-    const countryCode = (pricing && pricing.country) ? String(pricing.country).slice(0, 2).toUpperCase() : 'US';
+    const countryCode = checkoutCountryFromPricing(pricing);
 
     try {
       const response = await safeSendMessage({

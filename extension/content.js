@@ -212,7 +212,7 @@ try {
 
     function rpOpenUpgradeForLimit(contextText) {
       if (!licenseKey && replypalPlan === 'anon') {
-        showToast('You\'ve used all 3 free tries. Sign in for 10 free rewrites/month!', 'error');
+        showToast('3 tries without an account. Sign up on the site for 10 free rewrites/month.', 'error');
         try { window.open(SITE_ORIGIN + '/login', '_blank', 'noopener'); } catch (_) { }
         return;
       }
