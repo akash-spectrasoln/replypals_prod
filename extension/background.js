@@ -358,6 +358,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === 'getReferralLink') {
+    handleGetReferralLink()
+      .then(wrapped)
+      .catch(err => wrapped({ success: false, error: err.message }));
+    return true;
+  }
+
   if (message.type === 'track') {
     track(message.event, message.properties || {}); // no personal data
     clearTimeout(timeout);
@@ -819,6 +826,47 @@ async function handleFetchPricing() {
   } catch (err) {
     return { success: true, ...FALLBACK };
   }
+}
+
+async function handleGetReferralLink() {
+  const { replypalSupabaseToken, replypalRefCode } = await chrome.storage.local.get([
+    'replypalSupabaseToken',
+    'replypalRefCode',
+  ]);
+
+  // Prefer canonical backend-issued referral code when authenticated.
+  if (replypalSupabaseToken) {
+    try {
+      const res = await fetch(`${API_BASE}/account/referral`, {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${replypalSupabaseToken}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data && data.referral_url) {
+        if (data.ref_code) {
+          await chrome.storage.local.set({ replypalRefCode: data.ref_code });
+        }
+        return {
+          success: true,
+          referral_url: data.referral_url,
+          ref_code: data.ref_code || null,
+          source: 'backend',
+        };
+      }
+    } catch (_) {
+      // Fall through to local fallback.
+    }
+  }
+
+  // Fallback: keep flow usable, but indicate local link may not carry rewards.
+  const code = (replypalRefCode || 'XXXXXXXX').toString().trim();
+  return {
+    success: true,
+    referral_url: `https://replypals.in/signup?ref=${encodeURIComponent(code)}`,
+    ref_code: code,
+    source: 'local',
+    warning: 'Sign in on dashboard to sync referral rewards.',
+  };
 }
 
 // ─── Selection Action Handler ───

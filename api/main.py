@@ -14,7 +14,7 @@ import time
 import smtplib
 import httpx
 from datetime import datetime, timezone
-from email.header import Header
+from email.header import Header as EmailHeader
 from email.mime.text import MIMEText
 from typing import Optional, List
 import asyncio
@@ -3393,14 +3393,14 @@ def _send_email(to_email: str, subject: str, body_plain: str, email_type: str = 
         try:
             if body_html:
                 msg = MIMEMultipart("alternative")
-                msg["Subject"] = str(Header(subject, "utf-8"))
+                msg["Subject"] = str(EmailHeader(subject, "utf-8"))
                 msg["From"] = f"ReplyPals <{GMAIL_ADDRESS}>"
                 msg["To"] = to_email
                 msg.attach(MIMEText(body_plain, "plain", "utf-8"))
                 msg.attach(MIMEText(body_html, "html", "utf-8"))
             else:
                 msg = MIMEText(body_plain, "plain", "utf-8")
-                msg["Subject"] = str(Header(subject, "utf-8"))
+                msg["Subject"] = str(EmailHeader(subject, "utf-8"))
                 msg["From"] = f"ReplyPals <{GMAIL_ADDRESS}>"
                 msg["To"] = to_email
 

@@ -995,20 +995,25 @@
 
   // ─── Referral ───
   referralCopyBtn.addEventListener('click', async () => {
-    const { replypalRefCode } = await chrome.storage.local.get('replypalRefCode');
-    const code = replypalRefCode || 'XXXXXXXX';
-    const link = `https://replypals.in?ref=${code}`;
+    const refResp = await safeSendMessage({ type: 'getReferralLink' });
+    const link = (refResp && refResp.success && refResp.referral_url)
+      ? refResp.referral_url
+      : 'https://replypals.in/signup';
     await navigator.clipboard.writeText(link);
     referralCopyBtn.textContent = '✅ Copied!';
+    if (refResp && refResp.warning) showToast(refResp.warning, 'error');
     sendTrack('referral_shared', { channel: 'copy' }); // no personal data
     setTimeout(() => { referralCopyBtn.textContent = '📋 Copy your referral link'; }, 2000);
   });
 
   referralWhatsappBtn.addEventListener('click', async () => {
-    const { replypalRefCode } = await chrome.storage.local.get('replypalRefCode');
-    const code = replypalRefCode || 'XXXXXXXX';
-    const waURL = `https://wa.me/?text=I%20use%20ReplyPals%20to%20write%20better%20English%20emails%20in%20seconds.%20Try%20it%20free%3A%20https%3A%2F%2Freplypals.in%3Fref%3D${code}`;
+    const refResp = await safeSendMessage({ type: 'getReferralLink' });
+    const link = (refResp && refResp.success && refResp.referral_url)
+      ? refResp.referral_url
+      : 'https://replypals.in/signup';
+    const waURL = `https://wa.me/?text=I%20use%20ReplyPals%20to%20write%20better%20English%20emails%20in%20seconds.%20Try%20it%20free%3A%20${encodeURIComponent(link)}`;
     chrome.tabs.create({ url: waURL });
+    if (refResp && refResp.warning) showToast(refResp.warning, 'error');
     sendTrack('referral_shared', { channel: 'whatsapp' }); // no personal data
   });
 
