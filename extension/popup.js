@@ -203,6 +203,58 @@
     }
   }
 
+  /** Paid license: pull /check-usage into storage (avoids /free-usage overwriting license limits). */
+  async function refreshLicenseUsageFromServer(keyOpt) {
+    const lk = (keyOpt != null ? String(keyOpt).trim() : '') || (licenseKey || '').trim();
+    if (!lk) return null;
+    try {
+      const usageResp = await safeSendMessage({
+        type: 'checkUsage',
+        payload: { license_key: lk }
+      });
+      if (!usageResp || usageResp.success === false || !usageResp.plan) return null;
+      licenseKey = lk;
+      currentPlan = usageResp.plan;
+      isTeamAdmin = usageResp.is_admin || false;
+      const lim = usageResp.limit;
+      const usedMo = Number(usageResp.rewrites_this_month || 0);
+      useCount = usedMo;
+      serverRewriteCount = usedMo;
+      await chrome.storage.local.remove(['replypalPlan']);
+      const st = {
+        replypalLicense: lk,
+        replypalUsageUsed: usedMo,
+        replypalCount: usedMo,
+      };
+      if (typeof lim === 'number' && lim > 0) {
+        replypalRewritesLimit = lim;
+        replypalUsageLeft = Math.max(0, lim - usedMo);
+        st.replypalRewritesLimit = lim;
+        st.replypalUsageLeft = replypalUsageLeft;
+      } else if (typeof lim === 'number' && lim < 0) {
+        replypalRewritesLimit = lim;
+        replypalUsageLeft = null;
+        st.replypalRewritesLimit = lim;
+        st.replypalUsageLeft = null;
+      } else {
+        replypalRewritesLimit = -1;
+        replypalUsageLeft = null;
+        st.replypalRewritesLimit = -1;
+        st.replypalUsageLeft = null;
+      }
+      await chrome.storage.local.set(st);
+      if (!isPopupQuotaBlockedSync()) {
+        hideUpgradeOverlay(true);
+      }
+      if (currentPlan === 'team' && isTeamAdmin) {
+        try { loadTeamStats(); } catch (_) { /* ignore */ }
+      }
+      return true;
+    } catch (e) {
+      return null;
+    }
+  }
+
   function startUsagePolling() {
     // Disabled: aggressive polling can read stale pre-log snapshots and cause badge rollbacks.
     if (usagePollTimer) clearInterval(usagePollTimer);
@@ -313,33 +365,7 @@
 
     // Check license and usage from server
     if (licenseKey) {
-      try {
-        const usageResp = await safeSendMessage({
-          type: 'checkUsage',
-          payload: { license_key: licenseKey }
-        });
-        if (usageResp && usageResp.success !== false && usageResp.plan) {
-          currentPlan = usageResp.plan;
-          isTeamAdmin = usageResp.is_admin || false;
-          const lim = usageResp.limit;
-          const usedMo = Number(usageResp.rewrites_this_month || 0);
-          if (typeof lim === 'number' && lim > 0) {
-            replypalRewritesLimit = lim;
-            replypalUsageLeft = Math.max(0, lim - usedMo);
-            await chrome.storage.local.set({
-              replypalRewritesLimit: lim,
-              replypalUsageLeft: replypalUsageLeft
-            });
-          } else if (typeof lim === 'number' && lim < 0) {
-            replypalRewritesLimit = lim;
-            replypalUsageLeft = null;
-            await chrome.storage.local.set({
-              replypalRewritesLimit: lim,
-              replypalUsageLeft: null
-            });
-          }
-        }
-      } catch (e) { }
+      await refreshLicenseUsageFromServer(licenseKey);
     } else {
       await refreshFreeUsageFromServer();
     }
@@ -1780,34 +1806,12 @@
         showToast('🔴 ReplyPals offline — check your connection', 'error');
       } else if (response?.success !== false && response?.valid) {
         licenseKey = key;
-        currentPlan = response.plan || 'pro';
-        isTeamAdmin = response.is_admin || false;
         await chrome.storage.local.set({ replypalLicense: key });
-        try {
-          const usageResp = await safeSendMessage({
-            type: 'checkUsage',
-            payload: { license_key: key }
-          });
-          if (usageResp && usageResp.success !== false && typeof usageResp.limit === 'number') {
-            const lim = usageResp.limit;
-            const usedMo = Number(usageResp.rewrites_this_month || 0);
-            if (lim > 0) {
-              replypalRewritesLimit = lim;
-              replypalUsageLeft = Math.max(0, lim - usedMo);
-              await chrome.storage.local.set({
-                replypalRewritesLimit: lim,
-                replypalUsageLeft: replypalUsageLeft
-              });
-            } else {
-              replypalRewritesLimit = lim;
-              replypalUsageLeft = null;
-              await chrome.storage.local.set({
-                replypalRewritesLimit: lim,
-                replypalUsageLeft: null
-              });
-            }
-          }
-        } catch (_) { }
+        const ok = await refreshLicenseUsageFromServer(key);
+        if (!ok) {
+          currentPlan = response.plan || 'pro';
+          isTeamAdmin = response.is_admin || false;
+        }
         updateUsageDisplay();
         hideUpgradeOverlay(true);
         showToast('✅ License activated!', 'success');
@@ -1832,7 +1836,22 @@
       inputText.value = changes.replypalSelection.newValue;
       updateCharCount();
     }
-    if (area === 'local' && (changes.replypalUsageUsed || changes.replypalUsageLimit || changes.replypalUsageLeft || changes.replypalRewritesLimit || changes.replypalLicense || changes.replypalBonusRewrites || changes.replypalMonthlyBaseLimit)) {
+    if (area === 'local' && changes.replypalLicense) {
+      const nv = changes.replypalLicense.newValue;
+      if (nv) {
+        void refreshLicenseUsageFromServer(nv).then(() => {
+          try { updateUsageDisplay(); } catch (_) { /* ignore */ }
+          try { hideUpgradeOverlay(true); } catch (_) { /* ignore */ }
+        });
+      } else {
+        licenseKey = null;
+        currentPlan = null;
+        isTeamAdmin = false;
+        void refreshFreeUsageFromServer().then(() => {
+          try { updateUsageDisplay(); } catch (_) { /* ignore */ }
+        });
+      }
+    } else if (area === 'local' && (changes.replypalUsageUsed || changes.replypalUsageLimit || changes.replypalUsageLeft || changes.replypalRewritesLimit || changes.replypalBonusRewrites || changes.replypalMonthlyBaseLimit)) {
       const used = changes.replypalUsageUsed?.newValue;
       const limit = changes.replypalUsageLimit?.newValue;
       if (typeof used === 'number') {
@@ -1852,10 +1871,6 @@
       if (changes.replypalRewritesLimit && typeof changes.replypalRewritesLimit.newValue === 'number') {
         replypalRewritesLimit = changes.replypalRewritesLimit.newValue;
       }
-      if (changes.replypalLicense?.newValue) {
-        licenseKey = changes.replypalLicense.newValue;
-        hideUpgradeOverlay(true);
-      }
       updateUsageDisplay();
     }
     if (area === 'local' && (changes.replypalScores || changes.replypalCache || changes.replypalCount)) {
@@ -1867,7 +1882,12 @@
       } catch (_) { }
     }
     if (area === 'local' && (changes.replypalSupabaseToken || changes.replypalEmail)) {
-      void refreshFreeUsageFromServer().then(() => {
+      void chrome.storage.local.get(['replypalLicense']).then((s) => {
+        if (s.replypalLicense) {
+          return refreshLicenseUsageFromServer(s.replypalLicense);
+        }
+        return refreshFreeUsageFromServer();
+      }).then(() => {
         try { updateUsageDisplay(); } catch (_) { /* ignore */ }
       });
     }

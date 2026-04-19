@@ -4447,7 +4447,7 @@ _WEBSITE_PAGES = [
     "login.html", "signup.html", "dashboard.html",
     "forgot-password.html", "reset-password.html",
     "auth-callback.html", "success.html", "contact.html",
-    "privacy.html", "terms.html", "refund.html",
+    "privacy.html", "terms.html", "refund.html", "about.html",
 ]
 
 for _page in _WEBSITE_PAGES:
@@ -4476,6 +4476,7 @@ _WEBSITE_PAGE_ALIASES = {
     "/privacy": "privacy.html",
     "/terms": "terms.html",
     "/refund": "refund.html",
+    "/about": "about.html",
 }
 
 for _alias_path, _alias_file in _WEBSITE_PAGE_ALIASES.items():

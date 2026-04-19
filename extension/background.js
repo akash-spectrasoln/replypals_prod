@@ -194,8 +194,41 @@ async function persistQuotaFromRewriteResponse(data) {
   }
 }
 
+/** Sync monthly usage for a paid license (same source as rate limits). */
+async function syncLicenseUsageSnapshot(licenseKey) {
+  if (!licenseKey || typeof licenseKey !== 'string') return;
+  try {
+    const snap = await handleCheckUsage({ license_key: licenseKey });
+    if (!snap || snap.success === false) return;
+    const lim = snap.limit;
+    const usedMo = Number(snap.rewrites_this_month || 0);
+    await chrome.storage.local.remove(['replypalPlan']);
+    const patch = {
+      replypalUsageUsed: usedMo,
+      replypalCount: usedMo,
+    };
+    if (typeof lim === 'number' && lim > 0) {
+      const left = Math.max(0, lim - usedMo);
+      patch.replypalRewritesLimit = lim;
+      patch.replypalUsageLeft = left;
+    } else if (typeof lim === 'number' && lim < 0) {
+      patch.replypalRewritesLimit = lim;
+      patch.replypalUsageLeft = null;
+    } else {
+      patch.replypalRewritesLimit = -1;
+      patch.replypalUsageLeft = null;
+    }
+    await chrome.storage.local.set(patch);
+  } catch (_) { /* ignore */ }
+}
+
 async function syncFreeUsageSnapshot(emailHint = null, anonHint = null) {
   try {
+    const { replypalLicense } = await chrome.storage.local.get(['replypalLicense']);
+    if (replypalLicense) {
+      await syncLicenseUsageSnapshot(replypalLicense);
+      return;
+    }
     const { replypalEmail, replypalUsageUsed, replypalUsageLimit } = await chrome.storage.local.get([
       'replypalEmail', 'replypalUsageUsed', 'replypalUsageLimit'
     ]);

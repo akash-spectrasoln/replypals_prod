@@ -603,7 +603,7 @@ class TestCron:
 class TestWebsite:
     @pytest.mark.parametrize("page", [
         "/","/login.html","/signup.html","/dashboard.html",
-        "/forgot-password.html","/success.html"
+        "/forgot-password.html","/success.html","/about","/about.html"
     ])
     def test_page_200(self, page):
         assert get(page).status_code == 200, f"Page {page} not serving"

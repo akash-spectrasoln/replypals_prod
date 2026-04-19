@@ -116,8 +116,7 @@
   <!-- Supabase -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
-    // ── Config ─────────────────────────────────────────────
-    // REPLACE THESE with your actual values
+    // ── Config: Supabase URL/anon loaded from GET /public-config when online; fallback for local dev ──
     const FALLBACK_SUPABASE_URL = 'https://nutchvfpcmowrlqjwkns.supabase.co';
     const apiBaseOverride = new URLSearchParams(window.location.search).get('api_base');
     const API_BASE = apiBaseOverride || window.location.origin;

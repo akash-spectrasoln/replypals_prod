@@ -704,7 +704,7 @@
         <div style="position:relative;z-index:1;">
           <div style="display:inline-block;background:rgba(255,107,53,0.3);border:1px solid rgba(255,107,53,0.6);border-radius:100px;padding:4px 16px;font-size:12px;font-weight:700;letter-spacing:0.08em;margin-bottom:16px;">🚀 UPGRADE TODAY</div>
           <h2 style="font-family:'Syne',sans-serif;font-size:28px;font-weight:800;line-height:1.2;margin-bottom:10px;">Write better English.<br>Sound more confident.</h2>
-          <p style="opacity:0.8;font-size:15px;line-height:1.6;margin-bottom:24px;max-width:480px;">You're on the free plan — 5 rewrites per session. Upgrade to unlock <strong>unlimited rewrites</strong>, voice input in 8 languages, and tone memory that learns your style.</p>
+          <p style="opacity:0.8;font-size:15px;line-height:1.6;margin-bottom:24px;max-width:480px;">You're on the free plan — limited monthly rewrites (see usage above). Upgrade to unlock <strong>unlimited rewrites</strong>, voice input in 8 languages, and tone memory that learns your style.</p>
           <button onclick="scrollToPlans()" style="background:linear-gradient(135deg,#FF6B35,#FF8C42);border:none;color:#fff;font-family:'Syne',sans-serif;font-weight:700;font-size:15px;padding:14px 32px;border-radius:12px;cursor:pointer;box-shadow:0 4px 20px rgba(255,107,53,0.5);transition:all 0.2s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='none'">
             ⚡ See Plans & Pricing →
           </button>
@@ -962,6 +962,13 @@
             window.REPLYPAL_EXTENSION_IDS = ids;
           }
           window.REPLYPAL_EXTENSION_ID = (window.REPLYPAL_EXTENSION_IDS && window.REPLYPAL_EXTENSION_IDS[0]) || '';
+          try {
+            const ext0 = (window.REPLYPAL_EXTENSION_IDS && window.REPLYPAL_EXTENSION_IDS[0]) || '';
+            if (/^[a-p]{32}$/.test(ext0)) {
+              const storeHref = `https://chromewebstore.google.com/detail/replypals/${ext0}`;
+              document.querySelectorAll('a[href*="EXTENSION_ID_HERE"]').forEach((a) => { a.href = storeHref; });
+            }
+          } catch (_) { /* ignore */ }
         }
       } catch (_) {}
       try {
@@ -1241,7 +1248,7 @@
         planEl.innerHTML = `
           <div class="plan-card free" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
             <div>
-              <div class="plan-name" style="margin-bottom:6px;">🆓 Free Plan <span style="font-size:13px;font-weight:400;color:#6B7280;">· 5 rewrites left</span></div>
+              <div class="plan-name" style="margin-bottom:6px;">🆓 Free Plan <span style="font-size:13px;font-weight:400;color:#6B7280;">· Loading usage…</span></div>
               <div style="font-size:12px;color:#6B7280;">Plan API is slow right now. You can still continue using the app.</div>
             </div>
             <button onclick="scrollToPlans()" style="background:linear-gradient(135deg,#FF6B35,#FF8C42);border:none;color:#fff;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;padding:10px 22px;border-radius:10px;cursor:pointer;">⚡ Upgrade</button>

@@ -102,7 +102,8 @@
 
         <p class="text-xs text-slate-400 text-center">
           By signing up you agree to our
-          <a href="/privacy.html" class="text-orange-500">Privacy Policy</a>
+          <a href="/privacy" class="text-orange-500">Privacy Policy</a>
+          and <a href="/terms" class="text-orange-500">Terms</a>
         </p>
       </div>
     </div>
@@ -115,6 +116,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
+    // Supabase URL/anon from GET /public-config when available
     const FALLBACK_SUPABASE_URL = 'https://nutchvfpcmowrlqjwkns.supabase.co';
     const apiBaseOverride = new URLSearchParams(window.location.search).get('api_base');
     const API_BASE = apiBaseOverride || window.location.origin;

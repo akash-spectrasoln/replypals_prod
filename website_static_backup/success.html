@@ -83,8 +83,7 @@
   </div>
 
 <script>
-  // <!-- REPLACE with your API base URL -->
-  const API_BASE = '';  // same origin — API and website served together
+  const API_BASE = '';  // same origin in production (API + static site together)
 
   const params = new URLSearchParams(window.location.search);
   const sessionId = params.get('session_id');
@@ -132,6 +131,19 @@
   });
 
   loadPayment();
+
+  (async function applyChromeStoreLinkFromConfig() {
+    try {
+      const r = await fetch(`${API_BASE}/public-config`);
+      if (!r.ok) return;
+      const cfg = await r.json();
+      const raw = cfg.chrome_extension_id || (Array.isArray(cfg.chrome_extension_ids) && cfg.chrome_extension_ids[0]) || '';
+      const ext = String(raw).trim().toLowerCase();
+      if (!/^[a-p]{32}$/.test(ext)) return;
+      const href = `https://chromewebstore.google.com/detail/replypals/${ext}`;
+      document.querySelectorAll('a[href*="EXTENSION_ID_HERE"]').forEach((a) => { a.href = href; });
+    } catch (_) { /* ignore */ }
+  })();
 </script>
 </body>
 </html>
