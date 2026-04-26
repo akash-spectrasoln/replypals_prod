@@ -116,6 +116,18 @@ class TestQuotaCrossEndpointConsistency:
         assert used >= 0
         assert left == max(0, lim - used)
 
+    def test_free_usage_email_uses_quota_contract_shape(self):
+        r = post("/free-usage", json={"email": unique_email()})
+        assert r.status_code == 200, r.text
+        fu = r.json()
+        assert fu.get("plan") == "free"
+        assert int(fu["rewrites_limit"]) >= int(fu["monthly_base_limit"])
+        assert int(fu["rewrites_left"]) == max(0, int(fu["rewrites_limit"]) - int(fu["rewrites_used"]))
+        if fu.get("usage_source") == "usage_logs":
+            assert fu.get("source") == "email"
+            for key in ("subscription_rewrites", "credit_rewrites", "total_rewrites", "credit_balance", "reset_date"):
+                assert key in fu
+
 
 @pytest.mark.e2e
 class TestRewriteThenFreeUsageEventuallyConsistent:
@@ -171,6 +183,10 @@ class TestBillingAndLicenseEndpoints:
         assert "plan" in d
         assert "rewrites_this_month" in d
         assert "limit" in d or d.get("limit") is None
+        if d.get("source") == "usage_logs":
+            assert int(d["rewrites_this_month"]) == int(d.get("subscription_rewrites", 0))
+            for key in ("credit_rewrites", "total_rewrites", "credit_balance", "rewrites_left", "reset_date"):
+                assert key in d
 
 
 @pytest.mark.e2e
@@ -188,6 +204,19 @@ class TestAdminDashboardNumbers:
         data = r.json()
         for key in ("total_users", "active_licenses", "rewrites_today", "mrr"):
             assert isinstance(data[key], (int, float)), f"{key} must be numeric, got {data[key]!r}"
+
+    def test_react_admin_stats_plan_breakdown_has_all_paid_buckets(self):
+        tok = admin_token()
+        if not tok:
+            pytest.skip("Admin login failed — set ADMIN_USERNAME / ADMIN_PASSWORD")
+        r = get("/admin/stats", headers={"Authorization": f"Bearer {tok}"})
+        if r.status_code == 401:
+            pytest.skip("Admin auth rejected")
+        assert r.status_code == 200, r.text
+        breakdown = r.json().get("plan_breakdown") or {}
+        for key in ("anon", "free", "starter", "pro", "growth", "team", "enterprise"):
+            assert key in breakdown
+            assert isinstance(breakdown[key], int)
 
 
 @pytest.mark.e2e

@@ -1,13 +1,16 @@
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 
-const COLORS = ['#94a3b8', '#22c55e', '#6366f1', '#f97316']
+const COLORS = ['#94a3b8', '#22c55e', '#38bdf8', '#6366f1', '#a855f7', '#f97316', '#14b8a6']
 
 export function PlanBreakdownPieChart({ breakdown = {} }) {
   const chartData = [
     { name: 'Anonymous', value: breakdown.anon ?? 0 },
     { name: 'Free', value: breakdown.free ?? 0 },
+    { name: 'Starter', value: breakdown.starter ?? 0 },
     { name: 'Pro', value: breakdown.pro ?? 0 },
+    { name: 'Growth', value: breakdown.growth ?? 0 },
     { name: 'Team', value: breakdown.team ?? 0 },
+    { name: 'Enterprise', value: breakdown.enterprise ?? 0 },
   ]
 
   return (

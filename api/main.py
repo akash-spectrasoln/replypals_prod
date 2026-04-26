@@ -109,7 +109,9 @@ from billing_usage import (
     extract_request_identity,
     get_anon_total_used,
     increment_anon_usage,
+    quota_snapshot_for_identity,
     record_rewrite_usage,
+    resolve_usage_user_id,
     ensure_user_profile_row,
     today_total_cost_usd,
     apply_cost_pause,
@@ -159,48 +161,41 @@ def _free_monthly_cap_from_db() -> int:
 
 async def _free_monthly_used_llm_logs(user_id: Optional[str], identity_email: str) -> int:
     """
-    Rolling 30-day successful rewrites from llm_call_logs, deduped by row id across
-    user_id and email (same semantics as admin user list + /free-usage enforcement).
+    Calendar-month free subscription rewrites from usage_logs, matching enforcement.
+    Falls back to llm_call_logs only for legacy deployments where usage_logs is absent.
     """
     if not supabase:
         return 0
-    from dateutil.relativedelta import relativedelta
+    resolved_uid = resolve_usage_user_id(auth_user_id=user_id, email=identity_email)
+    if resolved_uid:
+        try:
+            snap = await quota_snapshot_for_identity(
+                supabase,
+                _sb_execute,
+                resolved_user_id=resolved_uid,
+                email=identity_email,
+                plan="free",
+            )
+            return int(snap.get("rewrites_used") or 0)
+        except Exception:
+            pass
 
-    window_start = (datetime.now(timezone.utc) - relativedelta(months=1)).isoformat()
-    seen_ids = set()
+    month_start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
     try:
-        if user_id:
-            r_uid = await _sb_execute(
-                supabase.table("llm_call_logs")
-                .select("id")
-                .eq("status", "success")
-                .eq("user_id", user_id)
-                .gte("created_at", window_start)
-                .limit(5000),
-                timeout_sec=4.0,
-            )
-            for row in (r_uid.data or []):
-                rid = row.get("id")
-                if rid is not None:
-                    seen_ids.add(rid)
         em = (identity_email or "").strip().lower()
-        if em:
-            r_em = await _sb_execute(
-                supabase.table("llm_call_logs")
-                .select("id")
-                .eq("status", "success")
-                .eq("email", em)
-                .gte("created_at", window_start)
-                .limit(5000),
-                timeout_sec=4.0,
-            )
-            for row in (r_em.data or []):
-                rid = row.get("id")
-                if rid is not None:
-                    seen_ids.add(rid)
+        if not em:
+            return 0
+        r_em = await _sb_execute(
+            supabase.table("llm_call_logs")
+            .select("id", count="exact")
+            .eq("status", "success")
+            .eq("email", em)
+            .gte("created_at", month_start),
+            timeout_sec=4.0,
+        )
+        return int(r_em.count or 0)
     except Exception:
         return 0
-    return len(seen_ids)
 
 
 def _plan_policy_limits() -> dict:
@@ -417,6 +412,7 @@ async def call_ai_model(
                         if event_id:
                             dup = supabase.table("llm_call_logs").select("id").eq("event_id", event_id).limit(1).execute()
                             if dup.data:
+                                ctx["_log_duplicate"] = True
                                 _usage_dbg("llm_log_dedup_skip", event_id=event_id, action=action, email=ctx.get("email"), user_id=ctx.get("user_id"))
                                 return
                         supabase.table("llm_call_logs").insert(log_row).execute()
@@ -1669,6 +1665,7 @@ def _get_license_info(license_key: str) -> dict:
                 "valid": True,
                 "plan": row.get("plan", "pro"),
                 "email": row.get("email"),
+                "user_id": row.get("user_id"),
                 "is_admin": False,
                 "brand_voice": None,
             }
@@ -2920,7 +2917,6 @@ async def check_usage(body: CheckUsageRequest):
 
     plan = info.get("plan", "pro")
     now = datetime.now(timezone.utc)
-    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
     # Next month first day
     if now.month == 12:
@@ -2938,76 +2934,34 @@ async def check_usage(body: CheckUsageRequest):
 
     try:
         snap = await get_commerce_snapshot(supabase, _sb_execute)
-        result["limit"] = plan_monthly_cap(snap, plan, 0)
+        resolved_uid = resolve_usage_user_id(
+            auth_user_id=info.get("user_id"),
+            email=info.get("email"),
+            license_key=body.license_key,
+        )
+        quota = await quota_snapshot_for_identity(
+            supabase,
+            _sb_execute,
+            resolved_user_id=resolved_uid,
+            email=info.get("email"),
+            plan=plan,
+            snap=snap,
+        )
+        result.update(
+            {
+                "rewrites_this_month": int(quota.get("rewrites_used") or 0),
+                "subscription_rewrites": int(quota.get("subscription_rewrites") or 0),
+                "credit_rewrites": int(quota.get("credit_rewrites") or 0),
+                "total_rewrites": int(quota.get("total_rewrites") or 0),
+                "credit_balance": int(quota.get("credit_balance") or 0),
+                "limit": quota.get("rewrites_limit"),
+                "rewrites_left": quota.get("rewrites_left"),
+                "reset_date": quota.get("reset_date") or reset_date.isoformat(),
+                "source": quota.get("source", "usage_logs"),
+            }
+        )
     except Exception:
         result["limit"] = _plan_policy_limits().get(plan, {}).get("default_limit", 50)
-
-    try:
-        # Team usage should aggregate across admin key + all member keys.
-        if plan == "team" and info.get("team_id"):
-            key_set = {body.license_key}
-            try:
-                tr = await _sb_execute(
-                    supabase.table("teams")
-                    .select("license_key")
-                    .eq("id", info["team_id"])
-                    .maybe_single(),
-                    timeout_sec=3.0,
-                )
-                if tr and tr.data and tr.data.get("license_key"):
-                    key_set.add(tr.data["license_key"])
-            except Exception:
-                pass
-            try:
-                mr = await _sb_execute(
-                    supabase.table("team_members")
-                    .select("member_key")
-                    .eq("team_id", info["team_id"]),
-                    timeout_sec=3.0,
-                )
-                for row in (mr.data or []):
-                    mk = (row.get("member_key") or "").strip()
-                    if mk:
-                        key_set.add(mk)
-            except Exception:
-                pass
-
-            cnt_total = 0
-            for lk in key_set:
-                c = await _sb_execute(
-                    supabase.table("llm_call_logs")
-                    .select("id", count="exact")
-                    .eq("license_key", lk)
-                    .eq("status", "success")
-                    .gte("created_at", month_start.isoformat()),
-                    timeout_sec=4.0,
-                )
-                cnt_total += int(c.count or 0)
-            result["rewrites_this_month"] = cnt_total
-        else:
-            # Prefer key-based count; fallback to email for older rows.
-            cnt = await _sb_execute(
-                supabase.table("llm_call_logs")
-                .select("id", count="exact")
-                .eq("license_key", body.license_key)
-                .eq("status", "success")
-                .gte("created_at", month_start.isoformat()),
-                timeout_sec=4.0,
-            )
-            used = int(cnt.count or 0)
-            if used == 0 and info.get("email"):
-                c2 = await _sb_execute(
-                    supabase.table("llm_call_logs")
-                    .select("id", count="exact")
-                    .eq("email", str(info["email"]).strip().lower())
-                    .eq("status", "success")
-                    .gte("created_at", month_start.isoformat()),
-                    timeout_sec=4.0,
-                )
-                used = int(c2.count or 0)
-            result["rewrites_this_month"] = used
-    except Exception:
-        pass
 
     return result
 
@@ -3529,6 +3483,8 @@ async def _after_llm_usage(rate: dict) -> None:
     """usage_logs + cost guardrail from ``system_config`` (estimated daily cost → pause + alert)."""
     if not supabase or rate.get("degraded"):
         return
+    if rate.get("_log_duplicate"):
+        return
     if rate.get("anon_only") and rate.get("anon_id"):
         await increment_anon_usage(supabase, _sb_execute, str(rate["anon_id"]))
         return
@@ -3783,15 +3739,39 @@ async def account_status(authorization: str = Header(None)):
 
         if license_result.data:
             lic = license_result.data[0]
-            _dash_dbg("account_status paid", plan=lic.get("plan", "pro"), active=bool(lic.get("active", True)))
+            plan = lic.get("plan", "pro")
+            resolved_uid = resolve_usage_user_id(
+                auth_user_id=user_id or lic.get("user_id"),
+                email=email_lower or lic.get("email"),
+                license_key=lic.get("license_key"),
+            )
+            quota = await quota_snapshot_for_identity(
+                supabase,
+                _sb_execute,
+                resolved_user_id=resolved_uid,
+                email=email_lower or lic.get("email"),
+                plan=plan,
+            )
+            _dash_dbg(
+                "account_status paid",
+                plan=plan,
+                active=bool(lic.get("active", True)),
+                rewrites_used=quota.get("rewrites_used"),
+            )
             return {
-                "plan":        lic.get("plan", "pro"),
-                "active":      True,
+                "plan": plan,
+                "active": True,
                 "license_key": lic.get("license_key", "")[:8] + "••••••••",
-                "renews_at":   lic.get("renews_at"),
-                "rewrites_used": lic.get("rewrites_used", 0),
-                "rewrites_limit": lic.get("rewrites_limit", -1),
-                "reset_date": lic.get("reset_date")
+                "renews_at": lic.get("renews_at"),
+                "rewrites_used": quota.get("rewrites_used", 0),
+                "rewrites_limit": quota.get("rewrites_limit", -1),
+                "rewrites_left": quota.get("rewrites_left"),
+                "subscription_rewrites": quota.get("subscription_rewrites", 0),
+                "credit_rewrites": quota.get("credit_rewrites", 0),
+                "total_rewrites": quota.get("total_rewrites", 0),
+                "credit_balance": quota.get("credit_balance", 0),
+                "reset_date": quota.get("reset_date") or lic.get("reset_date"),
+                "source": quota.get("source", "usage_logs"),
             }
 
         # Free tier: usage from llm_call_logs (same source as admin + /free-usage), not free_users.rewrites_used
@@ -3807,17 +3787,33 @@ async def account_status(authorization: str = Header(None)):
         if free_result.data:
             bonus = int(free_result.data[0].get("bonus_rewrites") or 0)
 
-        rewrites_used = await _free_monthly_used_llm_logs(user_id, email_lower)
-        base_cap = _free_monthly_cap_from_db()
+        resolved_uid = resolve_usage_user_id(auth_user_id=user_id, email=email_lower)
+        quota = await quota_snapshot_for_identity(
+            supabase,
+            _sb_execute,
+            resolved_user_id=resolved_uid,
+            email=email_lower,
+            plan="free",
+            bonus_rewrites=bonus,
+        )
+        rewrites_used = int(quota.get("rewrites_used") or 0)
+        base_cap = int(quota.get("monthly_base_limit") or _free_monthly_cap_from_db())
         _dash_dbg("account_status free", rewrites_used=rewrites_used, bonus=bonus)
 
         return {
             "plan":               "free",
             "active":             False,
             "rewrites_used":      rewrites_used,
-            "rewrites_limit":     base_cap + bonus,
+            "rewrites_limit":     quota.get("rewrites_limit", base_cap + bonus),
+            "rewrites_left":      quota.get("rewrites_left"),
             "monthly_base_limit": base_cap,
             "bonus_rewrites":     bonus,
+            "subscription_rewrites": quota.get("subscription_rewrites", rewrites_used),
+            "credit_rewrites":    quota.get("credit_rewrites", 0),
+            "total_rewrites":     quota.get("total_rewrites", rewrites_used),
+            "credit_balance":     quota.get("credit_balance", 0),
+            "reset_date":         quota.get("reset_date"),
+            "source":             quota.get("source", "usage_logs"),
         }
     except Exception as e:
         _mark_supabase_down(e)
@@ -4135,8 +4131,11 @@ async def free_usage_status(
       so the extension still upgrades from anon → free after signup without relying on localStorage email.
     """
     raw_email = (body.email or "").strip().lower()
+    auth_user_id = ""
+    u = get_user_from_token(authorization or "")
+    if u:
+        auth_user_id = (u.get("sub") or "").strip()
     if not raw_email:
-        u = get_user_from_token(authorization or "")
         if u:
             em = (u.get("email") or "").strip().lower()
             if em and not em.endswith("@replypal.internal"):
@@ -4228,25 +4227,18 @@ async def free_usage_status(
     except Exception:
         bonus = 0
 
-    month_start = datetime.now(timezone.utc).replace(
-        day=1, hour=0, minute=0, second=0, microsecond=0
-    ).isoformat()
-    used = 0
-    try:
-        cnt = await _sb_execute(
-            supabase.table("llm_call_logs")
-            .select("id", count="exact")
-            .eq("email", identity_email)
-            .eq("status", "success")
-            .gte("created_at", month_start),
-            timeout_sec=4.0
-        )
-        used = int(cnt.count or 0)
-    except Exception:
-        used = 0
-
-    base_cap = _free_monthly_cap_from_db()
-    limit = base_cap + bonus
+    resolved_uid = resolve_usage_user_id(auth_user_id=auth_user_id, email=identity_email)
+    quota = await quota_snapshot_for_identity(
+        supabase,
+        _sb_execute,
+        resolved_user_id=resolved_uid,
+        email=identity_email,
+        plan="free",
+        bonus_rewrites=bonus,
+    )
+    used = int(quota.get("rewrites_used") or 0)
+    base_cap = int(quota.get("monthly_base_limit") or _free_monthly_cap_from_db())
+    limit = int(quota.get("rewrites_limit") or (base_cap + bonus))
     _usage_dbg(
         "free_usage_fetch",
         path="db",
@@ -4261,10 +4253,16 @@ async def free_usage_status(
         "plan": "free",
         "rewrites_used": used,
         "rewrites_limit": limit,
-        "rewrites_left": max(0, limit - used),
+        "rewrites_left": quota.get("rewrites_left", max(0, limit - used)),
         "source": "email",
         "bonus_rewrites": bonus,
         "monthly_base_limit": base_cap,
+        "subscription_rewrites": quota.get("subscription_rewrites", used),
+        "credit_rewrites": quota.get("credit_rewrites", 0),
+        "total_rewrites": quota.get("total_rewrites", used),
+        "credit_balance": quota.get("credit_balance", 0),
+        "reset_date": quota.get("reset_date"),
+        "usage_source": quota.get("source", "usage_logs"),
     }
 
 

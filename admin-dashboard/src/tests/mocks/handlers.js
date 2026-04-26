@@ -21,7 +21,7 @@ export const mockStats = {
     const d = new Date(Date.UTC(2026, 2, 1 + i))
     return { date: d.toISOString().slice(0, 10), count: 10 + i }
   }),
-  plan_breakdown: { anon: 100, free: 800, pro: 250, team: 50 },
+  plan_breakdown: { anon: 100, free: 760, starter: 40, pro: 250, growth: 20, team: 50, enterprise: 2 },
 }
 
 export const mockUsers = {

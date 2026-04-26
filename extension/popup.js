@@ -438,17 +438,15 @@
   // ─── Usage Display ───
   function updateUsageDisplay() {
     if (licenseKey && currentPlan) {
-      if (currentPlan === 'pro') {
-        usageText.textContent = 'Unlimited ✨';
+      const planLabel = String(currentPlan || 'pro').charAt(0).toUpperCase() + String(currentPlan || 'pro').slice(1);
+      if (typeof replypalRewritesLimit === 'number' && replypalRewritesLimit > 0) {
+        usageText.textContent = `${planLabel}: ${useCount} / ${replypalRewritesLimit} this month`;
         usageBadge.classList.add('pro');
-      } else if (currentPlan === 'team') {
-        usageText.textContent = 'Team · Unlimited';
-        usageBadge.classList.add('pro');
-      } else if (currentPlan === 'starter') {
-        usageText.textContent = 'Starter';
+      } else if (typeof replypalRewritesLimit === 'number' && replypalRewritesLimit < 0) {
+        usageText.textContent = `${planLabel} · Unlimited`;
         usageBadge.classList.add('pro');
       } else {
-        usageText.textContent = 'PRO';
+        usageText.textContent = planLabel;
         usageBadge.classList.add('pro');
       }
     } else if (licenseKey) {

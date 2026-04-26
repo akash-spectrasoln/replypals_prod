@@ -30,6 +30,14 @@ function mergedLeft({ plan, snapLeft, limit, mergedUsed }) {
   return Math.max(0, Number(limit || 0) - mergedUsed);
 }
 
+function paidUsageLabel({ plan, used, limit }) {
+  const p = String(plan || 'pro');
+  const label = p.charAt(0).toUpperCase() + p.slice(1);
+  if (typeof limit === 'number' && limit > 0) return `${label}: ${used} / ${limit} this month`;
+  if (typeof limit === 'number' && limit < 0) return `${label} · Unlimited`;
+  return label;
+}
+
 console.log('\n── Quota merge (extension parity) ───────────────────────────────');
 
 assert(
@@ -51,6 +59,14 @@ assert(
 assert(
   mergedLeft({ plan: 'free', snapLeft: undefined, limit: 10, mergedUsed: 3 }) === 7,
   'derive left from limit - used'
+);
+assert(
+  paidUsageLabel({ plan: 'pro', used: 12, limit: 300 }) === 'Pro: 12 / 300 this month',
+  'paid capped plans show DB-backed monthly usage'
+);
+assert(
+  paidUsageLabel({ plan: 'enterprise', used: 12, limit: -1 }) === 'Enterprise · Unlimited',
+  'unlimited plans still render as unlimited'
 );
 
 console.log(`\n${passed} passed, ${failed} failed`);

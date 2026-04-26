@@ -289,7 +289,7 @@ async def admin_dashboard_stats(admin=Depends(require_admin)):
         "active_users_today": 0,
         "pro_subscribers": 0,
         "daily_rewrites": [],
-        "plan_breakdown": {"anon": 0, "free": 0, "pro": 0, "team": 0},
+        "plan_breakdown": {"anon": 0, "free": 0, "starter": 0, "pro": 0, "growth": 0, "team": 0, "enterprise": 0},
     }
     if not supabase:
         return empty
@@ -383,7 +383,7 @@ async def admin_dashboard_stats(admin=Depends(require_admin)):
             cnt = 0
         daily_rewrites.append({"date": day.isoformat(), "count": cnt})
 
-    plan_breakdown = {"anon": 0, "free": 0, "pro": 0, "team": 0}
+    plan_breakdown = {"anon": 0, "free": 0, "starter": 0, "pro": 0, "growth": 0, "team": 0, "enterprise": 0}
     try:
         pr_res = supabase.table("user_profiles").select("email,id").limit(20000).execute()
         lic_res = supabase.table("licenses").select("email,user_id,plan,active").eq("active", True).limit(20000).execute()
@@ -398,10 +398,8 @@ async def admin_dashboard_stats(admin=Depends(require_admin)):
                 continue
             lic = lic_by_uid.get(uid) or lic_by_email.get(p.get("email"))
             pl = str((lic or {}).get("plan", "free")).lower()
-            if pl == "pro":
-                plan_breakdown["pro"] += 1
-            elif pl == "team":
-                plan_breakdown["team"] += 1
+            if pl in plan_breakdown and pl != "anon":
+                plan_breakdown[pl] += 1
             else:
                 plan_breakdown["free"] += 1
     except Exception:
@@ -569,7 +567,8 @@ async def list_users(
     plan: Optional[str] = Query(None),
     admin=Depends(require_admin),
 ):
-    from main import supabase, _free_monthly_cap_from_db
+    from main import supabase, _free_monthly_cap_from_db, _sb_execute
+    from billing_usage import quota_snapshot_for_identity, resolve_usage_user_id
     if not supabase:
         return {
             "users": [], "total": 0, "page": page, "limit": limit,
@@ -690,10 +689,8 @@ async def list_users(
             if email_l.startswith("anon_") and email_l.endswith("@replypal.internal"):
                 return "anon"
             pl = str(u.get("plan") or "free").lower()
-            if pl == "pro":
-                return "pro"
-            if pl == "team":
-                return "team"
+            if pl in ("starter", "pro", "growth", "team", "enterprise"):
+                return pl
             return "free"
 
         dash_filtered = []
@@ -718,64 +715,24 @@ async def list_users(
             total_ct = 0
             month_ct = 0
             try:
-                seen_ids = set()
-                if uid:
-                    r_uid = (
-                        supabase.table("llm_call_logs")
-                        .select("id")
-                        .eq("status", "success")
-                        .eq("user_id", uid)
-                        .limit(8000)
-                        .execute()
+                if em.startswith("anon_") and em.endswith("@replypal.internal"):
+                    total_res = supabase.table("llm_call_logs").select("id", count="exact") \
+                        .eq("status", "success").eq("email", em).execute()
+                    month_res = supabase.table("llm_call_logs").select("id", count="exact") \
+                        .eq("status", "success").eq("email", em).gte("created_at", month_start_d).execute()
+                    total_ct = int(total_res.count or 0)
+                    month_ct = int(month_res.count or 0)
+                else:
+                    resolved_uid = resolve_usage_user_id(auth_user_id=uid, email=em)
+                    quota = await quota_snapshot_for_identity(
+                        supabase,
+                        _sb_execute,
+                        resolved_user_id=resolved_uid,
+                        email=em,
+                        plan=str(u.get("plan") or "free").lower(),
                     )
-                    for row in r_uid.data or []:
-                        rid = row.get("id")
-                        if rid is not None:
-                            seen_ids.add(rid)
-                if em:
-                    r_em = (
-                        supabase.table("llm_call_logs")
-                        .select("id")
-                        .eq("status", "success")
-                        .eq("email", em)
-                        .limit(8000)
-                        .execute()
-                    )
-                    for row in r_em.data or []:
-                        rid = row.get("id")
-                        if rid is not None:
-                            seen_ids.add(rid)
-                total_ct = len(seen_ids)
-                seen_m = set()
-                if uid:
-                    r_uid = (
-                        supabase.table("llm_call_logs")
-                        .select("id")
-                        .eq("status", "success")
-                        .eq("user_id", uid)
-                        .gte("created_at", month_start_d)
-                        .limit(8000)
-                        .execute()
-                    )
-                    for row in r_uid.data or []:
-                        rid = row.get("id")
-                        if rid is not None:
-                            seen_m.add(rid)
-                if em:
-                    r_em = (
-                        supabase.table("llm_call_logs")
-                        .select("id")
-                        .eq("status", "success")
-                        .eq("email", em)
-                        .gte("created_at", month_start_d)
-                        .limit(8000)
-                        .execute()
-                    )
-                    for row in r_em.data or []:
-                        rid = row.get("id")
-                        if rid is not None:
-                            seen_m.add(rid)
-                month_ct = len(seen_m)
+                    month_ct = int(quota.get("rewrites_used") or 0)
+                    total_ct = int(quota.get("total_rewrites") or month_ct)
             except Exception:
                 pass
             st = "active" if u.get("active", True) else "inactive"
@@ -843,64 +800,33 @@ async def list_users(
     offset = (page - 1) * limit
     page_data = filtered[offset:offset+limit]
 
-    # Recompute usage from llm_call_logs (source-of-truth) for visible page.
+    # Recompute quota usage from usage_logs for visible page.
     # This avoids stale cache values in free_users/licenses rewrite counters.
     try:
-        from datetime import datetime, timezone
-        month_start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
         for u in page_data:
             plan = (u.get("plan") or "free").lower()
-            if plan in ("pro", "team"):
-                # Unlimited plans: keep display simple.
-                u["rewrites_used"] = 0
-                u["rewrites_limit"] = -1
-                continue
-
-            if plan == "starter":
-                # Starter is monthly-capped by license key if available.
-                lk = None
-                lic = lic_by_uid.get(u.get("user_id")) or lic_by_email.get(u.get("email"))
-                if lic:
-                    lk = lic.get("license_key")
-                if lk:
-                    c = supabase.table("llm_call_logs").select("id", count="exact") \
-                        .eq("status", "success").eq("license_key", lk).gte("created_at", month_start).execute()
-                    u["rewrites_used"] = c.count or 0
-                continue
-
-            # Free users: all successful calls in rolling 30-day window by user_id/email.
-            # (matches entitlement semantics in check_rate_limit)
-            from dateutil.relativedelta import relativedelta
-            window_start = (datetime.now(timezone.utc) - relativedelta(months=1)).isoformat()
-            # Count by both user_id and email, then dedupe by log row id.
-            # This captures usage across pre-signup (email/anon) and post-signup (user_id) phases.
-            seen_ids = set()
             uid = u.get("user_id")
             em = (u.get("email") or "").strip().lower()
-            if uid:
-                r_uid = supabase.table("llm_call_logs").select("id") \
-                    .eq("status", "success").eq("user_id", uid).gte("created_at", window_start) \
-                    .limit(5000).execute()
-                for row in (r_uid.data or []):
-                    rid = row.get("id")
-                    if rid is not None:
-                        seen_ids.add(rid)
-            if em:
-                r_em = supabase.table("llm_call_logs").select("id") \
-                    .eq("status", "success").eq("email", em).gte("created_at", window_start) \
-                    .limit(5000).execute()
-                for row in (r_em.data or []):
-                    rid = row.get("id")
-                    if rid is not None:
-                        seen_ids.add(rid)
-            u["rewrites_used"] = len(seen_ids)
-            fu_row = None
-            if uid:
-                fu_row = free_by_uid.get(uid)
-            if not fu_row and em:
-                fu_row = free_by_email.get(em)
-            bsum = int((fu_row or {}).get("bonus_rewrites") or 0)
-            u["rewrites_limit"] = free_cap + bsum
+            if em.startswith("anon_") and em.endswith("@replypal.internal"):
+                month_start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
+                c = supabase.table("llm_call_logs").select("id", count="exact") \
+                    .eq("status", "success").eq("email", em).gte("created_at", month_start).execute()
+                u["rewrites_used"] = int(c.count or 0)
+                u["rewrites_limit"] = 3
+                continue
+            resolved_uid = resolve_usage_user_id(auth_user_id=uid, email=em)
+            quota = await quota_snapshot_for_identity(
+                supabase,
+                _sb_execute,
+                resolved_user_id=resolved_uid,
+                email=em,
+                plan=plan,
+            )
+            u["rewrites_used"] = int(quota.get("rewrites_used") or 0)
+            u["rewrites_limit"] = quota.get("rewrites_limit", u.get("rewrites_limit"))
+            u["subscription_rewrites"] = int(quota.get("subscription_rewrites") or 0)
+            u["credit_rewrites"] = int(quota.get("credit_rewrites") or 0)
+            u["credit_balance"] = int(quota.get("credit_balance") or 0)
     except Exception:
         # Keep page available even if live recount fails.
         pass
@@ -912,7 +838,8 @@ async def list_users(
 
 @router.get("/users/{user_id}")
 async def get_user_detail(user_id: str, request: Request, admin=Depends(require_admin)):
-    from main import supabase, _free_monthly_cap_from_db, _free_monthly_used_llm_logs
+    from main import supabase, _sb_execute
+    from billing_usage import quota_snapshot_for_identity, resolve_usage_user_id
     if not supabase:
         raise HTTPException(500, "DB not configured")
         
@@ -982,27 +909,29 @@ async def get_user_detail(user_id: str, request: Request, admin=Depends(require_
     # Source-of-truth usage for detail view
     rewrites_used = 0
     rewrites_limit = 0
+    subscription_rewrites = 0
+    credit_rewrites = 0
+    credit_balance = 0
     try:
-        from datetime import datetime, timezone
         plan = (lic_data.get("plan") or "free").lower() if lic_data else "free"
-        if plan in ("pro", "team"):
-            rewrites_used = 0
-            rewrites_limit = -1
-        elif plan == "starter":
-            rewrites_limit = int(lic_data.get("rewrites_limit") or 50)
-            lk = lic_data.get("license_key")
-            if lk:
-                c = supabase.table("llm_call_logs").select("id", count="exact") \
-                    .eq("status", "success").eq("license_key", lk) \
-                    .gte("created_at", datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()) \
-                    .execute()
-                rewrites_used = c.count or 0
-        else:
-            em_low = (email or "").strip().lower()
-            rewrites_used = await _free_monthly_used_llm_logs(profile.get("id"), em_low)
-            rewrites_limit = _free_monthly_cap_from_db() + int(
-                (free_data.get("bonus_rewrites") or 0) if free_data else 0
-            )
+        em_low = (email or "").strip().lower()
+        resolved_uid = resolve_usage_user_id(
+            auth_user_id=profile.get("id") or user_id,
+            email=em_low,
+            license_key=lic_data.get("license_key"),
+        )
+        quota = await quota_snapshot_for_identity(
+            supabase,
+            _sb_execute,
+            resolved_user_id=resolved_uid,
+            email=em_low,
+            plan=plan,
+        )
+        rewrites_used = int(quota.get("rewrites_used") or 0)
+        rewrites_limit = quota.get("rewrites_limit", 0)
+        subscription_rewrites = int(quota.get("subscription_rewrites") or 0)
+        credit_rewrites = int(quota.get("credit_rewrites") or 0)
+        credit_balance = int(quota.get("credit_balance") or 0)
     except Exception:
         pass
         
@@ -1015,6 +944,9 @@ async def get_user_detail(user_id: str, request: Request, admin=Depends(require_
         "api_logs": api_logs,
         "rewrites_used": rewrites_used,
         "rewrites_limit": rewrites_limit,
+        "subscription_rewrites": subscription_rewrites,
+        "credit_rewrites": credit_rewrites,
+        "credit_balance": credit_balance,
     }
 
 

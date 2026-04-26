@@ -262,6 +262,44 @@ def _month_key(d: Optional[date] = None) -> str:
     return f"{d.year:04d}-{d.month:02d}"
 
 
+def current_month_key() -> str:
+    """Public calendar-month key used by quota display endpoints."""
+    return _month_key()
+
+
+def next_month_reset_iso() -> str:
+    """UTC ISO timestamp for the next calendar-month quota reset."""
+    now = datetime.now(timezone.utc)
+    if now.month == 12:
+        return now.replace(year=now.year + 1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
+    return now.replace(month=now.month + 1, day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
+
+
+def resolve_usage_user_id(
+    *,
+    auth_user_id: Optional[str] = None,
+    email: Optional[str] = None,
+    license_key: Optional[str] = None,
+) -> Optional[str]:
+    """Resolve the stable usage_logs user_id used by quota enforcement."""
+    resolved = _resolved_uid_from_auth_sub(auth_user_id)
+    if resolved:
+        return resolved
+    em = (email or "").strip().lower()
+    if em:
+        try:
+            return str(uuid.uuid5(uuid.NAMESPACE_DNS, f"replypals:{em}"))
+        except Exception:
+            return None
+    lk = (license_key or "").strip()
+    if lk:
+        try:
+            return str(uuid.uuid5(uuid.NAMESPACE_DNS, f"replypals:key:{lk}"))
+        except Exception:
+            return None
+    return None
+
+
 def _seconds_until_end_of_day_utc() -> int:
     now = datetime.now(timezone.utc)
     tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
@@ -488,6 +526,126 @@ async def _fetch_user_billing_row(
         return getattr(r, "data", None) if r is not None else None
     except Exception:
         return None
+
+
+async def _free_bonus_rewrites(
+    supabase: Any,
+    sb_execute: Callable,
+    *,
+    user_id: Optional[str],
+    email: Optional[str],
+) -> int:
+    if not supabase:
+        return 0
+    em = (email or "").strip().lower()
+    try:
+        if user_id:
+            r = await _exec_sb(
+                supabase.table("free_users")
+                .select("bonus_rewrites")
+                .eq("user_id", user_id)
+                .maybe_single(),
+                sb_execute,
+            )
+            if r and getattr(r, "data", None):
+                return int(r.data.get("bonus_rewrites") or 0)
+        if em:
+            r2 = await _exec_sb(
+                supabase.table("free_users")
+                .select("bonus_rewrites")
+                .eq("email", em)
+                .maybe_single(),
+                sb_execute,
+            )
+            if r2 and getattr(r2, "data", None):
+                return int(r2.data.get("bonus_rewrites") or 0)
+    except Exception:
+        return 0
+    return 0
+
+
+async def quota_snapshot_for_identity(
+    supabase: Any,
+    sb_execute: Callable,
+    *,
+    resolved_user_id: Optional[str],
+    email: Optional[str] = None,
+    plan: str = "free",
+    bonus_rewrites: Optional[int] = None,
+    snap: Optional[CommerceSnapshot] = None,
+) -> dict[str, Any]:
+    """
+    Shared DB-backed quota snapshot for user-facing and admin usage displays.
+    Enforcement uses the same usage_logs aggregates in check_rate_limit_impl.
+    """
+    plan_key = (plan or "free").strip().lower()
+    if not supabase or not resolved_user_id:
+        base = 10 if plan_key == "free" else -1
+        return {
+            "plan": plan_key,
+            "resolved_user_id": resolved_user_id,
+            "rewrites_used": 0,
+            "rewrites_limit": base,
+            "rewrites_left": base if base >= 0 else None,
+            "subscription_rewrites": 0,
+            "credit_rewrites": 0,
+            "total_rewrites": 0,
+            "credit_balance": 0,
+            "monthly_base_limit": base if plan_key == "free" else None,
+            "bonus_rewrites": 0,
+            "reset_date": next_month_reset_iso(),
+            "reset_in": format_reset_days_month_utc(),
+            "source": "usage_logs",
+        }
+
+    snapshot = snap or await get_commerce_snapshot(supabase, sb_execute)
+    if plan_key not in snapshot.plans:
+        plan_key = "free"
+
+    bonus = int(bonus_rewrites) if bonus_rewrites is not None else 0
+    if plan_key == "free" and bonus_rewrites is None:
+        bonus = await _free_bonus_rewrites(
+            supabase,
+            sb_execute,
+            user_id=resolved_user_id,
+            email=email,
+        )
+
+    base_cap = plan_monthly_cap(snapshot, plan_key, 0)
+    cap = base_cap
+    if plan_key == "free" and cap is not None:
+        cap = int(cap) + max(0, bonus)
+
+    month = _month_key()
+    subscription_used = await _sum_subscription_rewrites_month(
+        supabase, sb_execute, resolved_user_id, month
+    )
+    total_used, _month_cost = await _sum_usage_for_month(
+        supabase, sb_execute, resolved_user_id, month
+    )
+    credit_used = max(0, int(total_used) - int(subscription_used))
+    billing = await _fetch_user_billing_row(supabase, sb_execute, resolved_user_id)
+    credit_balance = int((billing or {}).get("credit_balance") or 0)
+
+    limit_value = -1 if cap is None else int(cap)
+    rewrites_left = None if cap is None else max(0, int(cap) - int(subscription_used))
+
+    return {
+        "plan": plan_key,
+        "resolved_user_id": resolved_user_id,
+        "rewrites_used": int(subscription_used),
+        "rewrites_limit": limit_value,
+        "rewrites_left": rewrites_left,
+        "subscription_rewrites": int(subscription_used),
+        "credit_rewrites": int(credit_used),
+        "total_rewrites": int(total_used),
+        "credit_balance": credit_balance,
+        "monthly_base_limit": base_cap if base_cap is not None else None,
+        "bonus_rewrites": max(0, bonus),
+        "reset_date": next_month_reset_iso(),
+        "reset_in": format_reset_days_month_utc(),
+        "source": "usage_logs",
+    }
 
 
 async def _sum_usage_for_month(

@@ -161,8 +161,11 @@ export function UsersPage() {
               <option value="all">All plans</option>
               <option value="anon">Anonymous</option>
               <option value="free">Free</option>
+              <option value="starter">Starter</option>
               <option value="pro">Pro</option>
+              <option value="growth">Growth</option>
               <option value="team">Team</option>
+              <option value="enterprise">Enterprise</option>
             </select>
             <Button type="button" variant="secondary" onClick={() => queryClient.invalidateQueries({ queryKey: ['admin-users'] })}>
               Refresh

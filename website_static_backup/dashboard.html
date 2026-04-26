@@ -1391,6 +1391,20 @@
             : (dynamicLabel
               ? `${dynamicLabel} · All features unlocked`
               : 'All features unlocked');
+          const paidLimit = Number(data.rewrites_limit);
+          const paidUsed = Number(data.rewrites_used || 0);
+          const paidLeft = typeof data.rewrites_left === 'number' ? data.rewrites_left : Math.max(0, paidLimit - paidUsed);
+          const hasPaidCap = Number.isFinite(paidLimit) && paidLimit > 0;
+          const paidPct = hasPaidCap ? Math.min(100, Math.round((paidUsed / paidLimit) * 100)) : 0;
+          const creditBits = Number(data.credit_balance || 0) > 0
+            ? ` · ${Number(data.credit_balance || 0)} credits available`
+            : '';
+          const paidUsageHtml = hasPaidCap
+            ? `<div style="width:220px;height:8px;background:#EAECF4;border-radius:8px;overflow:hidden;margin:8px 0 4px;">
+                 <div style="width:${paidPct}%;height:100%;background:#FF6B35;border-radius:8px;transition:width 0.5s;"></div>
+               </div>
+               <div style="font-size:12px;color:#6B7280;">${paidUsed} of ${paidLimit} subscription rewrites used · ${paidLeft} left${creditBits}</div>`
+            : `<div style="font-size:12px;color:#6B7280;margin-top:6px;">${paidUsed} subscription rewrites this month${creditBits}</div>`;
 
           el.innerHTML = `
             <div class="plan-card" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
@@ -1399,6 +1413,7 @@
                   <span class="plan-badge">${data.active ? 'ACTIVE' : 'INACTIVE'}</span>
                 </div>
                 <div class="plan-detail">${paidDetail}</div>
+                ${paidUsageHtml}
               </div>
               <button class="btn-outline" id="manageBillingBtn">⚙️ Manage Billing</button>
             </div>`;
