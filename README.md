@@ -324,6 +324,7 @@ Full documentation is available in the [`docs/`](docs/) folder:
 | [Regional Pricing](docs/06-regional-pricing.md) | 6-tier pricing system |
 | [Features](docs/07-features.md) | Complete feature reference |
 | [Project Structure](docs/08-project-structure.md) | Directory layout + dependencies |
+| [Test & market playbook](docs/10-test-and-market-playbook.md) | How to test every part + first users without ads |
 
 ---
 

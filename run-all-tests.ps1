@@ -7,6 +7,7 @@ pytest "tests/unit/" -v --tb=short
 
 Write-Host "`n[2/6] Extension unit tests..."
 node "tests/extension/test_extension.js"
+node "tests/extension/test_quota_merge.js"
 node "tests/extension/test-logic.js"
 node "tests/extension/test_background_format.js"
 

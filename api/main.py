@@ -2302,14 +2302,19 @@ async def generate(
 @app.get("/pricing")
 async def get_pricing(request: Request):
     """Localized subscription + credit bundle display from ``plan_config`` × PPP (DB)."""
-    ip = _client_ip(request)
-    geo_data = await _geo_country_for_ip(ip)
-    country = (geo_data.get("countryCode") or "US").upper()
-    vpn_detected = bool(geo_data.get("proxy") or geo_data.get("hosting"))
-    if vpn_detected:
-        country = "US"
-
     snap = await get_commerce_snapshot(supabase, _sb_execute)
+    global_pricing = snap.pricing_mode_global()
+    if global_pricing:
+        country = "US"
+        vpn_detected = False
+    else:
+        ip = _client_ip(request)
+        geo_data = await _geo_country_for_ip(ip)
+        country = (geo_data.get("countryCode") or "US").upper()
+        vpn_detected = bool(geo_data.get("proxy") or geo_data.get("hosting"))
+        if vpn_detected:
+            country = "US"
+
     crow, mult = resolve_country_row(snap, country)
 
     plans_out: dict = {}
@@ -2356,6 +2361,8 @@ async def get_pricing(request: Request):
         )
     else:
         note = None if mult >= 0.999 else "Pricing adjusted for your region (PPP)"
+    if global_pricing:
+        note = None
 
     return {
         "country": country,
@@ -2363,6 +2370,7 @@ async def get_pricing(request: Request):
         "currency_symbol": crow.currency_symbol,
         "exchange_rate_per_usd": crow.exchange_rate_per_usd,
         "price_multiplier": mult,
+        "pricing_mode": "global" if global_pricing else "regional",
         "plans": plans_out,
         "credit_bundles": bundles_out,
         "note": note,
@@ -2540,14 +2548,18 @@ def _normalize_plan_str(p: str) -> str:
 @app.post("/geo/detect")
 async def geo_detect(request: Request, authorization: Optional[str] = Header(None)):
     """Resolve client IP → country + PPP multiplier + localized plan/bundle prices. Optionally stores on profile."""
-    ip = _client_ip(request)
-    geo_data = await _geo_country_for_ip(ip)
-    country = (geo_data.get("countryCode") or "US").upper()
-    vpn = bool(geo_data.get("proxy") or geo_data.get("hosting"))
-    if vpn:
-        country = "US"
-
     snap = await get_commerce_snapshot(supabase, _sb_execute)
+    if snap.pricing_mode_global():
+        country = "US"
+        vpn = False
+    else:
+        ip = _client_ip(request)
+        geo_data = await _geo_country_for_ip(ip)
+        country = (geo_data.get("countryCode") or "US").upper()
+        vpn = bool(geo_data.get("proxy") or geo_data.get("hosting"))
+        if vpn:
+            country = "US"
+
     crow, mult = resolve_country_row(snap, country)
 
     localized_prices: dict = {}

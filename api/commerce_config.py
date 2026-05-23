@@ -106,6 +106,13 @@ class CommerceSnapshot:
     def maintenance_mode(self) -> bool:
         return str(self.system.get("maintenance_mode") or "").lower() in ("1", "true", "yes")
 
+    def pricing_mode_global(self) -> bool:
+        """When true, all countries use US USD list prices (no PPP / local FX)."""
+        env = (os.getenv("PRICING_MODE") or "").strip().lower()
+        if env in ("global", "single", "usd_only"):
+            return True
+        return str(self.system.get("pricing_mode") or "").strip().lower() == "global"
+
 
 def _env_stripe_price_for_plan(plan_key: str) -> str:
     """When ``plan_config.stripe_price_id`` is empty: USD Tier-1 keys (PPP uses coupons, not extra Prices)."""
@@ -461,6 +468,21 @@ def resolve_country_row(snap: CommerceSnapshot, country_code: str) -> tuple[Coun
     Active country row or synthetic default (full USD price).
     Returns (row, multiplier).
     """
+    if snap.pricing_mode_global():
+        us = snap.countries.get("US")
+        if us and us.is_active:
+            return us, 1.0
+        return CountryPricingRow(
+            country_code="US",
+            country_name="United States",
+            currency_code="USD",
+            currency_symbol="$",
+            price_multiplier=1.0,
+            is_active=True,
+            stripe_coupon_id=None,
+            exchange_rate_per_usd=None,
+        ), 1.0
+
     cc = (country_code or "US").strip().upper()
     row = snap.countries.get(cc)
     if row and row.is_active:
