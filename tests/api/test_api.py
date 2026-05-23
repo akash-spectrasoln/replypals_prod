@@ -627,7 +627,7 @@ class TestWebsite:
 class TestTrackRewrite:
     def test_missing_anon_id(self):
         r = post("/track-rewrite", json={"score":80})
-        assert r.status_code == 200 and r.json().get("ok") is False
+        assert r.status_code == 422
 
     def test_with_anon_id(self):
         r = post("/track-rewrite", json={"anon_id":str(uuid.uuid4()),"score":85})

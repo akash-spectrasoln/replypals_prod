@@ -15,7 +15,12 @@ SRC="$ROOT/extension"
 DIST="$ROOT/dist/extension"
 
 # ── Validate required vars ────────────────────────────────────────────────────
-: "${REPLYPAL_API_URL:=https://www.replypals.in}"
+: "${REPLYPAL_API_URL:=https://replypals.in/api}"
+# Normalize: always inject .../api
+case "$REPLYPAL_API_URL" in
+  */api) ;;
+  *) REPLYPAL_API_URL="${REPLYPAL_API_URL%/}/api" ;;
+esac
 : "${MIXPANEL_TOKEN:=}"
 
 if [[ -z "$MIXPANEL_TOKEN" ]]; then

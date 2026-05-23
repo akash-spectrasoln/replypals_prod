@@ -4,6 +4,24 @@ Base URL: `http://localhost:8150` (development) / `https://your-api.railway.app`
 
 ---
 
+## Rate limits (SlowAPI)
+
+Public POST endpoints use per-IP limits via `slowapi` (see `api/main.py`). Common values:
+
+| Path | Default limit | Notes |
+|------|---------------|--------|
+| `POST /rewrite` | 100/minute | Core product |
+| `POST /generate` | 100/minute | Core product |
+| `POST /track` | 60/minute | Marketing / analytics (no DB write) |
+| `POST /free-usage` | 120/minute | Extension may refresh after rewrites |
+| `POST /save-email` | 20/minute | Lead capture |
+| `POST /register-referral` | 15/minute | Referral registration |
+| `POST /track-rewrite` | 60/minute | Legacy anonymous counter path |
+
+Exceeding a limit returns HTTP **429** with a standard SlowAPI / rate-limit response.
+
+---
+
 ## Public Endpoints
 
 | Method | Path | Description |
@@ -16,6 +34,9 @@ Base URL: `http://localhost:8150` (development) / `https://your-api.railway.app`
 | `POST` | `/stripe-webhook` | Handle Stripe webhook events |
 | `POST` | `/verify-license` | Verify a license key |
 | `POST` | `/check-usage` | Get usage stats for a license |
+| `POST` | `/free-usage` | Get free / anon usage snapshot (no increment) |
+| `POST` | `/track` | Lightweight marketing event (no DB write) |
+| `POST` | `/track-rewrite` | Legacy anonymous rewrite counter in `free_users` |
 | `POST` | `/save-email` | Save free user email |
 | `POST` | `/register-referral` | Register a referral |
 | `POST` | `/create-team` | Create a team |

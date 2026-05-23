@@ -1,9 +1,9 @@
 import { useState } from 'react'
 
 const CHROME_URL = 'https://chrome.google.com/webstore/detail/replypals/jipgphhkpgkjjfpjbjjnbdikjkgmnnkp'
-const SIGNUP_URL = 'https://www.replypals.in/signup'
+const SIGNUP_URL = 'https://replypals.in/signup'
 /** Regional PPP checkout lives in the app (same as extension) — avoids static USD Payment Links. */
-const DASHBOARD_UPGRADE_URL = 'https://www.replypals.in/dashboard'
+const DASHBOARD_UPGRADE_URL = 'https://replypals.in/dashboard'
 
 export default function PricingTable() {
   const [annual, setAnnual] = useState(false)

@@ -1,15 +1,20 @@
 // ─── ReplyPals Background Service Worker ───
-// Paths are /api/... — FastAPI strips the /api prefix when running without nginx (Railway).
-// Use www — apex replypals.in does not proxy /api/* to FastAPI (POSTs get 405, /api/health 404).
-const API_BASE = 'https://www.replypals.in/api';
-/** Origin without trailing /api (for health fallbacks when /api/* is not routed). */
+// Paths are /api/... — FastAPI middleware strips /api when running uvicorn-only (Render/Railway).
+// Replaced at build time via scripts/build.sh (REPLYPAL_API_URL should end with /api).
+const _API_BASE_RAW = '__REPLYPAL_API_URL__';
+const API_BASE = (() => {
+  if (!_API_BASE_RAW || _API_BASE_RAW.startsWith('__')) return 'https://replypals.in/api';
+  const b = _API_BASE_RAW.replace(/\/$/, '');
+  return b.endsWith('/api') ? b : `${b}/api`;
+})();
+/** Origin without trailing /api (health fallbacks, site links). */
 const API_ORIGIN = (() => {
   const b = String(API_BASE || '').replace(/\/$/, '');
   if (b.endsWith('/api')) return b.slice(0, -4);
   try {
     return new URL(b).origin;
   } catch {
-    return 'https://www.replypals.in';
+    return 'https://replypals.in';
   }
 })();
 if (!API_BASE || !API_BASE.startsWith('https://')) {
@@ -114,8 +119,8 @@ async function checkOnline() {
   const urls = [
     `${API_BASE}/health`,
     `${API_ORIGIN}/health`,
-    'https://www.replypals.in/api/health',
-    'https://www.replypals.in/health',
+    `${API_BASE}/health`,
+    `${API_ORIGIN}/health`,
   ];
   for (const url of urls) {
     try {

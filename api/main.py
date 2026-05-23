@@ -36,7 +36,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Request, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -1269,9 +1269,11 @@ class CheckoutRequest(BaseModel):
 
 
 class TrackRequest(BaseModel):
-    event: str
-    location: Optional[str] = None
-    referrer: Optional[str] = None
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    event: str = Field(..., min_length=1, max_length=128)
+    location: Optional[str] = Field(default=None, max_length=512)
+    referrer: Optional[str] = Field(default=None, max_length=512)
 
 
 class VerifyLicenseRequest(BaseModel):
@@ -1283,19 +1285,50 @@ class CheckUsageRequest(BaseModel):
 
 
 class FreeUsageRequest(BaseModel):
-    email: Optional[str] = None
-    anon_id: Optional[str] = None
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    email: Optional[str] = Field(default=None, max_length=254)
+    anon_id: Optional[str] = Field(default=None, max_length=128)
 
 
 class SaveEmailRequest(BaseModel):
-    email: str
-    goal: Optional[str] = None
-    sites: Optional[list] = None
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    email: str = Field(..., min_length=5, max_length=254)
+    goal: Optional[str] = Field(default=None, max_length=2000)
+    sites: Optional[list[str]] = Field(default=None, max_length=40)
+
+    @field_validator("sites", mode="after")
+    @classmethod
+    def _normalize_sites(cls, v: Optional[list[str]]) -> Optional[list[str]]:
+        if v is None:
+            return None
+        out: list[str] = []
+        for s in v:
+            if s is None:
+                continue
+            t = str(s).strip()
+            if not t:
+                continue
+            out.append(t[:200])
+        return out or None
 
 
 class RegisterReferralRequest(BaseModel):
-    ref_code: str
-    new_user_email: str
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    ref_code: str = Field(..., min_length=1, max_length=32)
+    new_user_email: str = Field(..., min_length=5, max_length=254)
+
+
+class TrackRewriteAnonymousRequest(BaseModel):
+    """Body for /track-rewrite — anonymous pre-account usage tracking (legacy path)."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    anon_id: str = Field(..., min_length=1, max_length=128)
+    email: Optional[str] = Field(default=None, max_length=254)
+    score: int = Field(default=0, ge=0, le=100)
 
 
 class CreateTeamRequest(BaseModel):
@@ -1954,18 +1987,32 @@ async def admin_user_calls(email: str, credentials=Depends(require_admin)):
 
 
 @app.post("/track")
+@limiter.limit("60/minute")
 async def track_event(request: Request, body: TrackRequest):
     """Simple event tracking for marketing site (no DB write)."""
     return {"status": "ok"}
 
 
+def _public_api_base_url() -> str:
+    """HTTPS base for extension + static pages (…/api)."""
+    explicit = (os.getenv("PUBLIC_API_BASE_URL") or "").strip().rstrip("/")
+    if explicit:
+        return explicit if explicit.endswith("/api") else f"{explicit}/api"
+    app_base = (os.getenv("APP_BASE_URL") or "").strip().rstrip("/")
+    if app_base:
+        return f"{app_base}/api"
+    return ""
+
+
 @app.get("/public-config")
 async def public_config():
     """Public frontend config (safe values only). Includes live free-tier monthly cap from DB."""
+    app_base = os.getenv("APP_BASE_URL", "").strip()
     payload = {
         "supabase_url": SUPABASE_URL or "",
         "supabase_anon_key": SUPABASE_ANON_KEY or "",
-        "app_base_url": os.getenv("APP_BASE_URL", "").strip(),
+        "app_base_url": app_base,
+        "api_base_url": _public_api_base_url(),
         "free_monthly_rewrites": _free_monthly_cap_from_db(),
         **_public_plan_limits_payload(),
     }
@@ -2970,7 +3017,8 @@ async def check_usage(body: CheckUsageRequest):
 # SAVE EMAIL (Free users)
 # ═══════════════════════════════════════════
 @app.post("/save-email")
-async def save_email(body: SaveEmailRequest):
+@limiter.limit("20/minute")
+async def save_email(request: Request, body: SaveEmailRequest):
     """Save a free user's email for weekly reports."""
 
     if not supabase:
@@ -3045,7 +3093,8 @@ async def _sb_find_referrer_row_by_ref(ref_raw: str):
 # REFERRAL
 # ═══════════════════════════════════════════
 @app.post("/register-referral")
-async def register_referral(body: RegisterReferralRequest):
+@limiter.limit("15/minute")
+async def register_referral(request: Request, body: RegisterReferralRequest):
     """Register a referral — give both users 5 bonus rewrites."""
 
     if not supabase:
@@ -4053,7 +4102,8 @@ async def referral_use(request: Request):
 # Uses a browser fingerprint / anonymous session ID
 # ═══════════════════════════════════════════
 @app.post("/track-rewrite")
-async def track_rewrite_anonymous(request: Request):
+@limiter.limit("60/minute")
+async def track_rewrite_anonymous(request: Request, body: TrackRewriteAnonymousRequest):
     """
     Track rewrites for anonymous (not logged in) users.
     
@@ -4063,13 +4113,12 @@ async def track_rewrite_anonymous(request: Request):
     - Returns how many rewrites this anonymous user has used & their limit
     - When they eventually log in, their email links the data to their account
     """
-    body       = await request.json()
-    anon_id    = (body.get("anon_id") or "").strip()    # UUID stored in extension
-    email      = (body.get("email") or "").strip().lower()
-    score      = int(body.get("score") or 0)
-    
-    if not anon_id:
-        return {"ok": False, "error": "anon_id required"}
+    if not supabase:
+        return {"ok": False, "error": "Database not connected"}
+
+    anon_id = (body.anon_id or "").strip()
+    email = (body.email or "").strip().lower() if body.email else ""
+    score = int(body.score or 0)
 
     # We track anonymous users in free_users using a synthetic email
     synthetic_email = email or f"anon_{anon_id[:16]}@replypal.internal"
@@ -4119,7 +4168,9 @@ async def track_rewrite_anonymous(request: Request):
 
 
 @app.post("/free-usage")
+@limiter.limit("120/minute")
 async def free_usage_status(
+    request: Request,
     body: FreeUsageRequest,
     authorization: Optional[str] = Header(None),
 ):

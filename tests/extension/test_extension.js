@@ -442,7 +442,8 @@ section('Build Constants');
 
 if (bgSrc) {
   assertNotContains(bgSrc, 'YOUR_MIXPANEL_TOKEN', 'No placeholder Mixpanel token');
-  assertContains(bgSrc, "const API_BASE = 'https://www.replypals.in/api'", 'API_BASE is production www /api');
+  assertContains(bgSrc, 'replypals.in/api', 'API_BASE points at production /api');
+  assertContains(bgSrc, '_API_BASE_RAW', 'API_BASE uses build-time placeholder');
   assertNotContains(bgSrc, 'localhost:8150', 'No dev API port in background.js');
   assertContains(bgSrc, 'replypals.in', 'Production domain present in API_BASE');
 }
@@ -593,7 +594,7 @@ function classifyError(errorMsg) {
   const msg = errorMsg.toLowerCase();
   if (msg.includes('offline') || msg.includes('econnrefused') || msg.includes('failed to fetch')) return 'offline';
   if (msg.includes('timeout') || msg.includes('aborted') || msg.includes('timed out')) return 'timeout';
-  if (msg.includes('limit_reached') || msg.includes('429')) return 'limit';
+  if (msg.includes('limit_reached') || msg.includes('limit_exceeded') || msg.includes('429')) return 'limit';
   if (msg.includes('401') || msg.includes('unauthorized')) return 'auth';
   if (msg.includes('500') || msg.includes('server error')) return 'server';
   return 'generic';
@@ -603,6 +604,7 @@ assertEqual(classifyError('ReplyPals is offline. Check your connection.'), 'offl
 assertEqual(classifyError('ECONNREFUSED'), 'offline', 'ECONNREFUSED classified as offline');
 assertEqual(classifyError('Request timed out — please try again'), 'timeout', 'Timeout classified');
 assertEqual(classifyError('limit_reached'), 'limit', 'Limit error classified');
+assertEqual(classifyError('limit_exceeded'), 'limit', 'limit_exceeded classified');
 assertEqual(classifyError('HTTP 429'), 'limit', '429 classified as limit');
 assertEqual(classifyError('HTTP 401: Unauthorized'), 'auth', '401 classified as auth');
 assertEqual(classifyError('Server error: 500'), 'server', '500 classified as server error');

@@ -1,5 +1,5 @@
 param(
-  [string]$ApiUrl = "https://www.replypals.in",
+  [string]$ApiUrl = "https://replypals.in/api",
   [string]$MixpanelToken = ""
 )
 
@@ -31,6 +31,7 @@ foreach ($name in $devOnly) {
 Write-Host "Injecting build placeholders..."
 $bgPath = Join-Path $dist "background.js"
 $content = Get-Content -Raw $bgPath
+if (-not $ApiUrl.EndsWith('/api')) { $ApiUrl = $ApiUrl.TrimEnd('/') + '/api' }
 $content = $content.Replace("__REPLYPAL_API_URL__", $ApiUrl)
 $content = $content.Replace("__MIXPANEL_TOKEN__", $MixpanelToken)
 Set-Content -Path $bgPath -Value $content -NoNewline

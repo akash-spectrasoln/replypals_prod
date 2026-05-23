@@ -3,7 +3,7 @@ try {
     'use strict';
     if (window.__replypalInjected) return;
     window.__replypalInjected = true;
-    var SITE_ORIGIN = 'https://www.replypals.in';
+    var SITE_ORIGIN = 'https://replypals.in';
 
     /** Align with popup.js — must match GET /pricing for Stripe country resolution. */
     function checkoutCountryFromPricing(pricing) {
@@ -221,8 +221,10 @@ try {
     function rpIsLimitReachedError(res) {
       var msg = String((res && res.error) || '').toLowerCase();
       return msg.indexOf('limit_reached') >= 0 ||
+             msg.indexOf('limit_exceeded') >= 0 ||
              msg.indexOf('limit reached') >= 0 ||
              msg.indexOf('"error":"limit_reached"') >= 0 ||
+             msg.indexOf('"error":"limit_exceeded"') >= 0 ||
              msg.indexOf('status 429') >= 0 ||
              msg.indexOf('server error: 429') >= 0;
     }

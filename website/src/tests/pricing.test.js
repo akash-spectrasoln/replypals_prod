@@ -30,17 +30,17 @@ describe('PricingTable', () => {
   })
 
   test('Get Pro CTA links to in-app dashboard upgrade', () => {
-    expect(pricing).toContain('www.replypals.in/dashboard')
+    expect(pricing).toContain('replypals.in/dashboard')
     expect(pricing).toContain('Get Pro')
   })
 
   test('Get Team CTA links to in-app dashboard upgrade', () => {
     expect(pricing).toContain('Get Team')
-    expect(pricing).toContain('www.replypals.in/dashboard')
+    expect(pricing).toContain('replypals.in/dashboard')
   })
 
   test('Free plan CTA links to sign up', () => {
-    expect(pricing).toContain('www.replypals.in/signup')
+    expect(pricing).toContain('replypals.in/signup')
     expect(pricing).toContain('Sign Up Free')
   })
 })

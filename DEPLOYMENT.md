@@ -58,13 +58,22 @@ docker run -d \
   replypal-api
 ```
 
-### Option B: Railway / Render / Fly.io
+### Option B: Render (recommended free tier)
+
+See **[docs/09-free-hosting.md](docs/09-free-hosting.md)** for the full checklist.
 
 1. Push repo to GitHub (ensure `.env` is in `.gitignore`)
-2. Connect repo to Railway/Render
-3. Set root directory to `.` (Dockerfile is at root)
-4. Add all env vars from `api/.env.example` in the dashboard
-5. Set `APP_ENV=production`
+2. Render → **New Blueprint** (uses root `render.yaml`) or **New Web Service** → Docker
+3. Add all env vars from `api/.env.example` (set `APP_BASE_URL` and `PUBLIC_API_BASE_URL` to your `*.onrender.com` URL)
+4. Set `APP_ENV=production`, `ALLOWED_ORIGINS` to your Render URL + `chrome-extension://…`
+5. Stripe webhook: `https://YOUR-SERVICE.onrender.com/api/stripe-webhook`
+
+### Option C: Railway / Fly.io
+
+1. Push repo to GitHub (ensure `.env` is in `.gitignore`)
+2. Connect repo to Railway/Fly (Dockerfile at repo root; `railway.json` included)
+3. Add all env vars from `api/.env.example` in the dashboard
+4. Set `APP_ENV=production`
 
 ### Startup validation
 

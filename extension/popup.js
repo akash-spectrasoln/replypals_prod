@@ -22,8 +22,8 @@
   }
   /** Fallback only until /free-usage returns; keep aligned with API default free monthly cap */
   const FREE_LIMIT_BASE = 10;
-  /** Canonical site host (apex replypals.in does not serve /login, /privacy, etc.). */
-  const SITE_ORIGIN = 'https://www.replypals.in';
+  /** Same host as API (Render/Railway serve login, dashboard, pricing on one origin). */
+  const SITE_ORIGIN = 'https://replypals.in';
 
   /** Must match GET /pricing geography or Checkout bills USD while UI shows PPP local prices. */
   function checkoutCountryFromPricing(pricing) {
@@ -132,6 +132,13 @@
         : FREE_LIMIT_BASE;
       bonusRewrites = Math.max(0, lim - base);
     }
+  }
+
+  function isQuotaLimitMessage(msg) {
+    const s = String(msg || '').toLowerCase();
+    return s.includes('limit_reached') || s.includes('limit_exceeded')
+      || s.includes('limit reached') || s.includes('status 429')
+      || s.includes('server error: 429');
   }
 
   function isPopupQuotaBlockedSync() {
@@ -721,14 +728,24 @@
           } catch (_) { }
         }
       } else {
-        if (response?.error) {
-          showToast('⚠️ ' + response.error, 'error');
+        const errMsg = response?.error || 'Something went wrong. Please try again.';
+        if (isQuotaLimitMessage(errMsg)) {
+          showUpgradeOverlay(true);
+          sendTrack('upgrade_shown', { trigger: 'limit_api' });
+        } else {
+          showToast('⚠️ ' + errMsg, 'error');
+          showError(errMsg);
         }
-        showError(response?.error || 'Something went wrong. Please try again.');
       }
     } catch (err) {
-      showToast('⚠️ Something went wrong — try again', 'error');
-      showError(err.message || 'Connection failed. Is the API running?');
+      const errMsg = err.message || 'Connection failed. Is the API running?';
+      if (isQuotaLimitMessage(errMsg)) {
+        showUpgradeOverlay(true);
+        sendTrack('upgrade_shown', { trigger: 'limit_api' });
+      } else {
+        showToast('⚠️ Something went wrong — try again', 'error');
+        showError(errMsg);
+      }
     } finally {
       setLoading(false);
     }

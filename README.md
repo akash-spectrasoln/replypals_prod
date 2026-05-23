@@ -342,27 +342,13 @@ This project is proprietary. All rights reserved.
 
 ---
 
-## 🚄 Deploy on Railway
+## 🚄 Deploy (free tier)
 
-1. Push this repo to GitHub.
-2. In Railway, create a new project from the repo.
-3. Railway will use `railway.json` at repo root.
-4. Set required env vars from `api/.env.example` (do not commit real secrets).
-5. Add custom domains:
-   - `api.replypals.in` for API
-   - `replypals.in` for website (optional same service or separate service)
-6. Set DNS records in your domain provider using Railway-provided targets.
+**Recommended:** [Render](https://render.com) + [Supabase](https://supabase.com) — one Docker service runs API, dashboard, signup, and admin.
 
-### Runtime command used
+See **[docs/09-free-hosting.md](docs/09-free-hosting.md)** for step-by-step setup, env vars, Stripe webhook URL, and extension build.
 
-`cd api && uvicorn main:app --host 0.0.0.0 --port ${PORT:-8150}`
+Quick start: push to GitHub → Render **Blueprint** (`render.yaml`) → paste env from `api/.env.example` → build extension with `REPLYPAL_API_URL=https://YOUR-SERVICE.onrender.com/api ./scripts/build.sh`
 
-### Recommended production env
-
-- `APP_ENV=production`
-- `UVICORN_RELOAD=0`
-- `UVICORN_WORKERS=2`
-- `FRONTEND_SUCCESS_URL=https://replypals.in/success`
-- `FRONTEND_CANCEL_URL=https://replypals.in/dashboard`
-- `ALLOWED_ORIGINS=https://replypals.in,https://www.replypals.in,chrome-extension://<YOUR_EXTENSION_ID>`
+**Railway** also works (`railway.json` at repo root). Default entrypoint runs uvicorn only (no nginx).
 
