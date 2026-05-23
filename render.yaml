@@ -2,11 +2,11 @@
 # https://render.com/docs/blueprint-spec
 #
 # After deploy:
-#   1. Set env vars in Render dashboard (from api/.env.example).
-#   2. Set APP_BASE_URL=https://YOUR-SERVICE.onrender.com
-#   3. Set ALLOWED_ORIGINS=https://YOUR-SERVICE.onrender.com,chrome-extension://YOUR_EXT_ID
-#   4. Stripe webhook: https://YOUR-SERVICE.onrender.com/api/stripe-webhook
-#   5. Extension build: REPLYPAL_API_URL=https://YOUR-SERVICE.onrender.com/api ./scripts/build.sh
+#   1. Set env vars in Render (see docs/11-custom-domain-replypals-in.md).
+#   2. Add custom domain replypals.in in Render → Settings → Custom Domains.
+#   3. APP_BASE_URL=https://replypals.in  PUBLIC_API_BASE_URL=https://replypals.in/api
+#   4. CANONICAL_HOST_REDIRECT=1  (redirects *.onrender.com → replypals.in)
+#   5. Stripe webhook: https://replypals.in/api/stripe-webhook
 
 services:
   - type: web
@@ -22,4 +22,4 @@ services:
       - key: UVICORN_WORKERS
         value: "1"
       - key: CANONICAL_HOST_REDIRECT
-        value: "0"
+        value: "1"

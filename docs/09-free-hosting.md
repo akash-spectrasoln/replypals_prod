@@ -47,13 +47,11 @@ export MIXPANEL_TOKEN="your_token"
 
 Load `dist/extension` in Chrome or upload the zip to the Web Store.
 
-## 4. Custom domain (optional)
+## 4. Custom domain — use replypals.in (recommended)
 
-In Render → **Settings** → **Custom Domains** → add `replypals.in`.
+Full steps: **[11-custom-domain-replypals-in.md](11-custom-domain-replypals-in.md)**
 
-Update `APP_BASE_URL`, `PUBLIC_API_BASE_URL`, `ALLOWED_ORIGINS`, Stripe webhook, and rebuild the extension with the new API URL.
-
-Use **apex** `replypals.in` (not `www`) unless you configure SSL for both.
+Summary: add `replypals.in` in Render → set `APP_BASE_URL=https://replypals.in` → `CANONICAL_HOST_REDIRECT=1` → rebuild extension with `https://replypals.in/api`.
 
 ## 5. Full Docker stack (nginx + Astro, optional)
 

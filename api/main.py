@@ -818,9 +818,19 @@ async def canonical_host_and_no_cache(request: Request, call_next):
             target_host = (urlparse(app_base).hostname or "").lower()
         except Exception:
             target_host = ""
-        if target_host and host in {"replypals.in", "www.replypals.in"} and host != target_host:
-            new_url = str(request.url).replace(f"://{host}", f"://{target_host}", 1)
-            return RedirectResponse(url=new_url, status_code=307)
+        if target_host and host != target_host:
+            # Apex vs www, and Render default host → custom domain (replypals.in)
+            if host.endswith(".onrender.com") or host in {"replypals.in", "www.replypals.in"}:
+                parsed = urlparse(app_base)
+                new_url = urlunparse((
+                    parsed.scheme or "https",
+                    target_host,
+                    request.url.path,
+                    request.url.params,
+                    request.url.query,
+                    request.url.fragment,
+                ))
+                return RedirectResponse(url=new_url, status_code=307)
 
     response = await call_next(request)
     ctype = (response.headers.get("content-type", "") or "").lower()
